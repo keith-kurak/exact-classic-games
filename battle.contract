@@ -74,6 +74,9 @@ fn verb(f: Foe, r: number): string = (f.look == "elder" ? "shouts through a mega
 
 // One digit of a number for a meter's wheel: 0 is the blank above "0", so a
 // leading zero is blank. A wheel turns as the shown HP rolls.
+// How long a line takes to type: four characters every 40 ms.
+fn lineMs(s: string): number = ceil(s.length / 4) * 40
+
 fn wheel(n: number, place: number): number = (n < place and place > 1) ? 0 : floor(n / place) % 10 + 1
 
 keyframes jolt
@@ -82,12 +85,18 @@ keyframes jolt
   45% translate="10px 0px"
   70% translate="-5px 0px"
   100% translate="0px 0px"
-keyframes pulse
-  50% opacity=0.55 scale=1.06
-keyframes bob
-  50% translate="0px 10px"
-keyframes glow
-  50% opacity=0.4 scale=1.1
+keyframes flare
+  0% opacity=0 scale=0.15
+  10% opacity=1
+  30% opacity=0.5
+  45% opacity=1
+  65% opacity=0.6
+  80% opacity=1 scale=1
+  100% opacity=0 scale=1.15
+keyframes sparkle
+  0% opacity=0 translate="0px 20px"
+  25% opacity=1
+  100% opacity=0 translate="0px -40px"
 keyframes fade
   to opacity=0 scale=0.8 animation-timing-function="ease-in"
 keyframes drop
@@ -200,6 +209,10 @@ component Battle
     sel: string
     heroHits: number[]
     shake: number
+    hitDelay: number
+    fireN: number
+    healN: number
+    healT: number
     phase: string
     actor: number
     cursor: number
@@ -277,7 +290,7 @@ component Battle
                 for s in [shake] key=`shake-${s}`
                   column flex=1 max-width=680 min-height=92 box-sizing="border-box" padding="12px 18px" gap=6
                     background-color="Canvas" border="3px solid CanvasText" border-radius=10 press=next
-                    animation=(s > 0 ? "jolt 360ms ease-out" : "pop 200ms ease-out both") testId="battle-dialog"
+                    animation=(s > 0 ? `jolt 360ms ${hitDelay}ms ease-out` : "pop 200ms ease-out both") testId="battle-dialog"
                     text line1 font-size=20 font-weight=700 testId="battle-text"
                     text line2 font-size=20 font-weight=700 testId="battle-text-2"
           // The win: the message box in the middle of the screen.
@@ -288,40 +301,42 @@ component Battle
                 animation="pop 260ms ease-out both" testId="win-dialog"
                 text line1 font-size=24 font-weight=800 testId="battle-text"
                 text line2 font-size=20 font-weight=700 testId="battle-text-2"
-          // The middle: the foes still standing. They drop in at the start, and a
+          // The middle: the foes still standing. The row keeps its height when they
+          // are gone, so the HUD below never moves. They drop in at the start, and a
           // hit replays the jolt.
-          row gap=20 justify-content="center" align-items="flex-end" position="relative" testId="foes"
+          row gap=20 justify-content="center" align-items="flex-end" position="relative" min-height=240 testId="foes"
             for f, i in foes key=`${f.look}-${i}`
               if hpAt(foeHp, i) > 0
                 column align-items="center" -exact-exit-animation="fade 450ms ease-in both"
                   animation=`drop 520ms ${200 + i * 140}ms ease-out both` testId=`foe-${i}`
-                  // The target being chosen: a bouncing arrow, a ring of light at its
-                  // feet, and a pulse.
-                  text "▼" font-size=34 font-weight=900 color="CanvasText" height=40
-                    opacity=(phase == "target" and cursor == i ? 1 : 0)
-                    animation=(phase == "target" and cursor == i ? "bob 520ms ease-in-out infinite" : "none")
-                    testId=`aim-${i}`
-                  column position="relative" align-items="center"
-                    if phase == "target" and cursor == i
-                      svg viewBox="0 0 100 30" width=150 height=45 position="absolute" bottom=-20
-                        animation="glow 700ms ease-in-out infinite"
-                        ellipse cx=50 cy=15 rx=48 ry=13 fill="#fff6b0" opacity=0.35
-                        ellipse cx=50 cy=15 rx=40 ry=9 fill="none" stroke="#fff6b0" stroke-width=3
-                    for hit in [hpAt(foeHits, i)] key=`${i}-${hit}`
-                      column animation=(hit > 0 ? "jolt 320ms ease-out" : "none")
-                        column animation=(phase == "target" and cursor == i ? "pulse 700ms ease-in-out infinite" : "none")
-                          if i == 0
-                            column press=pick0
-                              Robe(look=f.look)
-                          if i == 1
-                            column press=pick1
-                              Robe(look=f.look)
-                          if i == 2
-                            column press=pick2
-                              Robe(look=f.look)
-                          if i == 3
-                            column press=pick3
-                              Robe(look=f.look)
+                  // The target being chosen: an arrow over it, nothing more.
+                  text "▼" font-size=24 font-weight=900 color="CanvasText" height=30
+                    opacity=(phase == "target" and cursor == i ? 1 : 0) testId=`aim-${i}`
+                  for hit in [hpAt(foeHits, i)] key=`${i}-${hit}`
+                    column animation=(hit > 0 ? `jolt 320ms ${hitDelay}ms ease-out` : "none")
+                      if i == 0
+                        column press=pick0
+                          Robe(look=f.look)
+                      if i == 1
+                        column press=pick1
+                          Robe(look=f.look)
+                      if i == 2
+                        column press=pick2
+                          Robe(look=f.look)
+                      if i == 3
+                        column press=pick3
+                          Robe(look=f.look)
+            // Fire: red diamonds flare out across the foes and flicker.
+            for n in [fireN] key=`fire-${n}`
+              if n > 0
+                column position="absolute" left=0 right=0 top=0 bottom=0 align-items="center" justify-content="center"
+                  testId="fire-fx"
+                  svg viewBox="0 0 200 100" width=760 height=300 animation="flare 900ms ease-out both"
+                    polygon points="0,50 100,22 200,50 100,78" fill="none" stroke="#e8402a" stroke-width=1.6
+                    polygon points="30,50 100,32 170,50 100,68" fill="none" stroke="#ff7a3a" stroke-width=1.4
+                    polygon points="60,50 100,40 140,50 100,60" fill="#ff9a4a40" stroke="#ffd070" stroke-width=1.2
+                    line x1=0 y1=50 x2=200 y2=50 stroke="#ffb060" stroke-width=2.4
+                    ellipse cx=100 cy=50 rx=60 ry=4 fill="#ffe0a0" opacity=0.7
             if auto and not won
               column position="absolute" right=0 bottom=0 padding="2px 10px" border="2px solid CanvasText"
                 border-radius=6 background-color="Canvas" press=autoOff testId="auto"
@@ -331,10 +346,18 @@ component Battle
           row gap=12 justify-content="center" align-items="flex-end"
             for h, i in party() key=h.name
               column animation=`rise 480ms ${120 + i * 90}ms ease-out both`
-                column translate=((phase == "menu" or phase == "target" or phase == "magic") and actor == i and not auto ? "0px -14px" : "0px 0px")
+                column position="relative" translate=((phase == "menu" or phase == "target" or phase == "magic") and actor == i and not auto ? "0px -14px" : "0px 0px")
                   transition="translate -exact-spring(260, 22, 1)" testId=`hero-${i}`
+                  for n in [healN] key=`heal-${n}`
+                    if n > 0 and healT == i
+                      row position="absolute" left=0 right=0 top=-10 justify-content="center" gap=14
+                        animation=`sparkle 900ms ${hitDelay}ms ease-out both` testId="heal-fx"
+                        for k in [0, 1, 2] key=`spark${k}`
+                          svg viewBox="-10 -10 20 20" width=(k == 1 ? 30 : 22) height=(k == 1 ? 30 : 22)
+                            path d="M0 -10 L2.5 -2.5 L10 0 L2.5 2.5 L0 10 L-2.5 2.5 L-10 0 L-2.5 -2.5 Z"
+                              fill=(k == 1 ? "#c8ffd2" : "#9ff0b0")
                   for hit in [hpAt(heroHits, i)] key=`${i}-${hit}`
-                    column animation=(hit > 0 ? "jolt 320ms ease-out" : "none")
+                    column animation=(hit > 0 ? `jolt 320ms ${hitDelay}ms ease-out` : "none")
                       Meter(i=i, hero=h, hp=hpAt(shownHp, i), pp=hpAt(pp, i), active=((phase == "menu" or phase == "target" or phase == "magic") and actor == i))
           row justify-content="flex-end"
             button press=toggleMusic testId="music-toggle"

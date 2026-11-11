@@ -7,7 +7,7 @@
 // Arrow keys or WASD walk (hold two for a diagonal); Space, Enter or Z talks and
 // confirms; Escape or X goes back from a target and stops Auto Fight.
 use Npc, Foe, Scenery, Person, npcs, blocked, stands, tile, cols, rows, camera, opposite from "./world.contract"
-use Battle, party, hpAt, living, hurt, hurtAll, bump, bumpAll, orFirst, roll, livingFrom, nextLiving, prevLiving, weakest, menuFor, itemAt, fireCost, healCost, fireDmg, healAmt, neediest, mend, foeLabel, roundQueue, canAct, heroAt, foeAt, heroRoll, foeRoll, heroDmg, foeMiss, foeHymn, foeDmg, verb from "./battle.contract"
+use Battle, party, hpAt, living, hurt, hurtAll, bump, bumpAll, orFirst, roll, livingFrom, nextLiving, prevLiving, weakest, menuFor, itemAt, fireCost, healCost, fireDmg, healAmt, neediest, mend, lineMs, foeLabel, roundQueue, canAct, heroAt, foeAt, heroRoll, foeRoll, heroDmg, foeMiss, foeHymn, foeDmg, verb from "./battle.contract"
 
 sound "assets/player-attack.wav"
 sound "assets/enemy-attack.wav"
@@ -32,13 +32,19 @@ fn cancelKey(k: string): bool = k == "Escape" or k == "x"
 fn sign(n: number): number = n < 0 ? -1 : (n > 0 ? 1 : 0)
 fn faceOf(mx: number, my: number): string = mx < 0 ? "left" : (mx > 0 ? "right" : (my < 0 ? "up" : "down"))
 
-keyframes flash
+keyframes grow
+  from scale=0
+  to scale=1
+keyframes spin
+  from rotate="0deg"
+  to rotate="900deg"
+keyframes darken
   0% opacity=0
-  12% opacity=0.55
-  25% opacity=0
-  40% opacity=0.55
-  55% opacity=0
-  100% opacity=0
+  70% opacity=0
+  100% opacity=1
+keyframes undim
+  from opacity=1
+  to opacity=0
 keyframes dim
   from opacity=0
   to opacity=1
@@ -61,6 +67,14 @@ component Exactbound
   state typed = 0
   // The battle.
   state swirl = false
+  state swirlOut = false
+  // When the current hit lands, in ms after its message starts: the damage line's
+  // start. Sounds, shakes and the HP roll wait for it.
+  state hitDelay = 0
+  state rollAfter = 0
+  state fireN = 0
+  state healN = 0
+  state healT = 0
   state foeId = ""
   state foeHp: number[] = []
   state foeHits: number[] = []
@@ -91,6 +105,7 @@ component Exactbound
   derive sel = itemAt(actor, cursor)
   derive foes = npcs().filter(n => n.id == foeId).map(n => n.foes).flat()
   derive camX = camera(vp.width, cols() * tile(), (px + 0.5) * tile())
+  derive discR = max(vp.width, vp.height) * 1.2
   derive camY = camera(vp.height, rows() * tile(), (py + 0.5) * tile())
 
   // ── Text ──
@@ -167,7 +182,9 @@ component Exactbound
 
   // ── The battle ──
 
-  // The battle is set up at once; the field flashes and fades, then the route moves.
+  // The battle is set up at once. The field turns grey, a dark disc spins out
+  // from the player, and once the screen is dark the battle mounts under it (so
+  // its start-up cost is hidden); then the dark fades away.
   action startBattle(id: string)
     let fs = npcs().filter(n => n.id == id).map(n => n.foes).flat()
     fights = fights + 1
@@ -188,19 +205,29 @@ component Exactbound
     auto = false
     phase = "play"
     swirl = true
+    hitDelay = 0
+    rollAfter = 0
+    fireN = 0
+    healN = 0
     say(fs.length > 1 ? `• ${foeAt(fs, 0).name} and ${fs.length - 1} more block the way!` : `• You engage the ${foeAt(fs, 0).name}!`, "")
 
   task swirling when swirl
-    after(650, enter)
+    after(1000, enter)
   action enter
     swirl = false
+    swirlOut = true
     nav = push(nav, path("battle", foeId))
+  task unswirl when swirlOut
+    after(450, swirlDone)
+  action swirlDone
+    swirlOut = false
 
   // Shown HP rolls toward the real HP, like an odometer.
   task meters when inBattle and shownHp.join(",") != partyHp.join(",")
     every(45, rollMeters)
   action rollMeters
-    shownHp = roll(shownHp, partyHp)
+    if performanceNow() >= rollAfter
+      shownHp = roll(shownHp, partyHp)
 
   // A hero's turn: Attack picks a target when more than one foe stands.
   // The cursor-confirm sound, for a command, a spell or a target the player picks.
@@ -326,42 +353,54 @@ component Exactbound
         else
           heroAttack(ev, order)
 
-  // Fire: every foe standing takes the same damage.
+  // Fire: the flare starts at once; every foe standing takes the same damage
+  // when the damage line starts.
   action castFire(i: number)
     let d = fireDmg(heroRoll(fights * 131, round, i, 9))
     let downs = living(foeHp).filter(k => hpAt(foeHp, k) <= d).length
+    let l1 = `• ${heroAt(i).name} tries Fire!`
+    let wait = lineMs(l1) + 120
     foeHp = hurtAll(foeHp, d)
     foeHits = bumpAll(foeHits)
     ppNow = hurt(ppNow, i, fireCost())
+    fireN = fireN + 1
+    hitDelay = wait
     playSound("assets/fire.wav")
     if downs > 0
-      playSound("assets/enemy-die.wav", at=performanceNow() + 600)
-    say(`• ${heroAt(i).name} tries Fire!`, downs > 0 ? `• ${d} HP of damage to every foe! ${downs} calm down.`
-      : `• ${d} HP of damage to every foe!`)
+      playSound("assets/enemy-die.wav", at=performanceNow() + wait + 500)
+    say(l1, downs > 0 ? `• ${d} HP of damage to every foe! ${downs} calm down.` : `• ${d} HP of damage to every foe!`)
 
   // Heal: the hero with the least HP for their size recovers.
   action castHeal(i: number)
     let t = neediest(partyHp)
     let amt = min(healAmt(), heroAt(t).maxHp - hpAt(partyHp, t))
+    let l1 = `• ${heroAt(i).name} tries Heal!`
+    let wait = lineMs(l1) + 120
     partyHp = mend(partyHp, t, healAmt())
     ppNow = hurt(ppNow, i, healCost())
-    playSound("assets/heal.wav")
-    say(`• ${heroAt(i).name} tries Heal!`, `• ${heroAt(t).name} recovered ${amt} HP!`)
+    healN = healN + 1
+    healT = t
+    hitDelay = wait
+    rollAfter = performanceNow() + wait
+    playSound("assets/heal.wav", at=performanceNow() + wait)
+    say(l1, `• ${heroAt(t).name} recovered ${amt} HP!`)
 
   action heroAttack(i: number, want: number)
     let t = hpAt(foeHp, want) > 0 ? want : livingFrom(foeHp, 0)
     let r = heroRoll(fights * 131, round, i, t)
     let d = heroDmg(i, r)
     let down = d > 0 and hpAt(foeHp, t) <= d
+    let l1 = r >= 92 ? `• ${heroAt(i).name} attacks! SMAAAASH!!` : `• ${heroAt(i).name} attacks!`
+    let wait = lineMs(l1) + 120
     foeHp = hurt(foeHp, t, d)
+    hitDelay = wait
     if d > 0
       foeHits = bump(foeHits, t)
-      playSound("assets/player-attack.wav")
+      playSound("assets/player-attack.wav", at=performanceNow() + wait)
     if down
-      playSound("assets/enemy-die.wav", at=performanceNow() + 400)
-    say(r >= 92 ? `• ${heroAt(i).name} attacks! SMAAAASH!!` : `• ${heroAt(i).name} attacks!`,
-      d == 0 ? "• Just missed!" : (down ? `• ${d} HP of damage to ${foeLabel(foes, t)}! They calm down.`
-        : `• ${d} HP of damage to ${foeLabel(foes, t)}!`))
+      playSound("assets/enemy-die.wav", at=performanceNow() + wait + 450)
+    say(l1, d == 0 ? "• Just missed!" : (down ? `• ${d} HP of damage to ${foeLabel(foes, t)}! They calm down.`
+      : `• ${d} HP of damage to ${foeLabel(foes, t)}!`))
 
   action foeAttack(e: number)
     let f = foeAt(foes, e)
@@ -369,20 +408,23 @@ component Exactbound
     let t = livingFrom(partyHp, r % 3)
     let d = foeDmg(f, r)
     let ko = hpAt(partyHp, t) <= d
+    let l1 = foeHymn(f, r) ? `• ${foeLabel(foes, e)} leads a cheerful chant!` : `• ${foeLabel(foes, e)} ${verb(f, r)}!`
+    let wait = lineMs(l1) + 120
+    hitDelay = wait
+    rollAfter = performanceNow() + wait
     if foeMiss(r)
-      say(`• ${foeLabel(foes, e)} ${verb(f, r)}!`, `• ${heroAt(t).name} dodged quickly!`)
+      say(l1, `• ${heroAt(t).name} dodged quickly!`)
     else
       shake = shake + 1
-      playSound("assets/enemy-attack.wav")
+      playSound("assets/enemy-attack.wav", at=performanceNow() + wait)
       if foeHymn(f, r)
         partyHp = hurtAll(partyHp, d)
         heroHits = bumpAll(heroHits)
-        say(`• ${foeLabel(foes, e)} leads a cheerful chant!`, `• The whole party took ${d} HP of damage!`)
+        say(l1, `• The whole party took ${d} HP of damage!`)
       else
         partyHp = hurt(partyHp, t, d)
         heroHits = bump(heroHits, t)
-        say(`• ${foeLabel(foes, e)} ${verb(f, r)}!`, ko
-          ? `• ${heroAt(t).name} took ${d} HP of damage and can't go on!` : `• ${heroAt(t).name} took ${d} HP of damage!`)
+        say(l1, ko ? `• ${heroAt(t).name} took ${d} HP of damage and can't go on!` : `• ${heroAt(t).name} took ${d} HP of damage!`)
 
   action leave
     if outcome == "won"
@@ -523,6 +565,7 @@ component Exactbound
             // The world, moved by the camera. The player glides over the scenery.
             column position="absolute" left=0 top=0 width=(cols() * tile()) height=(rows() * tile())
               translate=`${camX}px ${camY}px` transition="translate 190ms linear" testId="world"
+              filter=(swirl ? "grayscale(1)" : "none")
               Scenery(talkTo=talkTo, turn=(talkTo != "" ? opposite(facing) : ""), beaten=beaten)
               column color-scheme="light" position="absolute" left=(14.25 * tile()) top=(26.65 * tile())
                 width=(4.5 * tile()) height=(1.35 * tile()) align-items="center" justify-content="center" gap=1
@@ -548,17 +591,29 @@ component Exactbound
               if not swirl
                 column position="absolute" bottom=16 left=0 right=0 align-items="center"
                   text "Arrow keys to walk · Space to talk" font-size=12 color="-exact-secondary-label" testId="hint"
-            // The battle entrance: two quick flashes, then a fade to dark.
+            // The battle entrance: over the grey field, a dark disc grows from the
+            // player with a pale arc spinning round it, then the screen goes dark.
             if swirl
-              column position="absolute" inset=0 testId="swirl"
-                column position="absolute" inset=0 background-color="CanvasText" animation="flash 650ms linear both"
-                column position="absolute" inset=0 background-color="Canvas" animation="dim 300ms 350ms ease-in both"
+              column position="absolute" inset=0 overflow="hidden" testId="swirl"
+                column position="absolute" left=(camX + (px + 0.5) * tile() - discR) top=(camY + (py + 0.5) * tile() - discR)
+                  width=(discR * 2) height=(discR * 2) animation="grow 900ms ease-in both"
+                  svg viewBox="-100 -100 200 200" width=(discR * 2) height=(discR * 2) position="absolute" left=0 top=0
+                    circle cx=0 cy=0 r=100 fill="#2a2c3e" opacity=0.88
+                  column position="absolute" inset=0 animation="spin 1000ms linear both"
+                    svg viewBox="-100 -100 200 200" width=(discR * 2) height=(discR * 2)
+                      path d="M 0 -70 A 70 70 0 0 1 70 0" fill="none" stroke="#7a7d96" stroke-width=10 stroke-linecap="round"
+                      path d="M 0 45 A 45 45 0 0 1 -45 0" fill="none" stroke="#5c5f78" stroke-width=8 stroke-linecap="round"
+                column position="absolute" inset=0 background-color="Canvas" animation="darken 1000ms linear both"
         if e.name == "battle"
           column navigationKey=`${e.id}` position="absolute" inset=0 testId="battle-screen"
             Battle(foes=foes, foeHp=foeHp, foeHits=foeHits, shownHp=shownHp, pp=ppNow, sel=sel, heroHits=heroHits,
-              shake=shake, phase=phase, actor=actor, cursor=cursor, auto=auto,
+              shake=shake, hitDelay=hitDelay, fireN=fireN, healN=healN, healT=healT, phase=phase, actor=actor, cursor=cursor, auto=auto,
               line1=msg1.slice(0, typed), line2=msg2.slice(0, max(0, typed - msg1.length)),
               seed=`${e.params.npc}-${fights}`, musicPaused=musicPaused, won=(outcome == "won"),
               attack=attack, magic=magic, fire=fire, heal=heal, autoOn=autoOn, autoOff=autoOff, run=run, next=next,
               pick0=pick0, pick1=pick1, pick2=pick2, pick3=pick3,
               toggleMusic=toggleMusic, musicPlaying=musicPlaying, musicPause=musicPause)
+      // The dark the entrance ends on, lifting off the battle once it has mounted.
+      if swirlOut
+        column position="absolute" inset=0 background-color="Canvas" animation="undim 450ms ease-out both"
+          testId="swirl-out"
