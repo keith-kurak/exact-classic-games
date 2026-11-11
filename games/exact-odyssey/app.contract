@@ -82,6 +82,8 @@ component ExactOdyssey
   state juggle: number[] = []
   state juggles = 0
   state rookTurns = 0
+  // Ticks since the one acting began: they leap to the enemy over 5.
+  state leap = 0
   // The fight's length and par in ticks, and its rank in stars.
   state bticks = 0
   state par = 0
@@ -108,13 +110,20 @@ component ExactOdyssey
   derive inBattle = scene == "battle"
   derive fighting = phase == "fight"
   derive acting = play == "act"
-  derive partySprites = [0, 1, 2].map(i => `${nth(hp, i) <= 0 ? "ko" : (acting and actor == i ? `strike${i}` : `idle${i}`)}:${partyX(i) - (acting and actor == i ? 16 : 0)}:${partyY(i)}:${i}`)
+  // The one acting leaps in an arc to beside its target for targeted
+  // abilities (casting in place otherwise), and back when done.
+  derive aimNow = nth(foeHp, nth(qAims, qi)) > 0 ? nth(qAims, qi) : (nth(qAims, qi) == 0 ? 1 : 0)
+  derive leaping = acting and needsTarget(word(queue, qi))
+  derive leapT = min(1, leap / 5)
+  derive leapX = round(partyX(actor) + (foeTx(aimNow, foes.length) * 8 + 66 - partyX(actor)) * leapT)
+  derive leapY = round(partyY(actor) + (foeTy(aimNow) * 8 + 24 - partyY(actor)) * leapT - sin(leapT * 3.14159) * 14)
+  derive partySprites = [0, 1, 2].map(i => `${nth(hp, i) <= 0 ? "ko" : (acting and actor == i ? `strike${i}` : `idle${i}`)}:${acting and actor == i ? (leaping ? leapX : partyX(i) - 16) : partyX(i)}:${acting and actor == i and leaping ? leapY : partyY(i)}:${i}`)
   derive pointing = fighting and not committed
-  derive handSprite = (not fighting ? []
-    : (ui == "target" ? [`hand:${10 * 8 - 6}:${(21 + (target + 1) * 2) * 8}:`]
-    : (ui == "stance" ? [`hand:2:${(21 + stanceCursor * 2) * 8}:`]
-    : (ui == "item" ? [`hand:2:${21 * 8}:`]
-    : (pointing ? [`hand:${10 * 8 - 6}:${(21 + cursor * 2) * 8}:`] : [])))))
+  // The chooser, bottom left: commands, or a target, stance or item list in
+  // their place. It goes away while Thunda's commands wait or play out.
+  derive chooserShown = fighting and not rookActing and not (committed and ui == "menu")
+  derive handRow = (ui == "target" ? target + 1 : (ui == "stance" ? stanceCursor : (ui == "item" ? 0 : cursor)))
+  derive handSprite = chooserShown ? [`hand:2:${(21 + handRow * 2) * 8}:`] : []
   derive dmgSprite = dmgT > 0 ? [`#${dmgText}:${dmgX}:${dmgY - (dmgT > 12 ? (16 - dmgT) * 2 : 8)}:3`] : []
   // OAM order is draw priority: damage numbers and the cursor in front.
   derive battleSprites = dmgSprite.concat(handSprite).concat(partySprites)
@@ -130,9 +139,11 @@ component ExactOdyssey
   derive panel = (foes.length > 0 and nth(foeHp, aimAt) > 0
     ? [`0,0,12,4|${panelName(word(foes, aimAt), nth(chain, aimAt), nth(brk, aimAt))}|${panelBar(nth(chain, aimAt), nth(brk, aimAt), foeOf(word(foes, aimAt)).breakAt)}`] : [])
   // The chooser: the commands, or, while picking a target, the enemies.
-  derive menuLines = (not fighting or (committed and ui == "menu") ? [] : (ui == "target"
-    ? ["{Target}"].concat([0, 1].filter(i => i < foes.length).map(i => (nth(foeHp, i) > 0 ? word(foes, i) : "")))
-    : ["Auto", abilityOf(roleOf(stance, 0), 0), abilityOf(roleOf(stance, 0), 1), "Item"]))
+  derive menuLines = (ui == "target"
+    ? [" {Target}"].concat([0, 1].filter(i => i < foes.length).map(i => (nth(foeHp, i) > 0 ? ` ${word(foes, i)}` : "")))
+    : (ui == "stance" ? [` ${stanceName(0)}`, ` ${stanceName(1)}`, ` ${stanceName(2)}`, ` ${stanceName(3)}`]
+    : (ui == "item" ? [" Potion", `   x${potions}`]
+    : [" Auto", ` ${abilityOf(roleOf(stance, 0), 0)}`, ` ${abilityOf(roleOf(stance, 0), 1)}`, " Item"])))
   // Thunda's ATB, above the commands: her slots, each an ability over its own
   // segment filling. Committed slots turn yellow; while she acts, each
   // command leaves the bar as it finishes. One slot, uncommitted: Right goes.
@@ -147,20 +158,18 @@ component ExactOdyssey
   derive atbLine = `${gauge(seg1 / 24 * 64, 8)}  ${gauge(seg2 / 24 * 64, 8)}`
   derive slotNames = `${slotText(word(shown, 0), locked)}    ${slotText(word(shown, 1), locked)}${shown.length == 1 and not locked ? "  >Go" : ""}`
   // The title is the stance; its arrow says Left changes it.
-  // Each member: the name, then the role in yellow, HP and the gauge.
-  derive statusLines = ([`<${stanceName(stance)}`].concat([0, 1, 2].map(i => [
-    nameOf(i), `{${padTo(roleOf(stance, i), 6)}}${pad3(nth(hp, i))}${gauge(nth(atb, i), 3)}`]).flat()))
+  // Each member on a line: name, role in yellow, HP.
+  derive statusLines = ([`<${stanceName(stance)}`].concat([0, 1, 2].map(i =>
+    `${padTo(nameOf(i), 8)} {${padTo(roleOf(stance, i), 6)}} ${pad3(nth(hp, i))}`)))
   derive stanceLines = [` ${stanceName(0)}`, ` ${stanceName(1)}`, ` ${stanceName(2)}`, ` ${stanceName(3)}`]
   derive rankLines = ["{Victory!}", `Time  ${clockOf(bticks)}`, `Rank  ${starLine(rank)}`].concat(found ? ["Found a Potion."] : [])
   // The top window: a stance's roles while choosing one, else what is playing.
   derive topMsg = ui == "stance" and fighting ? `${roleOf(stanceCursor, 0)} ${roleOf(stanceCursor, 1)} ${roleOf(stanceCursor, 2)}` : msg
-  derive battleWindows = ([`0,20,10,10,2|${foeLines.join("|")}`, `10,20,8,10,2|${menuLines.join("|")}`,
-    `18,20,14,10|${statusLines.join("|")}`]
-    .concat(fighting ? (shown.length > 0 ? [`10,16,21,4|${slotNames}|${atbLine}`] : [`10,17,21,3|${atbLine}`]) : [])
+  derive battleWindows = ([`10,20,22,10,2|${statusLines.join("|")}`]
+    .concat(chooserShown ? [`0,20,10,10,2|${menuLines.join("|")}`] : [])
+    .concat(fighting ? (shown.length > 0 ? [`0,16,21,4|${slotNames}|${atbLine}`] : [`0,17,21,3|${atbLine}`]) : [])
     .concat(hpBars)
     .concat(fighting ? panel : [])
-    .concat(fighting and ui == "stance" ? [`0,20,10,10,2|${stanceLines.join("|")}`] : [])
-    .concat(fighting and ui == "item" ? [`0,20,10,10,2| Potion|   x${potions}`] : [])
     .concat(topMsg != "" ? [`12,1,20,3|${topMsg}`] : [])
     .concat(phase == "won" ? [`7,6,18,10,2|${rankLines.join("|")}`] : []).join("^"))
 
@@ -300,6 +309,7 @@ component ExactOdyssey
       // A juggled enemy's gauge does not fill: it is in the air.
       let newFoe = [0, 1].filter(i => i < foes.length).map(i => (nth(foeHp, i) > 0 ? (nth(j0, i) > 0 ? nth(fa0, i) : min(full(), nth(fa0, i) + foeOf(word(foes, i)).speed)) : 0))
       bticks = bticks + 1
+      leap = play == "act" ? leap + 1 : 0
       juggle = ks.filter(i => i < foes.length).map(i => max(0, nth(j0, i) - 1))
       brk = ks.filter(i => i < foes.length).map(i => max(0, nth(b0, i) - 1))
       hold = ks.filter(i => i < foes.length).map(i => max(0, nth(hd0, i) - 1))
@@ -416,6 +426,7 @@ component ExactOdyssey
     qAims = aims
     qi = 0
     step = 0
+    leap = 0
     atb = gauges
     msg = announce(word(actions, 0))
     play = "act"

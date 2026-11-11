@@ -107,18 +107,19 @@ near its edge. At each waypoint a guard stops and slowly looks both ways.
 
 Battles run in real time: gauges fill and enemies attack while your menu is open; only one
 action plays at a time, the next right after. Each member's ATB gauge has two segments, one
-ability each. You command Thunda, the leader. Her ATB bar sits above the commands; choose an ability and its
+ability each. You command Thunda, the leader. The chooser sits bottom left (it goes away while her commands
+wait or play out), with her ATB bar above it; choose an ability and its
 name appears over a segment. Choose a second, then a target (the chooser becomes a target list),
 to commit both; **Auto** fills both by her role and goes straight to the target list. Committed,
 the commands stay on the bar until it fills and she acts; press Space or Enter first and she acts
 at once with the segments she has, dropping the rest. **Right** commits a single queued ability.
 Each command leaves the bar as it finishes. Escape takes back a slot. **Item** commits a Potion,
 which heals the whole party. Tooth
-and Chocolat fill theirs by role (shown in yellow) and act. Press **Left** for the stance menu,
+and Chocolat fill theirs by role (shown in yellow) and act. Press **Left** for the stance list, in the chooser,
 free at any time: **Assault** (all Blast), **Rush** (Strike, Strike, Blast), **Balance** and
 **Bulwark**. Only Strike attacks; Blast's Fire and Ice build an enemy's chain fast; Guard can
 Taunt and Steel. The chain drains over time, slower just after a Strike hit. The stagger panel
-at the top left follows the enemy you last targeted. Staggered, an enemy takes far more damage,
+at the top left follows the enemy you last targeted. Each attacker leaps in beside its target, weapon out. Staggered, an enemy takes far more damage,
 and Strike hits launch it: upside down in the air, it can't act. Each enemy's HP shows as a bar
 beneath it. A win shows your time and a 1–5 star rank (five stars finds a Potion), and the party
 is healed in full after every fight.
