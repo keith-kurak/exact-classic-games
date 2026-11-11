@@ -110,23 +110,50 @@ fn blocks(p: vec3<f32>) -> f32 {
     return sdBox(p - blockCentre(p), vec3<f32>(2.0, BLOCK_H * 0.5, 1.75));
 }
 
-// A figure at pos facing f, legs swinging by s (-1…1).
+// Turn q about the x axis by a (a leg or arm swinging forward and back).
+fn rotX(q: vec3<f32>, a: f32) -> vec3<f32> {
+    let c = cos(a);
+    let s = sin(a);
+    return vec3<f32>(q.x, q.y * c - q.z * s, q.y * s + q.z * c);
+}
+
+// A figure at pos facing f, legs swinging by s (-1…1), built from boxes, as a
+// late-90s low-poly model: flat faces and hard edges. A box head, a torso
+// with shoulder plates and a belt, and box limbs that swing from hip and
+// shoulder.
 fn figure(p: vec3<f32>, pos: vec2<f32>, f: vec2<f32>, s: f32) -> f32 {
     let q = vec2<f32>(p.x - pos.x, p.z - pos.y);
     let lz = dot(q, f);
     let lx = dot(q, vec2<f32>(f.y, -f.x));
     let r = length(q);
     // Far from the figure, a bound that meets its true distance smoothly (the
-    // arms reach 0.4 m out), so soft shadows show no rings.
+    // shoulder plates reach about 0.4 m out), so soft shadows show no rings.
     if (r > 1.5) { return r - 0.42; }
     if (p.y > 2.2) { return max(r - 0.42, p.y - 1.76); }
     let l = vec3<f32>(lx, p.y, lz);
-    var d = capsule(l, vec3<f32>(-0.12, 0.1, s * 0.22), vec3<f32>(-0.11, 0.85, 0.0), 0.1);
-    d = min(d, capsule(l, vec3<f32>(0.12, 0.1, -s * 0.22), vec3<f32>(0.11, 0.85, 0.0), 0.1));
-    d = min(d, capsule(l, vec3<f32>(0.0, 0.95, 0.0), vec3<f32>(0.0, 1.36, 0.02), 0.21));
-    d = min(d, length(l - vec3<f32>(0.0, 1.6, 0.04)) - 0.13);
-    d = min(d, capsule(l, vec3<f32>(-0.29, 1.36, 0.0), vec3<f32>(-0.32, 0.95, -s * 0.15), 0.075));
-    d = min(d, capsule(l, vec3<f32>(0.29, 1.36, 0.0), vec3<f32>(0.32, 0.95, s * 0.15), 0.075));
+    let a = s * 0.38;
+    // Legs and feet, from the hips.
+    var d = 1e5;
+    for (var k = 0; k < 2; k = k + 1) {
+        let side = select(-1.0, 1.0, k == 1);
+        let leg = rotX(l - vec3<f32>(side * 0.11, 0.88, 0.0), a * side);
+        d = min(d, sdBox(leg - vec3<f32>(0.0, -0.42, 0.0), vec3<f32>(0.072, 0.42, 0.082)));
+        d = min(d, sdBox(leg - vec3<f32>(0.0, -0.83, 0.05), vec3<f32>(0.075, 0.05, 0.13)));
+        // Arms from the shoulders, swinging against the legs.
+        let arm = rotX(l - vec3<f32>(side * 0.29, 1.37, 0.0), -a * side * 0.8);
+        d = min(d, sdBox(arm - vec3<f32>(0.0, -0.22, 0.0), vec3<f32>(0.058, 0.22, 0.062)));
+    }
+    // Hips and belt, torso, shoulder plates, collar, head.
+    d = min(d, sdBox(l - vec3<f32>(0.0, 0.93, 0.0), vec3<f32>(0.18, 0.08, 0.11)));
+    d = min(d, sdBox(l - vec3<f32>(0.0, 1.18, 0.0), vec3<f32>(0.2, 0.18, 0.12)));
+    // Shoulder plates, their tops sloped down to the arms.
+    let plates = sdBox(l - vec3<f32>(0.0, 1.38, -0.01), vec3<f32>(0.27, 0.07, 0.14));
+    d = min(d, max(plates, (abs(l.x) + l.y - 1.66) * 0.7071));
+    d = min(d, sdBox(l - vec3<f32>(0.0, 1.47, -0.01), vec3<f32>(0.1, 0.04, 0.09)));
+    // The head: a box with its upright edges cut off, eight-sided from above.
+    let hq = l - vec3<f32>(0.0, 1.61, 0.02);
+    let head = sdBox(hq, vec3<f32>(0.1, 0.115, 0.108));
+    d = min(d, max(head, (abs(hq.x) + abs(hq.z) - 0.15) * 0.7071));
     return d;
 }
 
@@ -217,13 +244,17 @@ fn shadow(p: vec3<f32>) -> f32 {
 fn figureColour(p: vec3<f32>, pos: vec2<f32>, f: vec2<f32>, player: bool) -> vec3<f32> {
     let front = dot(vec2<f32>(p.x - pos.x, p.z - pos.y), f);
     if (player) {
-        if (p.y > 1.48) {
-            // A dark hood, with teal goggles across the front.
-            if (front > 0.06 && p.y > 1.58 && p.y < 1.67) { return vec3<f32>(0.25, 0.85, 0.8); }
-            return vec3<f32>(0.14, 0.15, 0.18);
+        if (p.y > 1.5) {
+            // A dark hood over the top and back, teal goggles round the front
+            // and sides, and the face below them.
+            if (front > -0.02 && p.y > 1.6 && p.y < 1.67) { return vec3<f32>(0.25, 0.85, 0.8); }
+            if (front > 0.02 && p.y < 1.6) { return vec3<f32>(0.68, 0.55, 0.43); }
+            return vec3<f32>(0.16, 0.17, 0.2);
         }
+        // A slate sneaking suit, with darker seams and belt.
+        if (p.y > 0.86 && p.y < 0.92) { return vec3<f32>(0.1, 0.11, 0.13); }
         let seam = step(0.9, fract(p.y * 6.0));
-        return mix(vec3<f32>(0.20, 0.24, 0.33), vec3<f32>(0.12, 0.14, 0.2), seam);
+        return mix(vec3<f32>(0.33, 0.37, 0.45), vec3<f32>(0.2, 0.23, 0.29), seam);
     }
     if (p.y > 1.5) {
         if (front > 0.08 && p.y < 1.66) { return vec3<f32>(0.62, 0.48, 0.38); }
