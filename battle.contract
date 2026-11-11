@@ -10,7 +10,7 @@ shape Hero
   pp: number
 
 fn party(): Hero[] = [
-  Hero(name="Rory", maxHp=128, atk=24, pp=24),
+  Hero(name="Rory", maxHp=128, atk=24, pp=0),
   Hero(name="Juniper", maxHp=104, atk=19, pp=41),
   Hero(name="Teo", maxHp=116, atk=22, pp=0)
 ]
@@ -34,6 +34,19 @@ fn livingFrom(xs: number[], start: number): number = orFirst(living(xs).filter(i
 fn nextLiving(xs: number[], from: number): number = orFirst(living(xs).filter(i => i > from).concat(living(xs)))
 fn prevLiving(xs: number[], from: number): number = orFirst(sortBy(living(xs).filter(i => i < from), i => -i)
   .concat(sortBy(living(xs), i => -i)))
+// The commands for a hero: Juniper, the one with PP, also has Magic.
+fn menuFor(i: number): string[] = heroAt(i).pp > 0 ? ["Attack", "Magic", "Auto Fight", "Run"] : ["Attack", "Auto Fight", "Run"]
+fn itemAt(i: number, c: number): string = match menuFor(i).at(c) { case some(s) => s, case none => "" }
+
+// Magic. Fire hits every foe standing; Heal mends the hero with the least HP
+// for their size. Orders 100 and 200 stand for them in a hero's order.
+fn fireCost(): number = 6
+fn healCost(): number = 5
+fn fireDmg(r: number): number = 20 + r % 9
+fn healAmt(): number = 48
+fn neediest(xs: number[]): number = orFirst(sortBy(living(xs), i => hpAt(xs, i) / heroAt(i).maxHp))
+fn mend(xs: number[], i: number, d: number): number[] = xs.map((h, k) => k == i ? min(heroAt(k).maxHp, h + d) : h)
+
 // Auto Fight's pick: the foe with the least HP left.
 fn weakest(xs: number[]): number = orFirst(sortBy(living(xs), i => hpAt(xs, i)))
 
@@ -152,6 +165,7 @@ component Meter
     i: number
     hero: Hero
     hp: number
+    pp: number
     active: bool
   view
     column position="relative" width=150 height=120
@@ -172,9 +186,9 @@ component Meter
       Wheel(left=60, top=45, pos=wheel(hp, 100))
       Wheel(left=86, top=45, pos=wheel(hp, 10))
       Wheel(left=112, top=45, pos=wheel(hp, 1))
-      Wheel(left=60, top=81, pos=wheel(hero.pp, 100))
-      Wheel(left=86, top=81, pos=wheel(hero.pp, 10))
-      Wheel(left=112, top=81, pos=wheel(hero.pp, 1))
+      Wheel(left=60, top=81, pos=wheel(pp, 100))
+      Wheel(left=86, top=81, pos=wheel(pp, 10))
+      Wheel(left=112, top=81, pos=wheel(pp, 1))
 
 component Battle
   props
@@ -182,6 +196,8 @@ component Battle
     foeHp: number[]
     foeHits: number[]
     shownHp: number[]
+    pp: number[]
+    sel: string
     heroHits: number[]
     shake: number
     phase: string
@@ -192,7 +208,11 @@ component Battle
     line2: string
     seed: string
     musicPaused: bool
+    won: bool
     attack: action
+    magic: action
+    fire: action
+    heal: action
     autoOn: action
     autoOff: action
     run: action
@@ -206,38 +226,68 @@ component Battle
     musicPause: action
   view
     column width="100%" height="100%"
-      audio "assets/battle.mp3" autoplay=true loop=true paused=musicPaused
-        playing=musicPlaying pause=musicPause testId="music"
+      // The battle music, until the party wins; then the victory music, once.
+      if won
+        audio "assets/win.mp3" autoplay=true testId="win-music"
+      else
+        audio "assets/battle.mp3" autoplay=true loop=true paused=musicPaused
+          playing=musicPlaying pause=musicPause testId="music"
       canvas surface=aurora(seed) width="100%" height="100%" testId="sky"
         column color-scheme="dark" width="100%" height="100%" box-sizing="border-box" padding=24 gap=12
-          justify-content="space-between" color="CanvasText"
+          justify-content="space-between" color="CanvasText" position="relative"
           // The top: the command window on a hero's turn, else the messages. The
           // message box shakes when the party is hit.
           row height=128 gap=12 align-items="flex-start" justify-content="center"
-            if (phase == "menu" or phase == "target") and not auto
+            if (phase == "menu" or phase == "target" or phase == "magic") and not auto
               column width=240 box-sizing="border-box" padding="10px 16px" gap=4 background-color="Canvas"
-                border="3px solid CanvasText" border-radius=10 animation="pop 160ms ease-out both" testId="commands"
+                border="3px solid CanvasText" border-radius=10 testId="commands"
                 text heroAt(actor).name font-size=13 font-weight=700 color="-exact-secondary-label" testId="actor"
                 row gap=8 press=attack testId="cmd-attack"
-                  text (phase == "menu" and cursor == 0 ? "▸" : " ") width=14 font-size=19 font-weight=700
+                  text (phase == "menu" and sel == "Attack" ? "▸" : " ") width=14 font-size=19 font-weight=700
                   text "Attack" font-size=19 font-weight=700
+                if heroAt(actor).pp > 0
+                  row gap=8 press=magic testId="cmd-magic"
+                    text ((phase == "menu" and sel == "Magic") or phase == "magic" ? "▸" : " ") width=14 font-size=19 font-weight=700
+                    text "Magic" font-size=19 font-weight=700
                 row gap=8 press=autoOn testId="cmd-auto"
-                  text (phase == "menu" and cursor == 1 ? "▸" : " ") width=14 font-size=19 font-weight=700
+                  text (phase == "menu" and sel == "Auto Fight" ? "▸" : " ") width=14 font-size=19 font-weight=700
                   text "Auto Fight" font-size=19 font-weight=700
                 row gap=8 press=run testId="cmd-run"
-                  text (phase == "menu" and cursor == 2 ? "▸" : " ") width=14 font-size=19 font-weight=700
+                  text (phase == "menu" and sel == "Run" ? "▸" : " ") width=14 font-size=19 font-weight=700
                   text "Run" font-size=19 font-weight=700
               if phase == "target"
                 column box-sizing="border-box" padding="10px 16px" margin-top=40 background-color="Canvas"
-                  border="3px solid CanvasText" border-radius=10 animation="pop 160ms ease-out both" testId="target"
+                  border="3px solid CanvasText" border-radius=10 testId="target"
                   text `To ${foeLabel(foes, cursor)}` font-size=19 font-weight=700 testId="target-name"
+              if phase == "magic"
+                column width=230 box-sizing="border-box" padding="10px 16px" gap=4 margin-top=40 background-color="Canvas"
+                  border="3px solid CanvasText" border-radius=10 testId="magic"
+                  row gap=8 press=fire testId="spell-fire"
+                    opacity=(hpAt(pp, actor) >= fireCost() ? 1 : 0.4)
+                    text (cursor == 0 ? "▸" : " ") width=14 font-size=19 font-weight=700
+                    text "Fire" font-size=19 font-weight=700 flex=1
+                    text `${fireCost()} PP` font-size=15 font-weight=700 color="-exact-secondary-label"
+                  row gap=8 press=heal testId="spell-heal"
+                    opacity=(hpAt(pp, actor) >= healCost() ? 1 : 0.4)
+                    text (cursor == 1 ? "▸" : " ") width=14 font-size=19 font-weight=700
+                    text "Heal" font-size=19 font-weight=700 flex=1
+                    text `${healCost()} PP` font-size=15 font-weight=700 color="-exact-secondary-label"
             else
-              for s in [shake] key=`shake-${s}`
-                column flex=1 max-width=680 min-height=92 box-sizing="border-box" padding="12px 18px" gap=6
-                  background-color="Canvas" border="3px solid CanvasText" border-radius=10 press=next
-                  animation=(s > 0 ? "jolt 360ms ease-out" : "pop 200ms ease-out both") testId="battle-dialog"
-                  text line1 font-size=20 font-weight=700 testId="battle-text"
-                  text line2 font-size=20 font-weight=700 testId="battle-text-2"
+              if not won
+                for s in [shake] key=`shake-${s}`
+                  column flex=1 max-width=680 min-height=92 box-sizing="border-box" padding="12px 18px" gap=6
+                    background-color="Canvas" border="3px solid CanvasText" border-radius=10 press=next
+                    animation=(s > 0 ? "jolt 360ms ease-out" : "pop 200ms ease-out both") testId="battle-dialog"
+                    text line1 font-size=20 font-weight=700 testId="battle-text"
+                    text line2 font-size=20 font-weight=700 testId="battle-text-2"
+          // The win: the message box in the middle of the screen.
+          if won
+            column position="absolute" inset=0 align-items="center" justify-content="center" padding=24
+              column width="100%" max-width=520 min-height=92 box-sizing="border-box" padding="16px 22px" gap=6
+                background-color="Canvas" border="3px solid CanvasText" border-radius=10 press=next
+                animation="pop 260ms ease-out both" testId="win-dialog"
+                text line1 font-size=24 font-weight=800 testId="battle-text"
+                text line2 font-size=20 font-weight=700 testId="battle-text-2"
           // The middle: the foes still standing. They drop in at the start, and a
           // hit replays the jolt.
           row gap=20 justify-content="center" align-items="flex-end" position="relative" testId="foes"
@@ -272,7 +322,7 @@ component Battle
                           if i == 3
                             column press=pick3
                               Robe(look=f.look)
-            if auto
+            if auto and not won
               column position="absolute" right=0 bottom=0 padding="2px 10px" border="2px solid CanvasText"
                 border-radius=6 background-color="Canvas" press=autoOff testId="auto"
                 text "AUTO" font-size=14 font-weight=900 letter-spacing=2
@@ -281,11 +331,11 @@ component Battle
           row gap=12 justify-content="center" align-items="flex-end"
             for h, i in party() key=h.name
               column animation=`rise 480ms ${120 + i * 90}ms ease-out both`
-                column translate=((phase == "menu" or phase == "target") and actor == i and not auto ? "0px -14px" : "0px 0px")
+                column translate=((phase == "menu" or phase == "target" or phase == "magic") and actor == i and not auto ? "0px -14px" : "0px 0px")
                   transition="translate -exact-spring(260, 22, 1)" testId=`hero-${i}`
                   for hit in [hpAt(heroHits, i)] key=`${i}-${hit}`
                     column animation=(hit > 0 ? "jolt 320ms ease-out" : "none")
-                      Meter(i=i, hero=h, hp=hpAt(shownHp, i), active=((phase == "menu" or phase == "target") and actor == i))
+                      Meter(i=i, hero=h, hp=hpAt(shownHp, i), pp=hpAt(pp, i), active=((phase == "menu" or phase == "target" or phase == "magic") and actor == i))
           row justify-content="flex-end"
             button press=toggleMusic testId="music-toggle"
               text (musicPaused ? "Play music" : "Pause music")

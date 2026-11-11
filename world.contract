@@ -270,10 +270,12 @@ component Sign
 
 // The scenery, in tiles: grass, sidewalks and roads, the pond, flowers, houses,
 // trees, the sign and the cult. The player is drawn by the caller, over it.
+// `turn` is the way the one talking faces, "" otherwise: the player's own facing
+// is not a prop, so walking does not redraw the scenery.
 component Scenery
   props
     talkTo: string
-    facing: string
+    turn: string
     beaten: string[]
   view
     svg viewBox=`0 0 ${cols()} ${rows()}` width=(cols() * tile()) height=(rows() * tile()) testId="field"
@@ -321,5 +323,5 @@ component Scenery
         if n.kind == "sign"
           Sign(n=n)
         else
-          Cultist(x=n.x, y=n.y, facing=(talkTo == n.id ? opposite(facing) : n.facing), calm=beaten.includes(n.id))
+          Cultist(x=n.x, y=n.y, facing=(talkTo == n.id ? turn : n.facing), calm=beaten.includes(n.id))
       rect x=0 y=0 width=cols() height=rows() fill="#1c2440" opacity=0.14

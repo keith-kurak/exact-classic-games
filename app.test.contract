@@ -100,7 +100,14 @@ test "a cultist talks, the swirl plays, and Auto Fight wins the battle"
   clock +400
   expect tree has "auto"
   expect state actor == 1
-  clock +90000
+  clock +24000
+  expect state outcome == "won"
+  expect tree has "win-dialog"
+  expect tree has "win-music"
+  expect tree missing "music"
+  expect tree missing "battle-dialog"
+  expect tree missing "auto"
+  type "root" key " "
   expect tree missing "battle-screen"
   expect state beaten.0 == "greeter"
   type "root" key " "
@@ -207,3 +214,41 @@ test "the battle's music button pauses and plays"
   tap "music-toggle"
   clock settle
   expect state musicPaused == true
+
+test "Juniper's Magic menu casts Fire, which costs PP"
+  type "root" key "ArrowUp"
+  type "root" key "ArrowUp"
+  type "root" key "ArrowUp"
+  type "root" key "ArrowRight"
+  type "root" key "ArrowRight"
+  type "root" key "ArrowRight"
+  type "root" key " "
+  clock +1500
+  type "root" key " "
+  clock +1500
+  type "root" key " "
+  clock +1000
+  clock +1000
+  type "root" key " "
+  expect state phase == "menu"
+  expect text "actor" == "Rory"
+  expect tree missing "cmd-magic"
+  type "root" key " "
+  type "root" key " "
+  expect text "actor" == "Juniper"
+  expect tree has "cmd-magic"
+  type "root" key "ArrowDown"
+  type "root" key " "
+  expect tree has "magic"
+  type "root" key "Escape"
+  expect tree missing "magic"
+  type "root" key " "
+  type "root" key " "
+  expect state orders.1 == 100
+  expect text "actor" == "Teo"
+  type "root" key " "
+  type "root" key " "
+  expect state round == 1
+  clock +20000
+  expect state ppNow.1 == 35
+  expect state phase == "menu"
