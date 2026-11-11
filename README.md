@@ -6,7 +6,7 @@ Small games made with [Exact](../../exact), each in the style of a classic.
 | --- | --- | --- |
 | **Exactbound** | A 16-bit-era RPG slice: walk Cheery Cheery Village, talk to the Order of the Placid Blue, and fight them in turn-based battles over a GPU aurora background. | [`games/exactbound`](games/exactbound) |
 | **Exact Gear Solid** | A late-90s stealth game: cross a dim storage room past four patrolling guards, with an overhead camera, a radar of their view cones, and a camera that drops beside you when you press your back to a wall. | [`games/exact-gear-solid`](games/exact-gear-solid) |
-| **Exact Odyssey** | An 8-bit console RPG on a real NES-style picture processor: 2C02 colours, 8×8 CHR tiles, attribute-limited backgrounds, 3-colour sprites. Walk Reedholm, then fight in an ATB battle with a break chain and party stances. | [`games/exact-odyssey`](games/exact-odyssey) |
+| **Exact Odyssey** | An 8-bit console RPG on a real NES-style picture processor: 2C02 colours, 8×8 CHR tiles, attribute-limited backgrounds, 3-colour sprites. Walk Reedholm with Thunda, Tooth and Chocolat, then fight real-time ATB battles with stagger chains, juggling and party stances. | [`games/exact-odyssey`](games/exact-odyssey) |
 | **Links Exact86** | An early-90s PC golf game: hole 1, a dogleg-right par 4 laid out after Pebble Beach's first, ray-marched from a fixed camera behind the ball, with a three-press swing. | [`games/links-exact86`](games/links-exact86) |
 
 Each game is its own Exact app, with its own Cargo workspace and tests. Their histories
@@ -57,7 +57,7 @@ bun run test              # every game
 bun run test:exactbound   # 8 tests
 bun run test:links        # 5 tests
 bun run test:gear         # 10 tests
-bun run test:odyssey      # 10 tests
+bun run test:odyssey      # 11 tests
 bun run test:engine       # the NES picture processor's own tests
 ```
 
@@ -107,18 +107,20 @@ near its edge. At each waypoint a guard stops and slowly looks both ways.
 
 Battles run in real time: gauges fill and enemies attack while your menu is open; only one
 action plays at a time, the next right after. Each member's ATB gauge has two segments, one
-ability each. You command Rook, the leader; his slots appear above the commands as you fill them, each an ability
-over its filling segment. Choose an ability to fill slot one; choose a second, then its target,
-to commit both (they turn yellow), and Rook acts when his gauge is full. **Auto** fills both
-slots by his role; Space commits them. Escape takes back a slot. **Item** commits a Potion, which
-heals the whole party. Ivy and Kai fill theirs by role (shown in yellow) and act. Press **Left**
-for the stance menu, free at any time: **Assault** (all Blast), **Rush** (Strike, Strike,
-Blast), **Balance** and **Bulwark**. Only Strike attacks; Blast's Fire and Ice build an enemy's
-chain fast, and it drains over time, slower just after a Strike hit. The stagger panel at the top
-left follows the enemy you last targeted: its chain and a bar to its stagger point. Staggered, an
-enemy takes far more damage, and Strike hits launch it: upside down in the air, it can't act.
-Each enemy's HP shows as a bar beneath it. A win shows your time and a 1–5 star rank (five stars
-finds a Potion), and the party is healed in full after every fight.
+ability each. You command Thunda, the leader; her slots appear above the commands as you fill
+them, each an ability over its filling segment. Choose an ability to fill slot one; choose a
+second, then its target, to commit both (they turn yellow). **Right** commits what is queued
+early, even one ability. She acts as soon as her committed slots' segments are full, and each
+command leaves the bar as it finishes. **Auto** fills both slots by her role; Space commits
+them. Escape takes back a slot. **Item** commits a Potion, which heals the whole party. Tooth
+and Chocolat fill theirs by role (shown in yellow) and act. Press **Left** for the stance menu,
+free at any time: **Assault** (all Blast), **Rush** (Strike, Strike, Blast), **Balance** and
+**Bulwark**. Only Strike attacks; Blast's Fire and Ice build an enemy's chain fast; Guard can
+Taunt and Steel. The chain drains over time, slower just after a Strike hit. The stagger panel
+at the top left follows the enemy you last targeted. Staggered, an enemy takes far more damage,
+and Strike hits launch it: upside down in the air, it can't act. Each enemy's HP shows as a bar
+beneath it. A win shows your time and a 1–5 star rank (five stars finds a Potion), and the party
+is healed in full after every fight.
 
 The picture comes from [`engines/nes-ppu`](engines/nes-ppu). To write the game's pattern tables
 as PNG sprite sheets and two sample frames to `games/exact-odyssey/assets/sheets/`:

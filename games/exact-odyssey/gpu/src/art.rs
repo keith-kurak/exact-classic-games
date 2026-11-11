@@ -1,7 +1,7 @@
 //! Exact Odyssey's art, drawn as text: every pixel a colour number 0–3 in
 //! its palette. `build()` turns it into the two pattern tables, the metatiles
-//! and metasprites the picture processor draws, within NES limits: 256 tiles
-//! a table, one palette per 16×16 background area, 3 colours a sprite.
+//! and metasprites the picture processor draws, in NES style: one palette per
+//! 16×16 background area, 3 colours a sprite (banks may exceed 256 tiles).
 //! Sheets of the tables can be written as PNGs (`sheets` in lib.rs).
 
 use nes_ppu::{glyph_tile, parse_art, Metasprite, Metatile, Palettes, PatternTable, Tile};
@@ -32,7 +32,7 @@ pub const BATTLE: Palettes = Palettes {
     spr: SPRITES,
 };
 
-/// Sprites: Rook (red), Ivy (green), Kai (blue), and white things (the hand
+/// Sprites: Thunda (red), Tooth (green), Chocolat (blue), and white things (the hand
 /// cursor, villagers, damage numbers). Colour 1, the hair and outline, is dark
 /// but never black, so figures hold their shape on the black battle backdrop.
 pub const SPRITES: [[u8; 4]; 4] = [
@@ -500,56 +500,162 @@ const FIELD_LEFT_1: &str = "
 ...11......11...";
 
 // Battle: 16×24, facing left, standing and striking.
-const BATTLE_IDLE: &str = "
+
+
+const THUNDA_IDLE: &str = "
 ................
 ......11111.....
 ....11111111....
 ...1111111111...
 ..11111111111...
-..1122211111....
-..1212211111....
-..1222211111....
-...122221111....
-....1111111.....
-...133333331....
-..13333333331...
-..13323333331...
-..12313333331...
-..1213333331....
-...1333333331...
-...1333333331...
+..1111111111....
+..12211111111...
+..12121111111...
+...12221111.....
+....1111133.....
+...133333333....
+..1333333333333.
+..13323333333333
+..12313333333333
+..1213333333333.
+...13333333333..
 ...1111111111...
 ...1333113331...
 ...1333113331...
 ...1333113331...
 ...1111..1111...
 ..11111..11111..
+................
 ................";
 
-const BATTLE_STRIKE: &str = "
+const THUNDA_STRIKE: &str = "
 ................
 ......11111.....
 ....11111111....
 ...1111111111...
 ..11111111111...
-..1122211111....
-..1212211111....
-..1222211111....
-...122221111....
-....1111111.....
-.11.1333333331..
-1221333333333 1.
-1221333333333 1.
-.11.133333331...
-....13333333 1..
-....13333333 1..
-....13333333 1..
-....1111111111..
-...1333113331...
+..1111111111....
+..12211111111...
+..12121111111...
+...12221111.....
+....1111133.....
+...133333333....
+11111223333333..
+....11333333333.
+....13333333333.
+...13333333333..
+...1333333333...
+...1111111111...
+..13331.13331...
+.13331...13331..
+13331.....1331..
+1111......1111..
+................
+................
+................";
+
+const TOOTH_IDLE: &str = "
+.....111111.....
+...11111111111..
+..1111111111111.
+..11111111111111
+..11221111111111
+..12221111111111
+..12121111111111
+...1222111111111
+....1221111.1111
+....11111111....
+...1333333331...
+..133333333331..
+..133233333331..
+..123133333331..
+..12133333331...
+...1333333331...
+...1333333331...
+...1333333331...
+..133333333331..
+..133331333331..
 ..13331..13331..
-.13331....13331.
+..1221...1221...
+.11111..11111...
+................";
+
+const TOOTH_STRIKE: &str = "
+.....111111.....
+...11111111111..
+..1111111111111.
+..11111111111111
+..11221111111111
+..12221111111111
+..12121111111111
+...1222111111111
+....1221111.1111
+....11111111....
+...1333333331...
+1111111223333331
+....1133333331..
+....133333331...
+...1333333331...
+...1333333331...
+..133333333331..
+..133331333331..
+.13331...13331..
+13331.....13331.
+1221.......1221.
+1111.......1111.
+................
+................";
+
+const CHOCOLAT_IDLE: &str = "
+.........11.11..
+......1111111111
+....111111111.11
+...1111111111...
+...1221111111...
+..12222111111...
+..12122211111...
+...1222221111...
+....12221111....
+....1111111.....
+...133333331....
+..13332333331...
+..12313333331...
+..1213333331....
+...13333331.....
+..1333333331....
+.133333333331...
+.111111111111...
+...1221.1221....
+...1221.1221....
+...1221.1221....
+..11111.11111...
+................
+................";
+
+const CHOCOLAT_STRIKE: &str = "
+.1..............
+121.............
+121......11.11..
+...1111111111...
+...1221111111...
+..12222111111...
+..12122211111...
+...1222221111...
+....12221111....
+..1.1111111.....
+..121333331.....
+..1213332331....
+...1333333331...
+...133333331....
+...13333331.....
+..1333333331....
+.133333333331...
+.111111111111...
+...1221.1221....
+...1221..1221...
+..1221....1221..
 .11111....11111.
-1111........111.
+................
 ................";
 
 const BATTLE_DOWN: &str = "
@@ -740,56 +846,53 @@ const EDGE_LEFT: &str = "
 
 /// Everything the picture processor needs, built from the art above.
 pub struct Art {
-    /// Background CHR banks: the field's, and one per enemy type for battles.
-    /// Each starts with the same window tiles (and battle banks the same cave
-    /// rock), so their indices match; a battle bank then holds its enemy and
-    /// an upside-down copy for juggling, as NES RPGs swapped banks per fight.
+    /// Background CHR banks: the field's, and the battle's. Each starts with
+    /// the same window tiles, so text indices match in both; the battle bank
+    /// swaps the field's terrain for big enemies, as NES RPGs swapped banks.
     pub bg: PatternTable,
-    pub battle_banks: HashMap<&'static str, PatternTable>,
+    pub bg_battle: PatternTable,
     pub spr: PatternTable,
     /// Background metatiles by map character (field bank, and the cave rock
     /// in the battle bank).
     pub metatiles: HashMap<char, Metatile>,
-    /// Enemies (each in its own bank): size in tiles, their tiles row by
-    /// row, and the upside-down tiles (each tile flipped, rows reversed).
+    /// Enemies (battle bank): size in tiles and their tiles, row by row.
     pub enemies: HashMap<&'static str, Enemy>,
     pub sprites: HashMap<&'static str, Metasprite>,
     pub ui: Ui,
     /// Animated metatiles: frames by map character, swapped like CHR banks.
     pub frames: HashMap<char, Vec<Metatile>>,
     /// Damage digits as sprites.
-    pub digits: HashMap<char, u8>,
+    pub digits: HashMap<char, u16>,
 }
 
 pub struct Enemy {
     pub w: usize,
     pub h: usize,
-    pub tiles: Vec<u8>,
-    pub flipped: Vec<u8>,
+    pub tiles: Vec<u16>,
 }
 
 /// Window and label tiles, at the same index in every background bank.
 pub struct Ui {
     /// Glyphs on window blue: white, and yellow for the characters yellow text uses.
-    pub glyphs: HashMap<char, u8>,
-    pub yellow: HashMap<char, u8>,
+    pub glyphs: HashMap<char, u16>,
+    pub yellow: HashMap<char, u16>,
     /// Gauges on the black backdrop, for HP bars under enemies.
-    pub clear_bars: [u8; 9],
+    pub clear_bars: [u16; 9],
     pub border: Border,
     /// ATB gauge tiles on window blue, 0–8 pixels filled.
-    pub bars: [u8; 9],
+    pub bars: [u16; 9],
 }
 
 pub struct Border {
-    pub tl: u8,
-    pub tr: u8,
-    pub bl: u8,
-    pub br: u8,
-    pub top: u8,
-    pub bottom: u8,
-    pub left: u8,
-    pub right: u8,
-    pub fill: u8,
+    pub tl: u16,
+    pub tr: u16,
+    pub bl: u16,
+    pub br: u16,
+    pub top: u16,
+    pub bottom: u16,
+    pub left: u16,
+    pub right: u16,
+    pub fill: u16,
 }
 
 fn one(art: &str) -> Tile {
@@ -854,9 +957,8 @@ fn ui(bg: &mut PatternTable) -> Ui {
     let yellow_chars: Vec<char> = "StrikeBlastMendGuardHoundDroneVictoryAttackSlashFireIceCureHealProvokeSteelPotion*%0123456789".chars().collect();
     for (ch, rows) in FONT {
         glyphs.insert(*ch, bg.add(glyph_tile(rows, 3, 1)));
-        if yellow_chars.contains(ch) {
-            yellow.insert(*ch, bg.add(glyph_tile(rows, 2, 1)));
-        }
+        let _ = &yellow_chars;
+        yellow.insert(*ch, bg.add(glyph_tile(rows, 2, 1)));
     }
     let gauge = |n: usize, empty: u8| -> Tile {
         let mut t = Tile([[empty; 8]; 8]);
@@ -869,8 +971,8 @@ fn ui(bg: &mut PatternTable) -> Ui {
         }
         t
     };
-    let mut bars = [0u8; 9];
-    let mut clear_bars = [0u8; 9];
+    let mut bars = [0u16; 9];
+    let mut clear_bars = [0u16; 9];
     for n in 0..9 {
         bars[n] = bg.add(gauge(n, 1));
         clear_bars[n] = bg.add(gauge(n, 0));
@@ -902,32 +1004,20 @@ pub fn build() -> Art {
         metatiles.insert(ch, metatile(&mut bg, art, pal));
     }
 
-    // A battle bank per enemy type: the window tiles, the cave rock, then the
-    // enemy (64×64, its 32×32 art doubled with Scale2x) and upside down.
-    let mut battle_banks = HashMap::new();
+    // The battle bank: the window tiles, the cave rock, then the enemies
+    // (64×64, their 32×32 art doubled with Scale2x).
+    let mut bg_battle = PatternTable::default();
+    let battle_ui = ui(&mut bg_battle);
+    assert_eq!(battle_ui.border.fill, ui_tiles.border.fill, "both banks share the window tiles");
+    assert_eq!(battle_ui.clear_bars, ui_tiles.clear_bars);
+    for (ch, rock, pal) in [('k', ROCK, 0), ('K', SHARD, 0)] {
+        metatiles.insert(ch, metatile(&mut bg_battle, rock, pal));
+    }
     let mut enemies = HashMap::new();
     for (name, art) in [("drone", DRONE), ("hound", HOUND)] {
-        let mut bank = PatternTable::default();
-        let bank_ui = ui(&mut bank);
-        assert_eq!(bank_ui.border.fill, ui_tiles.border.fill, "every bank shares the window tiles");
-        assert_eq!(bank_ui.clear_bars, ui_tiles.clear_bars);
-        for (ch, rock, pal) in [('k', ROCK, 0), ('K', SHARD, 0)] {
-            let m = metatile(&mut bank, rock, pal);
-            if let Some(prev) = metatiles.get(&ch) {
-                assert_eq!(prev.tiles, m.tiles, "every battle bank has the rock at the same place");
-            }
-            metatiles.insert(ch, m);
-        }
         let (w, h, tiles) = parse_art(&scale2x(art));
-        let ids: Vec<u8> = tiles.iter().map(|t| bank.add(*t)).collect();
-        let mut flipped = Vec::with_capacity(ids.len());
-        for row in (0..h).rev() {
-            for col in 0..w {
-                flipped.push(bank.add(tiles[row * w + col].flipped()));
-            }
-        }
-        enemies.insert(name, Enemy { w, h, tiles: ids, flipped });
-        battle_banks.insert(name, bank);
+        let ids = tiles.into_iter().map(|t| bg_battle.add(t)).collect();
+        enemies.insert(name, Enemy { w, h, tiles: ids });
     }
 
     let mut sprites = HashMap::new();
@@ -940,8 +1030,12 @@ pub fn build() -> Art {
         ("left1", FIELD_LEFT_1, 0),
         ("villager0", VILLAGER, 3),
         ("villager1", VILLAGER_1, 3),
-        ("idle", BATTLE_IDLE, 0),
-        ("strike", BATTLE_STRIKE, 0),
+        ("idle0", THUNDA_IDLE, 0),
+        ("strike0", THUNDA_STRIKE, 0),
+        ("idle1", TOOTH_IDLE, 1),
+        ("strike1", TOOTH_STRIKE, 1),
+        ("idle2", CHOCOLAT_IDLE, 2),
+        ("strike2", CHOCOLAT_STRIKE, 2),
         ("ko", BATTLE_DOWN, 0),
         ("hand", HAND, 3),
     ] {
@@ -972,7 +1066,7 @@ pub fn build() -> Art {
         .collect();
     frames.insert('~', water_frames);
 
-    Art { bg, battle_banks, spr, metatiles, enemies, sprites, ui: ui_tiles, frames, digits }
+    Art { bg, bg_battle, spr, metatiles, enemies, sprites, ui: ui_tiles, frames, digits }
 }
 
 // ── Maps ──
@@ -1016,21 +1110,14 @@ mod tests {
     #[test]
     fn the_art_fits_the_tables() {
         let art = build();
-        assert!(art.bg.tiles.len() <= 256, "bg tiles: {}", art.bg.tiles.len());
-        for (name, bank) in &art.battle_banks {
-            assert!(bank.tiles.len() <= 256, "{name} bank: {}", bank.tiles.len());
-        }
-        assert!(art.spr.tiles.len() <= 256, "sprite tiles: {}", art.spr.tiles.len());
+        // Banks are not held to the NES's 256 tiles; this reports their sizes.
         for row in FIELD_MAP {
             assert_eq!(row.chars().count(), 32, "{row}");
             for ch in row.chars() {
                 assert!(art.metatiles.contains_key(&ch), "no metatile `{ch}`");
             }
         }
-        for (name, bank) in &art.battle_banks {
-            println!("{name} bank {} tiles", bank.tiles.len());
-        }
-        println!("field bank {} tiles, sprites {} tiles", art.bg.tiles.len(), art.spr.tiles.len());
+        println!("field bank {} tiles, battle bank {} tiles, sprites {} tiles", art.bg.tiles.len(), art.bg_battle.tiles.len(), art.spr.tiles.len());
     }
 }
 

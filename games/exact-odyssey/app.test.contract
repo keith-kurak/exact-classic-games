@@ -28,18 +28,18 @@ test "trees and water block the way"
   expect state ty == 18
   expect state moving == false
 
-test "the battle runs in real time: allies act while Rook's menu is open"
+test "the battle runs in real time: allies act while Thunda's menu is open"
   type "root" key "ArrowRight" for 5300
   clock +1000
   expect state scene == "battle"
   expect state phase == "fight"
   expect state ui == "menu"
   clock +3000
-  expect state lastAuto == "Kai"
+  expect state lastAuto == "Tooth"
   expect state ui == "menu"
   expect state committed == false
 
-test "one ability fills a slot; a second and its target commit both; Rook acts when full"
+test "one ability fills a slot; a second and its target commit both; Thunda acts when full"
   type "root" key "ArrowRight" for 5300
   clock +1000
   type "root" key "ArrowDown"
@@ -59,6 +59,21 @@ test "one ability fills a slot; a second and its target commit both; Rook acts w
   clock +4000
   expect state committed == false
   expect state plan.length == 0
+
+test "Right commits a single queued ability early, and it leaves the bar when done"
+  type "root" key "ArrowRight" for 5300
+  clock +1000
+  type "root" key "ArrowDown"
+  type "root" key " "
+  expect state plan.length == 1
+  type "root" key "ArrowRight"
+  expect state ui == "target"
+  type "root" key " "
+  expect state committed == true
+  expect state plan.length == 1
+  clock +3000
+  expect state rookTurns == 1
+  expect state committed == false
 
 test "Auto fills both slots by role, and Space commits them"
   type "root" key "ArrowRight" for 5300
@@ -80,7 +95,7 @@ test "Left opens the stances, free and at any time"
   expect state stance == 1
   expect state ui == "menu"
 
-test "a Potion takes Rook's turn and heals the party"
+test "a Potion takes Thunda's turn and heals the party"
   type "root" key "ArrowRight" for 5300
   clock +1000
   type "root" key "ArrowUp"
@@ -244,8 +259,8 @@ test "Auto in Balance staggers the hounds and wins, with a rank"
   type "root" key " "
   clock +2500
   expect state wins == 1
-  expect state rank == 4
+  expect state rank == 3
   expect state staggers == 2
-  expect state juggles == 7
+  expect state juggles == 4
   expect state hp.2 == 90
   expect state scene == "field"

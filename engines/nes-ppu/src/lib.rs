@@ -4,12 +4,14 @@
 //! the look with free-form drawing:
 //!
 //! - **Colours** come from the 64-entry 2C02 palette, by index.
-//! - **Tiles** are 8×8 pixels, 2 bits a pixel (colours 0–3), held in two
-//!   pattern tables (background and sprites) of at most 256 tiles each.
+//! - **Tiles** are 8×8 pixels, 2 bits a pixel (colours 0–3), held in
+//!   pattern tables (background and sprites). The NES held 256 tiles a
+//!   table; these may hold more (indices are 16-bit), for richer art.
 //! - **Palettes**: 4 background and 4 sprite palettes of 3 colours each, plus
 //!   one universal backdrop colour shared by every background palette.
 //! - **Backgrounds** are built from 16×16 metatiles; each metatile has one
-//!   palette, as the attribute table allows.
+//!   palette, as the attribute table allows. Unlike the NES, a background
+//!   cell may be flipped, so art can be reused.
 //! - **Sprites** are 8×8 OAM entries with a palette, flips and a
 //!   behind-background bit. Colour 0 is transparent. At most 64 are drawn,
 //!   and at most 8 on one scanline: the rest drop out, and the OAM start
@@ -82,27 +84,29 @@ impl Tile {
     }
 }
 
-/// A pattern table: up to 256 distinct tiles. Adding a tile already present
-/// returns its index, so art that repeats costs nothing, as on a cartridge.
+/// A pattern table of distinct tiles. Adding a tile already present returns
+/// its index, so art that repeats costs nothing, as on a cartridge. (Not
+/// limited to the NES's 256.)
 #[derive(Clone, Debug, Default)]
 pub struct PatternTable {
     pub tiles: Vec<Tile>,
 }
 
 impl PatternTable {
-    pub fn add(&mut self, t: Tile) -> u8 {
+    pub fn add(&mut self, t: Tile) -> u16 {
         if let Some(i) = self.tiles.iter().position(|x| *x == t) {
-            return i as u8;
+            return i as u16;
         }
-        assert!(
-            self.tiles.len() < TABLE_SIZE,
-            "pattern table full: an NES table holds 256 tiles"
-        );
         self.tiles.push(t);
-        (self.tiles.len() - 1) as u8
+        (self.tiles.len() - 1) as u16
     }
 
-    pub fn get(&self, i: u8) -> &Tile {
+    /// Whether this table would fit an NES pattern table (256 tiles).
+    pub fn fits_nes(&self) -> bool {
+        self.tiles.len() <= TABLE_SIZE
+    }
+
+    pub fn get(&self, i: u16) -> &Tile {
         static EMPTY: Tile = Tile([[0; 8]; 8]);
         self.tiles.get(i as usize).unwrap_or(&EMPTY)
     }
@@ -186,18 +190,21 @@ impl Palettes {
     }
 }
 
-/// One background cell: a tile and the palette of the 16×16 area it is in.
+/// One background cell: a tile, the palette of the 16×16 area it is in, and
+/// flips (FLIP_H, FLIP_V). Real NES backgrounds cannot flip tiles; this
+/// engine allows it, so art can be reused (an enemy shown upside down).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Cell {
-    pub tile: u8,
+    pub tile: u16,
     pub palette: u8,
+    pub flip: u8,
 }
 
 /// A 16×16 background metatile: four tiles (top-left, top-right, bottom-left,
 /// bottom-right) and the one palette the attribute table gives them.
 #[derive(Clone, Copy, Debug)]
 pub struct Metatile {
-    pub tiles: [u8; 4],
+    pub tiles: [u16; 4],
     pub palette: u8,
 }
 
@@ -206,6 +213,7 @@ impl Metatile {
         Cell {
             tile: self.tiles[(ty & 1) * 2 + (tx & 1)],
             palette: self.palette,
+            flip: 0,
         }
     }
 }
@@ -220,7 +228,7 @@ pub const BEHIND: u8 = 0x20;
 pub struct Sprite {
     pub x: i32,
     pub y: i32,
-    pub tile: u8,
+    pub tile: u16,
     /// Palette 0–3 in the low bits, plus FLIP_H, FLIP_V and BEHIND.
     pub attr: u8,
 }
@@ -229,7 +237,7 @@ pub struct Sprite {
 #[derive(Clone, Debug)]
 pub struct Metasprite {
     /// (dx, dy, tile) for each piece, unflipped.
-    pub parts: Vec<(i32, i32, u8)>,
+    pub parts: Vec<(i32, i32, u16)>,
     pub width: i32,
     pub palette: u8,
 }
@@ -320,6 +328,8 @@ pub fn render(scene: &Scene) -> Frame {
                     ((scene.background)(wx.div_euclid(8), wy.div_euclid(8)), wx.rem_euclid(8), wy.rem_euclid(8))
                 }
             };
+            let px = if cell.flip & FLIP_H != 0 { 7 - px } else { px };
+            let py = if cell.flip & FLIP_V != 0 { 7 - py } else { py };
             let c = scene.bg_table.get(cell.tile).0[py as usize][px as usize];
             bg_opaque[x as usize] = c != 0;
             pixels[y as usize * WIDTH + x as usize] = if c == 0 {

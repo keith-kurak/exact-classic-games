@@ -3,7 +3,7 @@
 // it walks the field, starts fights, runs the battle, and tells the surface
 // what is on screen as small text specs (see gpu/src/lib.rs).
 use Npc, fieldMap, tileAt, walkable, thicket, npcs, npcAt, blocked, dx, dy, camAxis, nextRng from "./field.contract"
-use Foe, foeOf, group, foeTx, foeTy, labelRow, juggleTicks, panelName, panelBar, potionHeal, startPotions, parOf, nameOf, maxHp, atkOf, speedOf, full, stances, stanceName, roleOf, abilityOf, needsTarget, isStrike, power, chainGain, hitFor, chainUp, maxChain, drain, staggerTicks, rolePlan, segments, announce, slotText, lowest, stars, starLine, clockOf, nth, word, put, pad3, padTo, gauge from "./battle.contract"
+use Foe, foeOf, group, foeTx, foeTy, labelRow, juggleTicks, panelName, panelBar, potionHeal, startPotions, parOf, nameOf, maxHp, atkOf, speedOf, full, stances, stanceName, roleOf, abilityOf, needsTarget, isStrike, power, chainGain, hitFor, chainUp, maxChain, drain, staggerTicks, rolePlan, segments, segment, announce, slotText, lowest, stars, starLine, clockOf, nth, word, put, pad3, padTo, gauge from "./battle.contract"
 
 fn keyDir(k: string): string = (k == "ArrowUp" or k == "w" ? "up" : (k == "ArrowDown" or k == "s" ? "down"
   : (k == "ArrowLeft" or k == "a" ? "left" : (k == "ArrowRight" or k == "d" ? "right" : ""))))
@@ -32,7 +32,7 @@ component ExactOdyssey
   state fading = ""
   state next = ""
   // ── The battle ──
-  // Everything runs in real time: gauges fill and enemies act while Rook's
+  // Everything runs in real time: gauges fill and enemies act while Thunda's
   // menu is open. Only one action plays at a time; the next follows at once.
   state foes: string[] = []
   state foeHp: number[] = []
@@ -45,15 +45,15 @@ component ExactOdyssey
   state stance = 0
   // The fight: "intro", "fight", "won" or "lost".
   state phase = ""
-  // Rook's input: "menu", "target", "stance", "item" or "confirm".
+  // Thunda's input: "menu", "target", "stance", "item" or "confirm".
   state ui = "menu"
   state cursor = 0
   state stanceCursor = 0
-  // Rook's two ATB slots, their targets, and whether they are committed.
+  // Thunda's two ATB slots, their targets, and whether they are committed.
   state plan: string[] = []
   state planAims: number[] = []
   state committed = false
-  // The last enemy Rook aimed at: the allies follow his lead.
+  // The last enemy Thunda aimed at: the allies follow her lead.
   state focus = 0
   state target = 0
   // What is playing: "" (nothing), "act" (a member) or "foeAct"; who; the
@@ -79,6 +79,7 @@ component ExactOdyssey
   // Ticks each enemy stays juggled (launched, upside down), and how often.
   state juggle: number[] = []
   state juggles = 0
+  state rookTurns = 0
   // The fight's length and par in ticks, and its rank in stars.
   state bticks = 0
   state par = 0
@@ -105,7 +106,7 @@ component ExactOdyssey
   derive inBattle = scene == "battle"
   derive fighting = phase == "fight"
   derive acting = play == "act"
-  derive partySprites = [0, 1, 2].map(i => `${nth(hp, i) <= 0 ? "ko" : (acting and actor == i ? "strike" : "idle")}:${partyX(i) - (acting and actor == i ? 16 : 0)}:${partyY(i)}:${i}`)
+  derive partySprites = [0, 1, 2].map(i => `${nth(hp, i) <= 0 ? "ko" : (acting and actor == i ? `strike${i}` : `idle${i}`)}:${partyX(i) - (acting and actor == i ? 16 : 0)}:${partyY(i)}:${i}`)
   derive pointing = fighting and not committed
   derive handSprite = (not fighting ? []
     : (ui == "target" ? [`hand:${foeTx(target, foes.length) * 8 - 14}:${foeTy(target) * 8 + 24}:`]
@@ -128,22 +129,27 @@ component ExactOdyssey
   derive panel = (foes.length > 0 and nth(foeHp, aimAt) > 0
     ? [`0,0,12,4|${panelName(word(foes, aimAt), nth(chain, aimAt), nth(brk, aimAt))}|${panelBar(nth(chain, aimAt), nth(brk, aimAt), foeOf(word(foes, aimAt)).breakAt)}`] : [])
   derive menuLines = (fighting ? ["Auto", abilityOf(roleOf(stance, 0), 0), abilityOf(roleOf(stance, 0), 1), "Item"] : [])
-  // Rook's ATB, above the commands: two slots, each an ability over its own
-  // segment filling. Committed slots turn yellow.
+  // Thunda's ATB, above the commands: her slots, each an ability over its own
+  // segment filling. Committed slots turn yellow; while she acts, each
+  // command leaves the bar as it finishes. One slot, uncommitted: Right goes.
+  derive rookActing = play == "act" and actor == 0
+  derive shown = rookActing ? queue.slice(qi) : plan
+  derive locked = committed or rookActing
   derive seg1 = min(24, nth(atb, 0) * 2)
   derive seg2 = max(0, (nth(atb, 0) - 12) * 2)
   // A slot shows only once it holds an ability.
-  derive slotLine = `${slotText(word(plan, 0), committed)}${gauge(seg1, 3)}${plan.length > 1 ? ` ${slotText(word(plan, 1), committed)}${gauge(seg2, 3)}` : ""}`
+  derive slotLine = `${slotText(word(shown, 0), locked)}${gauge(seg1, 3)}${shown.length > 1 ? ` ${slotText(word(shown, 1), locked)}${gauge(seg2, 3)}` : (locked ? "" : "  >Go")}`
   // The title is the stance; its arrow says Left changes it.
+  // Each member: the name, then the role in yellow, HP and the gauge.
   derive statusLines = ([`<${stanceName(stance)}`].concat([0, 1, 2].map(i => [
-    `${padTo(nameOf(i), 4)} ${pad3(nth(hp, i))}${gauge(nth(atb, i), 3)}`, `  {${roleOf(stance, i)}}`]).flat()))
+    nameOf(i), `{${padTo(roleOf(stance, i), 6)}}${pad3(nth(hp, i))}${gauge(nth(atb, i), 3)}`]).flat()))
   derive stanceLines = [` ${stanceName(0)}`, ` ${stanceName(1)}`, ` ${stanceName(2)}`, ` ${stanceName(3)}`]
   derive rankLines = ["{Victory!}", `Time  ${clockOf(bticks)}`, `Rank  ${starLine(rank)}`].concat(found ? ["Found a Potion."] : [])
   // The top window: a stance's roles while choosing one, else what is playing.
   derive topMsg = ui == "stance" and fighting ? `${roleOf(stanceCursor, 0)} ${roleOf(stanceCursor, 1)} ${roleOf(stanceCursor, 2)}` : msg
-  derive battleWindows = ([`0,20,10,10,2|${foeLines.join("|")}`, `10,20,9,10,2|${menuLines.join("|")}`,
-    `19,20,13,10|${statusLines.join("|")}`]
-    .concat(fighting and plan.length > 0 ? [`10,17,21,3|${slotLine}`] : [])
+  derive battleWindows = ([`0,20,10,10,2|${foeLines.join("|")}`, `10,20,8,10,2|${menuLines.join("|")}`,
+    `18,20,14,10|${statusLines.join("|")}`]
+    .concat(fighting and shown.length > 0 ? [`10,17,21,3|${slotLine}`] : [])
     .concat(hpBars)
     .concat(fighting ? panel : [])
     .concat(fighting and ui == "stance" ? [`0,20,10,10,2|${stanceLines.join("|")}`] : [])
@@ -281,7 +287,8 @@ component ExactOdyssey
       let j0 = juggle
       let a0 = atb
       let fa0 = foeAtb
-      let newAtb = [0, 1, 2].map(i => (nth(hp, i) > 0 ? min(full(), nth(a0, i) + speedOf(i)) : 0))
+      // The one acting does not refill until its queue is done.
+      let newAtb = [0, 1, 2].map(i => (nth(hp, i) <= 0 ? 0 : (play == "act" and actor == i ? nth(a0, i) : min(full(), nth(a0, i) + speedOf(i)))))
       // A juggled enemy's gauge does not fill: it is in the air.
       let newFoe = [0, 1].filter(i => i < foes.length).map(i => (nth(foeHp, i) > 0 ? (nth(j0, i) > 0 ? nth(fa0, i) : min(full(), nth(fa0, i) + foeOf(word(foes, i)).speed)) : 0))
       bticks = bticks + 1
@@ -294,17 +301,18 @@ component ExactOdyssey
       if play == ""
         dispatch(newAtb, newFoe)
 
-  // The next to act: Rook once his slots are committed and his gauge full,
-  // then an ally with a full gauge, then an enemy.
+  // The next to act: Thunda once her committed slots have their segments
+  // filled (one ability needs one), then an ally with a full gauge, then an enemy.
   action dispatch(gauges: number[], foeGauges: number[])
     let allies = [1, 2].filter(i => nth(gauges, i) >= full() and nth(hp, i) > 0)
     let foeReady = [0, 1].filter(i => i < foes.length and nth(foeGauges, i) >= full() and nth(foeHp, i) > 0)
-    if committed and nth(gauges, 0) >= full() and nth(hp, 0) > 0
+    if committed and nth(gauges, 0) >= plan.length * segment() and nth(hp, 0) > 0
       let p = plan
       let t = planAims
       plan = []
       planAims = []
       committed = false
+      rookTurns = rookTurns + 1
       run(0, p, t, gauges)
     else
       if allies.length > 0
@@ -313,7 +321,7 @@ component ExactOdyssey
         if foeReady.length > 0
           foeTurn(nth(foeReady, 0), foeGauges)
 
-  // ── Rook's input, open the whole fight ──
+  // ── Thunda's input, open the whole fight ──
   // The first ability chosen fills slot one; choosing a second, then its
   // target, commits both. Auto fills both by his role; Space commits them.
   // Escape takes back the last slot (or un-commits).
@@ -342,6 +350,15 @@ component ExactOdyssey
           else
             commit(aimAt)
 
+  // Commit what is queued, one slot or two; Right commits a single slot early.
+  action goEarly
+    if plan.length > 0 and not committed
+      if needsTarget(word(plan, 0)) or needsTarget(word(plan, 1))
+        target = aimAt
+        ui = "target"
+      else
+        commit(aimAt)
+
   action commit(aim: number)
     planAims = [aim, aim]
     focus = aim
@@ -369,7 +386,7 @@ component ExactOdyssey
       plan = []
     ui = "menu"
 
-  // An ally fills both segments by its role, at Rook's target, and acts.
+  // An ally fills both segments by its role, at Thunda's target, and acts.
   action autoAct(i: number, gauges: number[])
     lastAuto = nameOf(i)
     run(i, rolePlan(roleOf(stance, i), anyHurt, provoke == i), [aimAt, aimAt], gauges)
@@ -387,7 +404,7 @@ component ExactOdyssey
     qAims = aims
     qi = 0
     step = 0
-    atb = put(gauges, who, 0)
+    atb = gauges
     msg = announce(word(actions, 0))
     play = "act"
 
@@ -405,6 +422,9 @@ component ExactOdyssey
     else
       let n = qi + 1
       let left = [0, 1].filter(i => i < foes.length and nth(foeHp, i) > 0).length
+      // Each command leaves the ATB bar as it finishes.
+      if play == "act"
+        atb = put(atb, actor, max(0, nth(atb, actor) - segment()))
       if play == "act" and n < queue.length and left > 0
         qi = n
         step = 0
@@ -462,7 +482,7 @@ component ExactOdyssey
           dmgY = partyY(1) - 6
           dmgT = 16
         else
-          if c == "Provoke"
+          if c == "Taunt"
             provoke = actor
           else
             steel = actor
@@ -506,7 +526,7 @@ component ExactOdyssey
       phase = "won"
     else
       if partyLeft == 0 or nth(hp, 0) <= 0
-        msg = "Rook has fallen."
+        msg = "Thunda has fallen."
         phase = "lost"
 
   // ── Keys ──
@@ -550,11 +570,14 @@ component ExactOdyssey
           if d == "left"
             openStances()
           else
-            if confirmKey(k) and not committed
-              choose()
+            if d == "right"
+              goEarly()
             else
-              if cancelKey(k)
-                unslot()
+              if confirmKey(k) and not committed
+                choose()
+              else
+                if cancelKey(k)
+                  unslot()
     if ui == "confirm"
       if confirmKey(k)
         commit(aimAt)

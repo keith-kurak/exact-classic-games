@@ -14,9 +14,9 @@
 //!    0–8 is a gauge tile filled that many pixels (ATB and stagger gauges),
 //!    and text inside `{` `}` is yellow. An entry `@x,y|~n~n…` is a gauge
 //!    with no window, on the backdrop: the HP bars under enemies.
-//! 6. enemies: `name:tx:ty:fx` joined by `;`, all one type (a battle uses
-//!    that type's CHR bank). fx 0 is normal, 1 a hit flash, 2–5 a defeat
-//!    dissolving top-down, a tile row a step, 7 juggled: upside down, 16 px up.
+//! 6. enemies: `name:tx:ty:fx` joined by `;`. fx 0 is normal, 1 a hit flash,
+//!    2–5 a defeat dissolving top-down, a tile row a step, 7 juggled: upside
+//!    down (its tiles flipped, rows reversed), 16 px up.
 //! 7. fade: 0 (full colour) to 4 (black), the NES palette fade.
 
 pub mod art;
@@ -48,8 +48,6 @@ fn art() -> &'static Art {
 #[derive(Default)]
 struct Spec {
     battle: bool,
-    /// The battle's CHR bank: its enemy type.
-    bank: String,
     scroll_x: i32,
     scroll_y: i32,
     sprites: String,
@@ -92,9 +90,9 @@ fn parse_windows(spec: &str) -> Vec<Option<Cell>> {
     let ui = &art.ui;
     let b = &ui.border;
     let mut cells = vec![None; COLS * ROWS];
-    let mut put = |x: i32, y: i32, tile: u8| {
+    let mut put = |x: i32, y: i32, tile: u16| {
         if x >= 0 && y >= 0 && (x as usize) < COLS && (y as usize) < ROWS {
-            cells[y as usize * COLS + x as usize] = Some(Cell { tile, palette: WINDOW_PALETTE });
+            cells[y as usize * COLS + x as usize] = Some(Cell { tile, palette: WINDOW_PALETTE, flip: 0 });
         }
     };
     for win in spec.split('^').filter(|s| !s.is_empty()) {
@@ -196,17 +194,18 @@ fn parse_stage(spec: &str) -> Vec<Option<Cell>> {
             (_, "drone") => 1,
             _ => 3,
         };
-        // Juggled: the upside-down tiles, two rows higher (still on the
-        // attribute grid).
+        // Juggled: upside down (each tile flipped, the rows in reverse), two
+        // rows higher.
         let juggled = fx == 7;
-        let (tiles, ty) = if juggled { (&e.flipped, ty.saturating_sub(2)) } else { (&e.tiles, ty) };
+        let ty = if juggled { ty.saturating_sub(2) } else { ty };
         // Defeated: the enemy's rows clear away from the top, one a step.
         let gone = if (2..=5).contains(&fx) { (fx - 1) * h / 4 } else { 0 };
         for y in gone..h {
             for x in 0..w {
                 let (cx, cy) = (tx + x, ty + y);
                 if cx < COLS && cy < ROWS {
-                    cells[cy * COLS + cx] = Some(Cell { tile: tiles[y * w + x], palette });
+                    let (src, flip) = if juggled { ((h - 1 - y) * w + x, nes_ppu::FLIP_V) } else { (y * w + x, 0) };
+                    cells[cy * COLS + cx] = Some(Cell { tile: e.tiles[src], palette, flip });
                 }
             }
         }
@@ -246,7 +245,7 @@ fn draw(spec: &Spec, frame: u64, rgba: &mut [u8]) {
     let mut sprites = Vec::new();
     parse_sprites(&spec.sprites, frame, &mut sprites);
     let out = render(&Scene {
-        bg_table: if spec.battle { art.battle_banks.get(spec.bank.as_str()).unwrap_or(&art.battle_banks["drone"]) } else { &art.bg },
+        bg_table: if spec.battle { &art.bg_battle } else { &art.bg },
         spr_table: &art.spr,
         palettes,
         background: if spec.battle { &stage } else { &field },
@@ -264,10 +263,7 @@ pub fn write_sheets(dir: &std::path::Path) -> std::io::Result<()> {
     let art = art();
     std::fs::create_dir_all(dir)?;
     std::fs::write(dir.join("bg-field.png"), nes_ppu::png::sheet(&art.bg, FIELD.bg[0], false))?;
-    for (name, bank) in &art.battle_banks {
-        let pal = if *name == "drone" { BATTLE.bg[1] } else { BATTLE.bg[3] };
-        std::fs::write(dir.join(format!("bg-battle-{name}.png")), nes_ppu::png::sheet(bank, pal, false))?;
-    }
+    std::fs::write(dir.join("bg-battle.png"), nes_ppu::png::sheet(&art.bg_battle, BATTLE.bg[3], false))?;
     for (i, pal) in art::SPRITES.iter().enumerate() {
         std::fs::write(dir.join(format!("sprites-{i}.png")), nes_ppu::png::sheet(&art.spr, *pal, true))?;
     }
@@ -308,7 +304,6 @@ impl Surface for PpuSurface {
         };
         let battle = text(scene, "scene")? == "battle";
         let enemy_spec = text(enemies, "enemies")?;
-        let bank = enemy_spec.split(':').next().unwrap_or("drone").to_string();
         self.spec = Spec {
             battle,
             scroll_x: number(sx, "scroll x")?.round() as i32,
@@ -316,7 +311,6 @@ impl Surface for PpuSurface {
             sprites: text(sprites, "sprites")?,
             overlay: parse_windows(&text(windows, "windows")?),
             stage: if battle { parse_stage(&enemy_spec) } else { vec![None; COLS * ROWS] },
-            bank,
             fade: number(fade, "fade")?.clamp(0.0, 4.0) as u8,
         };
         Ok(())
@@ -463,7 +457,7 @@ mod tests {
         field.sprites = "down*:120:96;villager*:160:64".into();
         draw(&field, 0, &mut rgba);
         std::fs::write(dir.join("frame-field.png"), nes_ppu::png::encode(256, 240, &rgba)).unwrap();
-        let mut battle = Spec { battle: true, bank: "hound".into(), stage: parse_stage("hound:2:8:0;hound:12:8:7"), overlay: parse_windows("0,20,10,10|Drone|~8~3~0~0 131||{Hound}|~8~8~6~0 {205}^10,20,9,10,2|Fire|Ice|Flee|<Stance^19,20,13,10|Assault|Rook 120~8~8~8|  {Blast}|Ivy  100~4~0~0|  {Blast}|Kai   90~8~8~2|  {Blast}^@2,16|~8~8~8~8~8~3~0~0^@12,16|~8~8~4~0~0~0~0~0^0,0,14,4|{Hound}  212%|~8~8~8~8~8~8~8~4~0~0~0~0"), ..Default::default() };
+        let mut battle = Spec { battle: true, stage: parse_stage("drone:2:8:0;hound:12:8:7"), overlay: parse_windows("0,20,10,10|Drone|~8~3~0~0 131||{Hound}|~8~8~6~0 {205}^10,20,9,10,2|Fire|Ice|Flee|<Stance^19,20,13,10|Assault|Rook 120~8~8~8|  {Blast}|Ivy  100~4~0~0|  {Blast}|Kai   90~8~8~2|  {Blast}^@2,16|~8~8~8~8~8~3~0~0^@12,16|~8~8~4~0~0~0~0~0^0,0,14,4|{Hound}  212%|~8~8~8~8~8~8~8~4~0~0~0~0"), ..Default::default() };
         battle.sprites = "idle:200:56;idle:208:88:1;strike:184:120:2;hand:66:168".into();
         draw(&battle, 0, &mut rgba);
         std::fs::write(dir.join("frame-battle.png"), nes_ppu::png::encode(256, 240, &rgba)).unwrap();
