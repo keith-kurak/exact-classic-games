@@ -39,7 +39,7 @@ bun run exactbound    # build Exactbound and open it
 bun run links         # build Links Exact86 and open it
 ```
 
-Or from a game's folder, `bun exact.mjs mac --run`. The first build takes 1–3 minutes;
+Or from a game's folder, `bun exact.mjs mac --run` (for Exactbound, see [Audio](#audio) first). The first build takes 1–3 minutes;
 later builds take seconds. The app stays in the foreground of the terminal, with its log,
 until you quit it.
 
@@ -88,7 +88,7 @@ gets touchier.
 
 ```
 games/
-  exactbound/       app.contract, world.contract, battle.contract, gpu/ (aurora shader), assets/
+  exactbound/       app.contract, world.contract, battle.contract, gpu/ (aurora shader), assets/ (audio, not in git)
   links-exact86/    app.contract, course.contract, golfer.contract, gpu/ (course shader)
 ```
 
@@ -96,7 +96,11 @@ In each game, `app.contract` is the view and the game logic, `gpu/` is a Rust cr
 WGSL shaders that draw into a `canvas`, and `CLAUDE.md` has notes for working on it with
 Claude Code.
 
-## Assets
+## Audio
 
-Exactbound's music and sound effects in `games/exactbound/assets/` were supplied for
-personal use. Check their rights before you publish this repo.
+Exactbound's music and sound effects are not in this repo. `bun run exactbound` and
+`bun run test:exactbound` first run `scripts/silent-audio.ts`, which writes a silent
+stand-in for each missing file, so the game builds and plays without sound. To hear it, add
+your own files with the names in [`games/exactbound/assets/README.md`](games/exactbound/assets/README.md);
+git ignores them. If you build from the game's folder, run `bun scripts/silent-audio.ts`
+from the repo root once first.

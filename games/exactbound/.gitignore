@@ -6,3 +6,7 @@
 /app.contract.d.ts
 /.exact/
 /.env.local
+
+# Audio is not in git; scripts/silent-audio.ts writes silent stand-ins.
+/assets/*.mp3
+/assets/*.wav
