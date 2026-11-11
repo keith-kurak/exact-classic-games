@@ -1,5 +1,5 @@
-// The battle: the `aurora` GPU surface (gpu/) with the battle's UI inside it,
-// drawn through the shader. Three heroes against two to four members of the
+// The battle: the `aurora` GPU surface (gpu/) as the background, with the
+// battle's UI over it. Three heroes against two to four members of the
 // Order. The rules are pure functions here; the root keeps the state.
 use Foe, hash from "./world.contract"
 
@@ -245,9 +245,11 @@ component Battle
       else
         audio "assets/battle.mp3" autoplay=true loop=true paused=musicPaused
           playing=musicPlaying pause=musicPause testId="music"
-      canvas surface=aurora(seed) width="100%" height="100%" testId="sky"
-        column color-scheme="dark" width="100%" height="100%" box-sizing="border-box" padding=24 gap=12
-          justify-content="space-between" color="CanvasText" position="relative"
+      // The aurora is the background only; the UI sits over it, unwarped.
+      column position="relative" width="100%" height="100%"
+        canvas surface=aurora(seed) position="absolute" left=0 top=0 width="100%" height="100%" testId="sky"
+        column color-scheme="dark" position="absolute" inset=0 box-sizing="border-box" padding=24 gap=12
+          justify-content="space-between" color="CanvasText"
           // The top: the command window on a hero's turn, else the messages. The
           // message box shakes when the party is hit.
           row height=128 gap=12 align-items="flex-start" justify-content="center"
