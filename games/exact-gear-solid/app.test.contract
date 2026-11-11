@@ -99,6 +99,7 @@ test "lighting up brings a call from the medical officer, then you smoke"
   expect text "speaker" == "DR. VALE"
   clock +3000
   expect text "call-line" == "Is that smoke I'm reading on your vitals? In the middle of an infiltration?"
+  expect state smiling == false
   type "root" key " "
   type "root" key " "
   type "root" key " "
