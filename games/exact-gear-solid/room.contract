@@ -1,0 +1,87 @@
+// The storage room: 27 m × 20 m, north at the top (map y grows south).
+// Three rows of four steel containers, 4 m × 3.5 m: columns at x = 5 + 6c,
+// rows at y = 4.75 + 5.5r. The aisles between them run at x = 1.5, 8, 14, 20, 26
+// and y = 1.5, 7.5, 13, 18.75. The exit is in the north wall, x 22.5–25.5.
+// These must match gpu/shaders/room.wgsl.
+
+shape Spot
+  x: number
+  y: number
+
+shape Guard
+  x: number
+  y: number
+  fx: number
+  fy: number
+
+fn roomW(): number = 27
+fn roomD(): number = 20
+fn radius(): number = 0.3
+
+fn sq(v: number): number = v * v
+fn mag(v: number): number = max(v, -v)
+fn sgn(v: number): number = v < 0 ? -1 : (v > 0 ? 1 : 0)
+fn nr(x: number, g: number): number = (g + x / g) / 2
+fn root(x: number): number = x <= 0 ? 0 : nr(x, nr(x, nr(x, nr(x, nr(x, nr(x, nr(x, 1 + x / 8)))))))
+fn nth(xs: number[], k: number): number = match xs.at(k) { case some(v) => v, case none => 0 }
+
+fn colOf(x: number): number = max(0, min(3, round((x - 5) / 6)))
+fn rowOf(y: number): number = max(0, min(2, round((y - 4.75) / 5.5)))
+fn inBlock(x: number, y: number, m: number): bool =
+  (mag(x - (5 + colOf(x) * 6)) < 2 + m and mag(y - (4.75 + rowOf(y) * 5.5)) < 1.75 + m)
+fn solid(x: number, y: number, m: number): bool =
+  x < m or x > roomW() - m or y < m or y > roomD() - m or inBlock(x, y, m)
+fn atExit(x: number, y: number): bool = y < 1.0 and x > 22.5 and x < 25.5
+
+// ── The guards ──
+// Each walks a loop of waypoints along the aisles, at 1.3 m/s, and stops at
+// each waypoint for 1.5 s: half of it still facing the way it came, then
+// turned toward the next leg.
+
+fn routeOf(k: number): Spot[] = (k == 0 ? [Spot(x=2, y=7.5), Spot(x=26, y=7.5)]
+  : (k == 1 ? [Spot(x=14, y=1.5), Spot(x=14, y=18.75)]
+  : (k == 2 ? [Spot(x=20, y=1.5), Spot(x=26, y=1.5), Spot(x=26, y=13), Spot(x=20, y=13)]
+  : [Spot(x=8, y=13), Spot(x=8, y=18.75), Spot(x=20, y=18.75), Spot(x=20, y=13)])))
+fn ptAt(k: number, i: number): Spot = match routeOf(k).at(i % routeOf(k).length) { case some(p) => p, case none => Spot(x=0, y=0) }
+fn segLen(k: number, i: number): number = mag(ptAt(k, i + 1).x - ptAt(k, i).x) + mag(ptAt(k, i + 1).y - ptAt(k, i).y)
+fn speed(): number = 0.043
+fn pause(): number = 45
+
+fn guardFrom(a: Spot, b: Spot, prev: Spot, t: number, w: number): Guard = Guard(
+  x=a.x + sgn(b.x - a.x) * t, y=a.y + sgn(b.y - a.y) * t,
+  fx=(w > pause() / 2 ? sgn(a.x - prev.x) : sgn(b.x - a.x)),
+  fy=(w > pause() / 2 ? sgn(a.y - prev.y) : sgn(b.y - a.y)))
+fn guard(k: number, i: number, t: number, w: number): Guard =
+  guardFrom(ptAt(k, i), ptAt(k, i + 1), ptAt(k, i + routeOf(k).length - 1), t, w)
+
+fn ends(k: number, i: number, t: number): bool = t + speed() >= segLen(k, i)
+fn advI(k: number, i: number, t: number, w: number): number =
+  (w > 0 ? i : (ends(k, i, t) ? (i + 1) % routeOf(k).length : i))
+fn advT(k: number, i: number, t: number, w: number): number =
+  (w > 0 ? t : (ends(k, i, t) ? 0 : t + speed()))
+fn advW(k: number, i: number, t: number, w: number): number =
+  (w > 0 ? w - 1 : (ends(k, i, t) ? pause() : 0))
+
+// ── Sight ──
+// A guard sees 6 m ahead, 30° either side of where it faces, unless a container
+// is in the way; and anyone who bumps into it.
+fn sightRange(): number = 6
+fn clearLine(ax: number, ay: number, bx: number, by: number): bool =
+  [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].filter(f => inBlock(ax + (bx - ax) * f, ay + (by - ay) * f, 0)).length == 0
+fn sees(g: Guard, px: number, py: number): bool =
+  ((sq(px - g.x) + sq(py - g.y) < sq(sightRange())
+    and (px - g.x) * g.fx + (py - g.y) * g.fy > 0.87 * root(sq(px - g.x) + sq(py - g.y))
+    and clearLine(g.x, g.y, px, py))
+  or sq(px - g.x) + sq(py - g.y) < 0.64)
+
+// A point of a guard's view cone on the radar: a cone edge turned by a.
+fn coneX(g: Guard, a: number): number = g.x + sightRange() * (g.fx * cos(a) - g.fy * sin(a))
+fn coneY(g: Guard, a: number): number = g.y + sightRange() * (g.fx * sin(a) + g.fy * cos(a))
+fn cone(g: Guard): string =
+  `${g.x},${g.y} ${coneX(g, -0.52)},${coneY(g, -0.52)} ${coneX(g, -0.26)},${coneY(g, -0.26)} ${coneX(g, 0)},${coneY(g, 0)} ${coneX(g, 0.26)},${coneY(g, 0.26)} ${coneX(g, 0.52)},${coneY(g, 0.52)}`
+
+fn blockSpots(): Spot[] = [
+  Spot(x=3, y=3), Spot(x=9, y=3), Spot(x=15, y=3), Spot(x=21, y=3),
+  Spot(x=3, y=8.5), Spot(x=9, y=8.5), Spot(x=15, y=8.5), Spot(x=21, y=8.5),
+  Spot(x=3, y=14), Spot(x=9, y=14), Spot(x=15, y=14), Spot(x=21, y=14)
+]

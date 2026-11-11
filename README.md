@@ -5,6 +5,7 @@ Small games made with [Exact](../../exact), each in the style of a classic.
 | Game | Style | Folder |
 | --- | --- | --- |
 | **Exactbound** | A 16-bit-era RPG slice: walk Cheery Cheery Village, talk to the Order of the Placid Blue, and fight them in turn-based battles over a GPU aurora background. | [`games/exactbound`](games/exactbound) |
+| **Exact Gear Solid** | A late-90s stealth game: cross a dim storage room past four patrolling guards, with an overhead camera, a radar of their view cones, and a camera that drops beside you when you press your back to a wall. | [`games/exact-gear-solid`](games/exact-gear-solid) |
 | **Links Exact86** | An early-90s PC golf game: hole 1, a dogleg-right par 4 laid out after Pebble Beach's first, ray-marched from a fixed camera behind the ball, with a three-press swing. | [`games/links-exact86`](games/links-exact86) |
 
 Each game is its own Exact app, with its own Cargo workspace and tests. Their histories
@@ -37,6 +38,7 @@ From this folder:
 ```sh
 bun run exactbound    # build Exactbound and open it
 bun run links         # build Links Exact86 and open it
+bun run gear          # build Exact Gear Solid and open it
 ```
 
 Or from a game's folder, `bun exact.mjs mac --run` (for Exactbound, see [Audio](#audio) first). The first build takes 1–3 minutes;
@@ -49,9 +51,10 @@ To build without launching, run `bun exact.mjs mac` in the game's folder. The ap
 ## Test
 
 ```sh
-bun run test              # both games
+bun run test              # every game
 bun run test:exactbound   # 8 tests
 bun run test:links        # 5 tests
+bun run test:gear         # 4 tests
 ```
 
 The tests are each game's `app.test.contract`. They build the macOS app and drive it.
@@ -71,6 +74,20 @@ The tests are each game's `app.test.contract`. They build the macOS app and driv
 Every villager in a blue T-shirt starts a battle after they talk. Juniper has a Magic
 menu (Fire and Heal). **Auto Fight** plays the battle for you; Escape or X takes the controls back.
 
+### Exact Gear Solid
+
+| Key | Action |
+| --- | --- |
+| Arrows or WASD | Move (hold two keys to move diagonally) |
+| Push into a wall | After a quarter second, press your back to it; the camera drops beside you |
+| Along the wall | Slide; you stop at its corner, so you can look round it |
+| Away from the wall | Step off it |
+| Space | Try again, or play again |
+
+Reach the exit at the top right of the radar. A guard sees 6 m ahead, 30° either side, unless
+a container is in the way. A question mark means a guard has half-seen you; stay in its cone
+for about 0.3 s and you are spotted.
+
 ### Links Exact86
 
 | Key | Action |
@@ -89,6 +106,7 @@ gets touchier.
 ```
 games/
   exactbound/       app.contract, world.contract, battle.contract, gpu/ (aurora shader), assets/ (audio, not in git)
+  exact-gear-solid/ app.contract, room.contract, gpu/ (room shader)
   links-exact86/    app.contract, course.contract, golfer.contract, gpu/ (course shader)
 ```
 

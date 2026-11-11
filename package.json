@@ -6,6 +6,8 @@
     "links": "cd games/links-exact86 && bun exact.mjs mac --run",
     "test:exactbound": "bun scripts/silent-audio.ts && cd games/exactbound && bun exact.mjs test macos",
     "test:links": "cd games/links-exact86 && bun exact.mjs test macos",
-    "test": "bun run test:exactbound && bun run test:links"
+    "test": "bun run test:exactbound && bun run test:links && bun run test:gear",
+    "gear": "cd games/exact-gear-solid && bun exact.mjs mac --run",
+    "test:gear": "cd games/exact-gear-solid && bun exact.mjs test macos"
   }
 }

@@ -1,0 +1,41 @@
+test "the room starts with the player at the south-west corner and the radar up"
+  expect tree has "room"
+  expect tree has "radar"
+  expect tree has "radar-you"
+  expect state phase == "play"
+  expect state pressed == false
+  expect text "clock" == "0:00"
+
+test "holding up walks north, and letting go stops"
+  type "root" key "ArrowUp" down
+  clock +1000
+  type "root" key "ArrowUp" up
+  clock +100
+  expect state moving == false
+  expect state hy == 0
+
+test "pushing into a wall presses your back to it, and stepping away leaves it"
+  type "root" key "ArrowDown" down
+  clock +1000
+  expect state pressed == true
+  expect text "hint" == "Against the wall · slide along it, step away to leave"
+  type "root" key "ArrowDown" up
+  type "root" key "ArrowRight" down
+  clock +500
+  type "root" key "ArrowRight" up
+  expect state pressed == true
+  type "root" key "ArrowUp" down
+  clock +100
+  type "root" key "ArrowUp" up
+  expect state pressed == false
+
+test "standing in a guard's aisle gets you caught"
+  type "root" key "ArrowUp" down
+  clock +4200
+  type "root" key "ArrowUp" up
+  clock +40000
+  expect state phase == "caught"
+  expect tree has "game-over"
+  type "root" key " "
+  expect state phase == "play"
+  expect state px == 1.5

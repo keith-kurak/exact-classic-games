@@ -1,0 +1,19 @@
+[package]
+name = "exact-gear-solid-apple"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+build = "build.rs"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+exact-logic = { path = "../../../../../exact/logic" }
+exact-apple = { path = "../../../../../exact/host/apple" }
+exact-apple-update = { path = "../../../../../exact/host/apple-update" }
+exact-js = { path = "../../../../../exact/js" }
+
+[build-dependencies]
+exact-js-bake = { path = "../../../../../exact/js/bake" }
