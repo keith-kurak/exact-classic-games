@@ -75,15 +75,28 @@ test "Right commits a single queued ability early, and it leaves the bar when do
   expect state rookTurns == 1
   expect state committed == false
 
-test "Auto fills both slots by role, and Space commits them"
+test "Auto fills both slots by role, then the chooser asks the target"
   type "root" key "ArrowRight" for 5300
   clock +1000
   type "root" key " "
-  expect state ui == "confirm"
+  expect state ui == "target"
   expect state plan.0 == "Fire"
   expect state plan.1 == "Ice"
   type "root" key " "
   expect state committed == true
+
+test "Enter before the bar fills runs only the commands with filled segments"
+  type "root" key "ArrowRight" for 5300
+  clock +1000
+  type "root" key " "
+  type "root" key " "
+  expect state committed == true
+  type "root" key "Enter"
+  expect state rush == true
+  clock +300
+  expect state rookTurns == 1
+  expect state queue.length == 1
+  expect state committed == false
 
 test "Left opens the stances, free and at any time"
   type "root" key "ArrowRight" for 5300
@@ -260,7 +273,7 @@ test "Auto in Balance staggers the hounds and wins, with a rank"
   clock +2500
   expect state wins == 1
   expect state rank == 3
-  expect state staggers == 2
+  expect state staggers == 3
   expect state juggles == 4
   expect state hp.2 == 90
   expect state scene == "field"

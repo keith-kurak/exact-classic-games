@@ -45,7 +45,7 @@ component ExactOdyssey
   state stance = 0
   // The fight: "intro", "fight", "won" or "lost".
   state phase = ""
-  // Thunda's input: "menu", "target", "stance", "item" or "confirm".
+  // Thunda's input: "menu", "target", "stance" or "item".
   state ui = "menu"
   state cursor = 0
   state stanceCursor = 0
@@ -53,6 +53,8 @@ component ExactOdyssey
   state plan: string[] = []
   state planAims: number[] = []
   state committed = false
+  // Go now: run the committed commands whose segments have filled.
+  state rush = false
   // The last enemy Thunda aimed at: the allies follow her lead.
   state focus = 0
   state target = 0
@@ -109,11 +111,10 @@ component ExactOdyssey
   derive partySprites = [0, 1, 2].map(i => `${nth(hp, i) <= 0 ? "ko" : (acting and actor == i ? `strike${i}` : `idle${i}`)}:${partyX(i) - (acting and actor == i ? 16 : 0)}:${partyY(i)}:${i}`)
   derive pointing = fighting and not committed
   derive handSprite = (not fighting ? []
-    : (ui == "target" ? [`hand:${foeTx(target, foes.length) * 8 - 14}:${foeTy(target) * 8 + 24}:`]
+    : (ui == "target" ? [`hand:${10 * 8 - 6}:${(21 + (target + 1) * 2) * 8}:`]
     : (ui == "stance" ? [`hand:2:${(21 + stanceCursor * 2) * 8}:`]
     : (ui == "item" ? [`hand:2:${21 * 8}:`]
-    : (ui == "confirm" ? [`hand:${10 * 8 - 6}:${21 * 8}:`]
-    : (pointing ? [`hand:${10 * 8 - 6}:${(21 + cursor * 2) * 8}:`] : []))))))
+    : (pointing ? [`hand:${10 * 8 - 6}:${(21 + cursor * 2) * 8}:`] : [])))))
   derive dmgSprite = dmgT > 0 ? [`#${dmgText}:${dmgX}:${dmgY - (dmgT > 12 ? (16 - dmgT) * 2 : 8)}:3`] : []
   // OAM order is draw priority: damage numbers and the cursor in front.
   derive battleSprites = dmgSprite.concat(handSprite).concat(partySprites)
@@ -128,7 +129,10 @@ component ExactOdyssey
     `@${foeTx(i, foes.length)},${labelRow()}|${gauge(nth(foeHp, i) / foeOf(word(foes, i)).hp * 64, 8)}`))
   derive panel = (foes.length > 0 and nth(foeHp, aimAt) > 0
     ? [`0,0,12,4|${panelName(word(foes, aimAt), nth(chain, aimAt), nth(brk, aimAt))}|${panelBar(nth(chain, aimAt), nth(brk, aimAt), foeOf(word(foes, aimAt)).breakAt)}`] : [])
-  derive menuLines = (fighting ? ["Auto", abilityOf(roleOf(stance, 0), 0), abilityOf(roleOf(stance, 0), 1), "Item"] : [])
+  // The chooser: the commands, or, while picking a target, the enemies.
+  derive menuLines = (not fighting or (committed and ui == "menu") ? [] : (ui == "target"
+    ? ["{Target}"].concat([0, 1].filter(i => i < foes.length).map(i => (nth(foeHp, i) > 0 ? word(foes, i) : "")))
+    : ["Auto", abilityOf(roleOf(stance, 0), 0), abilityOf(roleOf(stance, 0), 1), "Item"]))
   // Thunda's ATB, above the commands: her slots, each an ability over its own
   // segment filling. Committed slots turn yellow; while she acts, each
   // command leaves the bar as it finishes. One slot, uncommitted: Right goes.
@@ -138,7 +142,10 @@ component ExactOdyssey
   derive seg1 = min(24, nth(atb, 0) * 2)
   derive seg2 = max(0, (nth(atb, 0) - 12) * 2)
   // A slot shows only once it holds an ability.
-  derive slotLine = `${slotText(word(shown, 0), locked)}${gauge(seg1, 3)}${shown.length > 1 ? ` ${slotText(word(shown, 1), locked)}${gauge(seg2, 3)}` : (locked ? "" : "  >Go")}`
+  // Thunda's ATB bar, always above the chooser: two segments of 8 tiles.
+  // Once something is slotted, its name sits over its segment.
+  derive atbLine = `${gauge(seg1 / 24 * 64, 8)}  ${gauge(seg2 / 24 * 64, 8)}`
+  derive slotNames = `${slotText(word(shown, 0), locked)}    ${slotText(word(shown, 1), locked)}${shown.length == 1 and not locked ? "  >Go" : ""}`
   // The title is the stance; its arrow says Left changes it.
   // Each member: the name, then the role in yellow, HP and the gauge.
   derive statusLines = ([`<${stanceName(stance)}`].concat([0, 1, 2].map(i => [
@@ -149,7 +156,7 @@ component ExactOdyssey
   derive topMsg = ui == "stance" and fighting ? `${roleOf(stanceCursor, 0)} ${roleOf(stanceCursor, 1)} ${roleOf(stanceCursor, 2)}` : msg
   derive battleWindows = ([`0,20,10,10,2|${foeLines.join("|")}`, `10,20,8,10,2|${menuLines.join("|")}`,
     `18,20,14,10|${statusLines.join("|")}`]
-    .concat(fighting and shown.length > 0 ? [`10,17,21,3|${slotLine}`] : [])
+    .concat(fighting ? (shown.length > 0 ? [`10,16,21,4|${slotNames}|${atbLine}`] : [`10,17,21,3|${atbLine}`]) : [])
     .concat(hpBars)
     .concat(fighting ? panel : [])
     .concat(fighting and ui == "stance" ? [`0,20,10,10,2|${stanceLines.join("|")}`] : [])
@@ -217,6 +224,7 @@ component ExactOdyssey
     plan = []
     planAims = []
     committed = false
+    rush = false
     play = ""
     msg = ""
     held = ""
@@ -306,9 +314,11 @@ component ExactOdyssey
   action dispatch(gauges: number[], foeGauges: number[])
     let allies = [1, 2].filter(i => nth(gauges, i) >= full() and nth(hp, i) > 0)
     let foeReady = [0, 1].filter(i => i < foes.length and nth(foeGauges, i) >= full() and nth(foeHp, i) > 0)
-    if committed and nth(gauges, 0) >= plan.length * segment() and nth(hp, 0) > 0
-      let p = plan
-      let t = planAims
+    let ready = floor(nth(gauges, 0) / segment())
+    if committed and nth(hp, 0) > 0 and (ready >= plan.length or (rush and ready > 0))
+      let p = plan.slice(0, min(plan.length, ready))
+      let t = planAims.slice(0, min(plan.length, ready))
+      rush = false
       plan = []
       planAims = []
       committed = false
@@ -322,8 +332,8 @@ component ExactOdyssey
           foeTurn(nth(foeReady, 0), foeGauges)
 
   // ── Thunda's input, open the whole fight ──
-  // The first ability chosen fills slot one; choosing a second, then its
-  // target, commits both. Auto fills both by his role; Space commits them.
+  // The first ability chosen fills slot one; choosing a second, then a
+  // target, commits both. Auto fills both by her role, then asks the target.
   // Escape takes back the last slot (or un-commits).
 
   derive aimAt = nth(foeHp, focus) > 0 ? focus : (nth(foeHp, 0) > 0 ? 0 : 1)
@@ -333,7 +343,8 @@ component ExactOdyssey
     let role = roleOf(stance, 0)
     if cursor == 0
       plan = rolePlan(role, anyHurt, provoke == 0)
-      ui = "confirm"
+      target = aimAt
+      ui = "target"
     else
       if cursor == 3
         ui = "item"
@@ -368,6 +379,7 @@ component ExactOdyssey
   action unslot
     if committed
       committed = false
+      rush = false
     else
       plan = plan.slice(0, max(0, plan.length - 1))
 
@@ -573,18 +585,14 @@ component ExactOdyssey
             if d == "right"
               goEarly()
             else
-              if confirmKey(k) and not committed
-                choose()
+              if confirmKey(k)
+                if committed
+                  rush = true
+                else
+                  choose()
               else
                 if cancelKey(k)
                   unslot()
-    if ui == "confirm"
-      if confirmKey(k)
-        commit(aimAt)
-      else
-        if cancelKey(k)
-          plan = []
-          ui = "menu"
     if ui == "stance"
       if d == "up"
         stanceCursor = (stanceCursor + stances() - 1) % stances()
@@ -611,7 +619,7 @@ component ExactOdyssey
           commit(target)
         else
           if cancelKey(k)
-            plan = plan.slice(0, 1)
+            plan = plan.length > 1 ? plan.slice(0, 1) : []
             ui = "menu"
 
   action onKeyUp(k: string)

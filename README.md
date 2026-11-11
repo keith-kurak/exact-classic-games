@@ -57,7 +57,7 @@ bun run test              # every game
 bun run test:exactbound   # 8 tests
 bun run test:links        # 5 tests
 bun run test:gear         # 10 tests
-bun run test:odyssey      # 11 tests
+bun run test:odyssey      # 12 tests
 bun run test:engine       # the NES picture processor's own tests
 ```
 
@@ -107,12 +107,13 @@ near its edge. At each waypoint a guard stops and slowly looks both ways.
 
 Battles run in real time: gauges fill and enemies attack while your menu is open; only one
 action plays at a time, the next right after. Each member's ATB gauge has two segments, one
-ability each. You command Thunda, the leader; her slots appear above the commands as you fill
-them, each an ability over its filling segment. Choose an ability to fill slot one; choose a
-second, then its target, to commit both (they turn yellow). **Right** commits what is queued
-early, even one ability. She acts as soon as her committed slots' segments are full, and each
-command leaves the bar as it finishes. **Auto** fills both slots by her role; Space commits
-them. Escape takes back a slot. **Item** commits a Potion, which heals the whole party. Tooth
+ability each. You command Thunda, the leader. Her ATB bar sits above the commands; choose an ability and its
+name appears over a segment. Choose a second, then a target (the chooser becomes a target list),
+to commit both; **Auto** fills both by her role and goes straight to the target list. Committed,
+the commands stay on the bar until it fills and she acts; press Space or Enter first and she acts
+at once with the segments she has, dropping the rest. **Right** commits a single queued ability.
+Each command leaves the bar as it finishes. Escape takes back a slot. **Item** commits a Potion,
+which heals the whole party. Tooth
 and Chocolat fill theirs by role (shown in yellow) and act. Press **Left** for the stance menu,
 free at any time: **Assault** (all Blast), **Rush** (Strike, Strike, Blast), **Balance** and
 **Bulwark**. Only Strike attacks; Blast's Fire and Ice build an enemy's chain fast; Guard can

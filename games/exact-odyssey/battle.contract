@@ -26,8 +26,8 @@ fn foeOf(name: string): Foe = (name == "Drone" ? drone() : hound())
 fn group(k: number): string[] = (k == 0 ? ["Drone"] : (k == 1 ? ["Hound", "Hound"] : ["Drone", "Hound"]))
 // Enemies are 64×64 (8×8 tiles); two stand side by side, one stands centred.
 fn foeTx(i: number, count: number): number = (count == 1 ? 6 : (i == 0 ? 2 : 12))
-fn foeTy(i: number): number = 8
-fn labelRow(): number = 16
+fn foeTy(i: number): number = 7
+fn labelRow(): number = 15
 // The label under an enemy: its stagger bar (5 tiles) and chain. Staggered,
 // the bar shows the stagger draining and the chain turns yellow.
 fn staggerText(chain: number, brk: number, breakAt: number): string = (brk > 0
