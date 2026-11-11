@@ -78,6 +78,8 @@ fn segments(): number = 2
 fn rolePlan(role: string, hurt: bool, provoking: bool): string[] =
   (role == "Strike" ? ["Attack", "Slash"] : (role == "Blast" ? ["Fire", "Ice"]
     : (role == "Mend" ? (hurt ? ["Cure", "Cure"] : ["Heal", "Heal"]) : (provoking ? ["Steel", "Steel"] : ["Provoke", "Steel"]))))
+// A slot in Rook's ATB: an ability name, six wide; yellow once committed.
+fn slotText(name: string, committed: bool): string = (committed and name != "" ? `{${padTo(name, 6)}}` : padTo(name == "" ? "  -" : name, 6))
 // The top window names abilities; a plain attack shows nothing.
 fn announce(name: string): string = (name == "Attack" or name == "attack" ? "" : name)
 

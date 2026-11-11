@@ -105,16 +105,18 @@ near its edge. At each waypoint a guard stops and slowly looks both ways.
 | Space, Enter or Z | Talk; choose in battle |
 | Escape or X | Back, when choosing a target |
 
-In battle, each member's ATB gauge has two segments, and each ability fills one; a full gauge
-acts them out back to back. You command Rook, the leader; Ivy and Kai fill theirs by role (shown
-in yellow) and act. On Rook's turn choose **Auto** (both segments by his role, then Space to
-confirm), his role's two abilities one segment at a time (Escape takes the last one back), or
-**Item** (a Potion heals the whole party and takes the turn). Press **Left** for the stance menu:
-**Assault** (all Blast), **Rush** (Strike, Strike, Blast), **Balance** and **Bulwark** change
-everyone's role, free. Only Strike attacks; Blast's Fire and Ice build an enemy's chain fast. The
-chain drains while gauges fill, slower just after a Strike hit, and not at all during menus.
-Fill the stagger bar under an enemy and it is staggered, taking far more damage. A win shows your
-time and a 1–5 star rank; five stars finds a Potion.
+Battles run in real time: gauges fill and enemies attack while your menu is open; only one
+action plays at a time, the next right after. Each member's ATB gauge has two segments, one
+ability each. You command Rook, the leader; his two slots sit above the commands, each an ability
+over its filling segment. Choose an ability to fill slot one; choose a second, then its target,
+to commit both (they turn yellow), and Rook acts when his gauge is full. **Auto** fills both
+slots by his role; Space commits them. Escape takes back a slot. **Item** commits a Potion, which
+heals the whole party. Ivy and Kai fill theirs by role (shown in yellow) and act. Press **Left**
+for the stance menu, free at any time: **Assault** (all Blast), **Rush** (Strike, Strike,
+Blast), **Balance** and **Bulwark**. Only Strike attacks; Blast's Fire and Ice build an enemy's
+chain fast, and it drains over time, slower just after a Strike hit. Fill the stagger bar under
+an enemy and it is staggered, taking far more damage. A win shows your time and a 1–5 star rank;
+five stars finds a Potion.
 
 The picture comes from [`engines/nes-ppu`](engines/nes-ppu). To write the game's pattern tables
 as PNG sprite sheets and two sample frames to `games/exact-odyssey/assets/sheets/`:

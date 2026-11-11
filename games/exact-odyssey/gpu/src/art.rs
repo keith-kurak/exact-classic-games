@@ -846,7 +846,7 @@ fn ui(bg: &mut PatternTable) -> Ui {
     let mut yellow = HashMap::new();
     let mut clear = HashMap::new();
     let mut clear_yellow = HashMap::new();
-    let yellow_chars: Vec<char> = "StrikeBlastMendGuardHoundDroneVictory*0123456789".chars().collect();
+    let yellow_chars: Vec<char> = "StrikeBlastMendGuardHoundDroneVictoryAttackSlashFireIceCureHealProvokeSteelPotion*0123456789".chars().collect();
     for (ch, rows) in FONT {
         glyphs.insert(*ch, bg.add(glyph_tile(rows, 3, 1)));
         if yellow_chars.contains(ch) {
