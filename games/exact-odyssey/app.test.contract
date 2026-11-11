@@ -313,7 +313,7 @@ test "a Revive brings a fallen ally back at half HP"
   expect state hp.2 == 45
   expect state revives == 0
 
-test "Mend casts Raise by itself when an ally has fallen"
+test "Mend casts Raise by itself when an ally has fallen, then Cure"
   type "root" key "ArrowRight" for 5300
   clock +1000
   type "root" key "ArrowLeft"
@@ -331,5 +331,23 @@ test "Mend casts Raise by itself when an ally has fallen"
   expect state plan.0 == "Potion"
   clock +4500
   expect state queue.0 == "Raise"
-  clock +600
-  expect state hp.2 == 22
+  clock +300
+  expect state hp.2 == 62
+
+test "a stance shift mid-attack cancels the party's commands"
+  type "root" key "ArrowRight" for 5300
+  clock +1000
+  type "root" key " "
+  type "root" key " "
+  expect state committed == true
+  clock +1800
+  expect state play == "act"
+  expect state actor == 0
+  type "root" key "ArrowLeft"
+  expect state ui == "stance"
+  type "root" key "ArrowDown"
+  type "root" key " "
+  expect state stance == 1
+  expect state play == ""
+  expect state atb.0 == 0
+  expect state plan.length == 0

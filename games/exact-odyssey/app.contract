@@ -74,6 +74,8 @@ component ExactOdyssey
   state dmgX = 0
   state dmgY = 0
   state dmgT = 0
+  // Healing numbers show green, damage red.
+  state dmgHeal = false
   state provoke = -1
   state steel = -1
   state wins = 0
@@ -132,10 +134,11 @@ component ExactOdyssey
   derive pointing = fighting and not committed
   // The chooser, bottom left: commands, or a target, stance or item list in
   // their place. It goes away while Thunda's commands wait or play out.
-  derive chooserShown = fighting and not rookActing and not (committed and ui == "menu")
+  // The stance list shows even then: a shift is allowed mid-attack.
+  derive chooserShown = fighting and (ui == "stance" or (not rookActing and not (committed and ui == "menu")))
   derive handRow = (ui == "target" ? target + 1 : (ui == "stance" ? stanceCursor : (ui == "item" ? itemCursor * 2 : cursor)))
   derive handSprite = chooserShown ? [`hand:2:${(21 + handRow * 2) * 8}:`] : []
-  derive dmgSprite = dmgT > 0 ? [`#${dmgText}:${dmgX}:${dmgY - (dmgT > 12 ? (16 - dmgT) * 2 : 8)}:3`] : []
+  derive dmgSprite = dmgT > 0 ? [`${dmgHeal ? "#" : "!"}${dmgText}:${dmgX}:${dmgY - (dmgT > 12 ? (16 - dmgT) * 2 : 8)}:${dmgHeal ? 2 : 3}`] : []
   // OAM order is draw priority: damage numbers and the cursor in front.
   derive battleSprites = dmgSprite.concat(handSprite).concat(ballSprite).concat(partySprites)
   derive enemySpec = ([0, 1].filter(i => i < foes.length and nth(fx, i) < 6)
@@ -424,12 +427,27 @@ component ExactOdyssey
   action openStances
     stanceCursor = stance
     ui = "stance"
+  // A shift cancels the party's commands: Thunda's queued ones, and whatever
+  // a member is playing out (its gauge is spent). An enemy's attack goes on.
   action pickStance
-    shiftT = stanceCursor != stance ? shiftTicks() : shiftT
+    let shifting = stanceCursor != stance
     stance = stanceCursor
-    if not committed
-      plan = []
     ui = "menu"
+    if shifting
+      shiftT = shiftTicks()
+      plan = []
+      planAims = []
+      committed = false
+      rush = false
+      if play == "act"
+        atb = put(atb, actor, 0)
+        queue = []
+        play = ""
+        step = 0
+        msg = ""
+    else
+      if not committed
+        plan = []
 
   // An ally fills both segments by its role, at Thunda's target, and acts.
   action autoAct(i: number, gauges: number[])
@@ -481,6 +499,7 @@ component ExactOdyssey
 
   action applyMember
     let c = word(queue, qi)
+    dmgHeal = not needsTarget(c)
     let aim0 = nth(qAims, qi)
     let t = nth(foeHp, aim0) > 0 ? aim0 : (aim0 == 0 ? 1 : 0)
     let r = nextRng(rng)
@@ -558,6 +577,7 @@ component ExactOdyssey
 
   action applyFoe
     let r = nextRng(rng)
+    dmgHeal = false
     let alive = [0, 1, 2].filter(i => nth(hp, i) > 0)
     let guard = [0, 1, 2].filter(i => nth(hp, i) > 0 and roleOf(stance, i) == "Guard")
     let who = provoke >= 0 and nth(hp, provoke) > 0 ? provoke : (guard.length > 0 ? nth(guard, 0) : nth(alive, r % max(1, alive.length)))

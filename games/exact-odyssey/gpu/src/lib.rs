@@ -6,7 +6,7 @@
 //! 1. scene: "field" or "battle"
 //! 2. scroll x, 3. scroll y: the field camera, in pixels
 //! 4. sprites: `name:x:y[:flags]` joined by `;`. Flags: `h` mirrors it, a
-//!    digit 0–3 overrides its palette. A name of `#123` draws those digits. A
+//!    digit 0–3 overrides its palette. A name of `#123` draws those digits in colour 3, `!123` in colour 2. A
 //!    name ending `*` steps in place: `*` becomes its frame, 0 or 1, from the
 //!    frame counter.
 //! 5. windows: `x,y,w,h[,spacing]|line|line` joined by `^`, in tiles; a
@@ -73,9 +73,10 @@ fn parse_sprites(spec: &str, frame: u64, out: &mut Vec<Sprite>) {
         let flags = f.next().unwrap_or("");
         let flip = flags.contains('h');
         let pal = flags.chars().find(|c| c.is_ascii_digit()).map(|c| c as u8 - b'0');
-        if let Some(num) = name.strip_prefix('#') {
-            for (i, ch) in num.chars().enumerate() {
-                if let Some(&tile) = art.digits.get(&ch) {
+        let digits = if name.starts_with('!') { Some(&art.digits2) } else if name.starts_with('#') { Some(&art.digits) } else { None };
+        if let Some(set) = digits {
+            for (i, ch) in name[1..].chars().enumerate() {
+                if let Some(&tile) = set.get(&ch) {
                     out.push(Sprite { x: x + i as i32 * 8, y, tile, attr: pal.unwrap_or(3) });
                 }
             }

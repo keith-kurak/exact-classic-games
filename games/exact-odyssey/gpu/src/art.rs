@@ -35,13 +35,14 @@ pub const BATTLE: Palettes = Palettes {
 
 /// Sprites: Thunda (white jacket), Tooth (blue), Chocolat (green), and a
 /// fourth for the hand cursor, damage numbers and the fireball (dark red,
-/// orange, white). Colour 1, hair and outline, is dark but never black, so
+/// red, white). Numbers: damage in red (colour 2 here), healing in green
+/// (colour 3 of Chocolat's palette). Colour 1, hair and outline, is never black, so
 /// figures hold their shape on the black battle backdrop.
 pub const SPRITES: [[u8; 4]; 4] = [
-    [0x0F, 0x07, 0x37, 0x30],
+    [0x0F, 0x17, 0x37, 0x30],
     [0x0F, 0x01, 0x37, 0x12],
-    [0x0F, 0x06, 0x37, 0x29],
-    [0x0F, 0x06, 0x27, 0x30],
+    [0x0F, 0x16, 0x37, 0x29],
+    [0x0F, 0x06, 0x26, 0x30],
 ];
 
 /// The background palette windows use.
@@ -1167,8 +1168,9 @@ pub struct Art {
     pub ui: Ui,
     /// Animated metatiles: frames by map character, swapped like CHR banks.
     pub frames: HashMap<char, Vec<Metatile>>,
-    /// Damage digits as sprites.
+    /// Digits as sprites: in colour 3 (healing, green) and colour 2 (damage, red).
     pub digits: HashMap<char, u16>,
+    pub digits2: HashMap<char, u16>,
 }
 
 pub struct Enemy {
@@ -1376,8 +1378,10 @@ pub fn build() -> Art {
         sprites.insert(name, Metasprite::from_art(&mut spr, &art.replace(' ', "."), pal));
     }
     let mut digits = HashMap::new();
+    let mut digits2 = HashMap::new();
     for (ch, rows) in FONT.iter().filter(|(c, _)| c.is_ascii_digit()) {
         digits.insert(*ch, spr.add(glyph_tile(rows, 3, 0)));
+        digits2.insert(*ch, spr.add(glyph_tile(rows, 2, 0)));
     }
 
     // Water ripples: four frames, each crest moved two pixels on.
@@ -1400,7 +1404,7 @@ pub fn build() -> Art {
         .collect();
     frames.insert('~', water_frames);
 
-    Art { bg, bg_battle, spr, metatiles, enemies, sprites, ui: ui_tiles, frames, digits }
+    Art { bg, bg_battle, spr, metatiles, enemies, sprites, ui: ui_tiles, frames, digits, digits2 }
 }
 
 // ── Maps ──
