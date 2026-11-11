@@ -1,96 +1,117 @@
 test "the field starts at the village gate"
   expect tree has "field"
   expect tree has "player"
+  expect tree has "sign-text"
   expect tree has "hint"
   expect tree has "field-music"
   expect tree missing "dialog"
-  expect state px == 21
+  expect state px == 22
   expect state py == 31
 
 test "a tap walks one tile, and the sign blocks the way"
   type "root" key "ArrowUp"
   type "root" key "ArrowUp"
-  expect state py == 29
-  expect state held == ""
+  type "root" key "ArrowUp"
+  expect state py == 28
+  expect state hy == 0
   type "root" key "a"
-  expect state px == 20
+  expect state px == 21
   type "root" key "ArrowLeft"
-  expect state px == 20
+  type "root" key "ArrowLeft"
+  type "root" key "ArrowLeft"
+  expect state px == 19
   expect state facing == "left"
 
-test "holding a direction keeps walking"
+test "holding a direction keeps walking, and two keys walk a diagonal"
   type "root" key "ArrowUp" for 500
-  expect state px == 21
+  expect state px == 22
   expect state py == 27
-  expect state held == ""
+  expect state hy == 0
   clock +1000
   expect state py == 27
+  type "root" key "ArrowRight" down
+  expect state px == 23
+  expect state py == 27
+  type "root" key "ArrowDown" down
+  expect state px == 24
+  expect state py == 28
+  clock +160
+  expect state px == 25
+  expect state py == 29
+  type "root" key "ArrowRight" up
+  type "root" key "ArrowDown" up
+  clock +1000
+  expect state px == 25
+  expect state py == 29
 
-test "the sign reads the village's name and starts no battle"
+test "the sign's words type in, and it starts no battle"
   type "root" key "ArrowUp"
   type "root" key "ArrowUp"
+  type "root" key "ArrowUp"
+  type "root" key "ArrowLeft"
   type "root" key "ArrowLeft"
   type "root" key "ArrowLeft"
   type "root" key " "
   expect text "speaker" == "Sign"
+  expect text "line" == ""
+  clock +1000
   expect text "line" == "• CHEERY CHEERY VILLAGE"
+  type "root" key "Enter"
+  expect state line == 1
   type "root" key "Enter"
   expect text "line" == "• Home of the Order of the Placid Blue. Everyone here is very, very cheery."
   type "root" key "z"
   expect tree missing "dialog"
+  clock +1000
+  expect tree missing "swirl"
   expect tree missing "battle-screen"
 
-test "an acolyte talks, fights, loses, and then talks sense"
-  type "root" key "ArrowUp"
-  type "root" key "ArrowUp"
+test "a cultist talks, the swirl plays, and Auto Fight wins the battle"
   type "root" key "ArrowUp"
   type "root" key "ArrowUp"
   type "root" key "ArrowUp"
   type "root" key "ArrowRight"
   type "root" key "ArrowRight"
-  expect state px == 22
-  expect state py == 26
+  type "root" key "ArrowRight"
+  expect state px == 24
+  expect state py == 28
+  expect state facing == "right"
   type "root" key " "
+  clock +1500
   expect text "line" == "• Welcome, traveler. Have you considered being blue?"
   type "root" key " "
   type "root" key " "
+  type "root" key " "
+  expect tree has "swirl"
+  expect tree missing "battle-screen"
+  clock +1000
   expect tree has "battle-screen"
   expect tree has "sky"
   expect tree has "music"
   expect tree missing "field-music"
-  expect text "battle-text" == "• You engage the Placid Acolyte!"
+  expect state msg1 == "• Blue Novice and 1 more block the way!"
+  type "root" key " "
   type "root" key " "
   expect tree has "commands"
   expect text "actor" == "Rory"
+  type "root" key "ArrowDown"
   type "root" key " "
-  expect text "actor" == "Juniper"
-  type "root" key " "
-  expect text "actor" == "Teo"
-  type "root" key " "
-  expect text "battle-text" == "• The party springs into action!"
-  type "root" key " "
-  expect text "battle-text" == "• Rory attacks!"
-  expect text "battle-text-2" == "• 22 HP of damage to Placid Acolyte!"
-  clock +1400
-  expect text "battle-text-2" == "• Juniper took 9 HP of damage!"
-  expect text "hp-1" == "69"
-  type "root" key " "
-  expect text "battle-text-2" == "• 21 HP of damage to Placid Acolyte!"
-  type "root" key " "
-  expect text "battle-text-2" == "• 17 HP of damage to Placid Acolyte! They calm down."
-  type "root" key " "
-  expect text "battle-text" == "• You won!"
-  type "root" key " "
+  expect state auto == true
+  clock +400
+  expect tree has "auto"
+  expect state actor == 1
+  clock +90000
   expect tree missing "battle-screen"
-  expect tree has "field-screen"
   expect state beaten.0 == "greeter"
   type "root" key " "
-  expect text "line" == "• Huh. Why am I wearing a blue sheet?"
+  clock +1500
+  expect text "line" == "• Huh. Why am I wearing this shirt? It isn't even my size."
   type "root" key " "
   expect tree missing "dialog"
+  clock +1000
   expect tree missing "battle-screen"
 
-test "with two foes, Attack picks a target, and Run leaves"
+test "with two foes, Attack picks a target, a round plays, and Run leaves"
   type "root" key "ArrowUp"
   type "root" key "ArrowUp"
   type "root" key "ArrowUp"
@@ -120,13 +141,19 @@ test "with two foes, Attack picks a target, and Run leaves"
   type "root" key "ArrowRight"
   type "root" key "ArrowUp"
   type "root" key "ArrowUp"
-  expect state px == 34
-  expect state py == 16
+  type "root" key "ArrowUp"
+  expect state px == 35
+  expect state py == 15
   type "root" key " "
+  clock +1000
   expect text "line" == "• We are the Blue Twins."
   type "root" key " "
   type "root" key " "
-  expect text "battle-text" == "• Placid Acolyte and friends block the way!"
+  type "root" key " "
+  type "root" key " "
+  clock +1000
+  expect state msg1 == "• Placid Acolyte and 1 more block the way!"
+  type "root" key " "
   type "root" key " "
   type "root" key " "
   expect text "target-name" == "To Placid Acolyte A"
@@ -136,26 +163,45 @@ test "with two foes, Attack picks a target, and Run leaves"
   expect text "target-name" == "To Placid Acolyte A"
   type "root" key "Escape"
   expect tree missing "target"
-  type "root" key "ArrowDown"
   type "root" key " "
-  expect text "battle-text" == "• The party ran away!"
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  expect state round == 1
+  expect state msg1 == "• The party springs into action!"
+  type "root" key " "
+  type "root" key " "
+  expect state msg1 == "• Rory attacks!"
+  type "root" key " "
+  type "root" key " "
+  expect state shake == 1
+  clock +20000
+  expect state phase == "menu"
+  type "root" key "ArrowUp"
+  type "root" key " "
+  type "root" key " "
+  expect state msg1 == "• The party ran away!"
+  type "root" key " "
   type "root" key " "
   expect tree missing "battle-screen"
-  expect state px == 34
-  type "root" key " "
-  expect text "line" == "• We are the Blue Twins."
+  expect state px == 35
 
 test "the battle's music button pauses and plays"
   type "root" key "ArrowUp"
   type "root" key "ArrowUp"
   type "root" key "ArrowUp"
-  type "root" key "ArrowUp"
-  type "root" key "ArrowUp"
   type "root" key "ArrowRight"
   type "root" key "ArrowRight"
+  type "root" key "ArrowRight"
   type "root" key " "
   type "root" key " "
   type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  clock +1000
   clock settle
   expect text "music-toggle" == "Pause music"
   tap "music-toggle"

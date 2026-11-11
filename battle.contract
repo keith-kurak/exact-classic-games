@@ -1,28 +1,32 @@
 // The battle: the `aurora` GPU surface (gpu/) with the battle's UI inside it,
-// drawn through the shader. Three heroes against one to three members of the
+// drawn through the shader. Three heroes against two to four members of the
 // Order. The rules are pure functions here; the root keeps the state.
-use Foe from "./world.contract"
+use Foe, hash from "./world.contract"
 
 shape Hero
   name: string
   maxHp: number
   atk: number
-  color: string
+  pp: number
 
 fn party(): Hero[] = [
-  Hero(name="Rory", maxHp=96, atk=21, color="#d23b3b"),
-  Hero(name="Juniper", maxHp=78, atk=17, color="#e0a43a"),
-  Hero(name="Teo", maxHp=84, atk=19, color="#4fa36b")
+  Hero(name="Rory", maxHp=128, atk=24, pp=24),
+  Hero(name="Juniper", maxHp=104, atk=19, pp=41),
+  Hero(name="Teo", maxHp=116, atk=22, pp=0)
 ]
 
-fn heroAt(i: number): Hero = match party().at(i) { case some(h) => h, case none => Hero(name="", maxHp=1, atk=0, color="") }
+fn heroAt(i: number): Hero = match party().at(i) { case some(h) => h, case none => Hero(name="", maxHp=1, atk=0, pp=0) }
 fn foeAt(foes: Foe[], i: number): Foe = match foes.at(i) { case some(f) => f, case none => Foe(name="", look="", hp=0, atk=0) }
 
 fn hpAt(xs: number[], i: number): number = match xs.at(i) { case some(h) => h, case none => 0 }
 fn living(xs: number[]): number[] = range(xs.length).filter(i => hpAt(xs, i) > 0)
 fn hurt(xs: number[], i: number, d: number): number[] = xs.map((h, k) => k == i ? max(0, h - d) : h)
+fn hurtAll(xs: number[], d: number): number[] = xs.map(h => h > 0 ? max(0, h - d) : 0)
 fn bump(xs: number[], i: number): number[] = xs.map((h, k) => k == i ? h + 1 : h)
+fn bumpAll(xs: number[]): number[] = xs.map(h => h + 1)
 fn orFirst(xs: number[]): number = match first(xs) { case some(i) => i, case none => -1 }
+// Shown HP rolls one point at a time toward the real HP.
+fn roll(shown: number[], real: number[]): number[] = shown.map((s, i) => s > hpAt(real, i) ? s - 1 : (s < hpAt(real, i) ? s + 1 : s))
 
 // The first one standing at or after `start`, wrapping round; -1 for none.
 fn livingFrom(xs: number[], start: number): number = orFirst(living(xs).filter(i => i >= start).concat(living(xs)))
@@ -30,75 +34,173 @@ fn livingFrom(xs: number[], start: number): number = orFirst(living(xs).filter(i
 fn nextLiving(xs: number[], from: number): number = orFirst(living(xs).filter(i => i > from).concat(living(xs)))
 fn prevLiving(xs: number[], from: number): number = orFirst(sortBy(living(xs).filter(i => i < from), i => -i)
   .concat(sortBy(living(xs), i => -i)))
+// Auto Fight's pick: the foe with the least HP left.
+fn weakest(xs: number[]): number = orFirst(sortBy(living(xs), i => hpAt(xs, i)))
 
-fn letter(i: number): string = "ABC".slice(i, i + 1)
+fn letter(i: number): string = "ABCD".slice(i, i + 1)
 fn foeLabel(foes: Foe[], i: number): string = foes.length > 1 ? `${foeAt(foes, i).name} ${letter(i)}` : foeAt(foes, i).name
 
 // A round's turns: hero 0, foe 0, hero 1, foe 1, … Heroes are 0–2, foes 10 and up.
-fn roundQueue(partyHp: number[], foeHp: number[]): number[] = range(3).map(i =>
+fn roundQueue(partyHp: number[], foeHp: number[]): number[] = range(4).map(i =>
   (hpAt(partyHp, i) > 0 ? [i] : [-1]).concat(hpAt(foeHp, i) > 0 ? [10 + i] : [-1])).flat().filter(ev => ev >= 0)
 fn canAct(ev: number, partyHp: number[], foeHp: number[]): bool = ev < 10 ? hpAt(partyHp, ev) > 0 : hpAt(foeHp, ev - 10) > 0
 
-// Damage varies by round, attacker and target, without a random source.
-fn heroDmg(i: number, t: number, round: number): number = heroAt(i).atk + ((round * 5 + i * 3 + t * 7) % 9) - 4
-fn foeDmg(f: Foe, e: number, round: number): number = f.atk + ((round * 3 + e * 5) % 7) - 3
-fn foeTarget(partyHp: number[], e: number, round: number): number = livingFrom(partyHp, (round + e * 2) % 3)
-fn verb(f: Foe, round: number): string = (f.look == "elder" ? "chants something soothing at the party"
-  : (f.look == "zealot" ? (round % 2 == 0 ? "swings a dripping paintbrush" : "flicks blue paint")
-  : (round % 2 == 0 ? "hums ominously and lunges" : "tries to hug you, menacingly")))
+// A roll from 0 to 99, fixed by the battle, the round, the attacker and the target.
+fn heroRoll(seed: number, round: number, i: number, t: number): number = hash(seed + round * 31 + i * 7 + t * 3) % 100
+fn foeRoll(seed: number, round: number, e: number): number = hash(seed + round * 37 + (10 + e) * 11 + 5) % 100
+// A hero misses on a low roll and lands a SMAAAASH on a high one.
+fn heroDmg(i: number, r: number): number = r < 8 ? 0 : (r >= 92 ? floor(heroAt(i).atk * 2.5) : heroAt(i).atk + (r % 9) - 4)
+fn foeMiss(r: number): bool = r < 12
+// The Elder's hymn hits the whole party for half its attack.
+fn foeHymn(f: Foe, r: number): bool = f.look == "elder" and r >= 70
+fn foeDmg(f: Foe, r: number): number = foeHymn(f, r) ? floor(f.atk / 2) : f.atk + (r % 7) - 3
+fn verb(f: Foe, r: number): string = (f.look == "elder" ? "shouts through a megaphone"
+  : (f.look == "zealot" ? (r % 2 == 0 ? "swings a dripping paint roller" : "flicks blue paint")
+  : (f.look == "novice" ? (r % 2 == 0 ? "shoves a pamphlet at you" : "recites the pamphlet, loudly")
+  : (r % 2 == 0 ? "smiles too hard and lunges" : "tries to hug you, menacingly"))))
+
+// One digit of a number for a meter's wheel: 0 is the blank above "0", so a
+// leading zero is blank. A wheel turns as the shown HP rolls.
+fn wheel(n: number, place: number): number = (n < place and place > 1) ? 0 : floor(n / place) % 10 + 1
 
 keyframes jolt
   0% translate="0px 0px"
-  25% translate="-10px 0px"
-  50% translate="8px 0px"
-  75% translate="-4px 0px"
+  20% translate="-12px 0px"
+  45% translate="10px 0px"
+  70% translate="-5px 0px"
   100% translate="0px 0px"
-keyframes blink
-  50% opacity=0.35
+keyframes pulse
+  50% opacity=0.55 scale=1.06
+keyframes bob
+  50% translate="0px 10px"
+keyframes glow
+  50% opacity=0.4 scale=1.1
 keyframes fade
-  to opacity=0 scale=0.85 animation-timing-function="ease-in"
+  to opacity=0 scale=0.8 animation-timing-function="ease-in"
+keyframes drop
+  from opacity=0 translate="0px -60px" scale=0.7
+keyframes rise
+  from translate="0px 180px"
+keyframes pop
+  from opacity=0 scale=0.9
 
-// One member of the Order, drawn large. `look` picks the robe.
+// One member of the Order, drawn large: a villager in the blue t-shirt with the
+// white ring, a headband and a fixed smile. `look` picks the rank's props.
 component Robe
   props
     look: string
   view
-    svg viewBox="0 0 12 17" width=120 height=170
-      path d="M6 3.5 L10.8 16.4 L1.2 16.4 Z"
-        fill=(look == "elder" ? "#5a3fa8" : (look == "zealot" ? "#23338a" : "#3e57b8"))
-      rect x=2.6 y=9.2 width=6.8 height=0.6 fill=(look == "elder" ? "#e3c46a" : "#c9d3ff")
-      rect x=1.6 y=7.6 width=1.6 height=3.2 rx=0.8 fill=(look == "zealot" ? "#1b2870" : "#344aa3")
-      rect x=8.8 y=7.6 width=1.6 height=3.2 rx=0.8 fill=(look == "zealot" ? "#1b2870" : "#344aa3")
-      if look == "zealot"
-        rect x=9.4 y=4.4 width=0.5 height=6 fill="#6b4a32"
-        rect x=9.1 y=3.2 width=1.1 height=1.6 rx=0.3 fill="#7fa2ff"
+    svg viewBox="0 0 12 17" width=(look == "novice" ? 96 : (look == "elder" ? 132 : 116))
+      height=(look == "novice" ? 136 : (look == "elder" ? 187 : 164))
+      // Legs and shoes.
+      rect x=3.9 y=11.2 width=1.8 height=4.6 fill="#3a4a6a" stroke="#0a0f24" stroke-width=0.2
+      rect x=6.3 y=11.2 width=1.8 height=4.6 fill="#3a4a6a" stroke="#0a0f24" stroke-width=0.2
+      rect x=3.5 y=15.6 width=2.4 height=0.9 rx=0.4 fill="#2a2a2a"
+      rect x=6.1 y=15.6 width=2.4 height=0.9 rx=0.4 fill="#2a2a2a"
+      // Arms.
+      rect x=1.6 y=6.4 width=1.5 height=4.4 rx=0.7 fill="#f0cdb0" stroke="#0a0f24" stroke-width=0.2
+      rect x=8.9 y=6.4 width=1.5 height=4.4 rx=0.7 fill="#f0cdb0" stroke="#0a0f24" stroke-width=0.2
+      // The t-shirt, with short sleeves and the ring.
+      path d="M3.2 6 L8.8 6 L10.6 7.6 L9.6 8.8 L8.8 8.2 L8.8 11.6 L3.2 11.6 L3.2 8.2 L2.4 8.8 L1.4 7.6 Z"
+        stroke="#0a0f24" stroke-width=0.22 stroke-linejoin="round"
+        fill=(look == "novice" ? "#7fa6f0" : (look == "zealot" ? "#2f55c8" : "#3f6fe0"))
+      circle cx=6 cy=8.6 r=1 fill="none" stroke="#f2f4ff" stroke-width=0.35
       if look == "elder"
-        path d="M6 0.2 L8.2 3.6 L3.8 3.6 Z" fill="#4a3392"
-      circle cx=6 cy=4.6 r=3.1 fill=(look == "elder" ? "#4a3392" : "#2f449c")
-      circle cx=6 cy=5 r=2.1 fill="#0d1230"
-      circle cx=5.2 cy=4.8 r=0.32 fill="#d8e6ff"
-      circle cx=6.8 cy=4.8 r=0.32 fill="#d8e6ff"
+        path d="M3.2 6 L4.8 6 L5.4 11.6 L3.2 11.6 Z" fill="#26407e" stroke="#0a0f24" stroke-width=0.2
+        path d="M8.8 6 L7.2 6 L6.6 11.6 L8.8 11.6 Z" fill="#26407e" stroke="#0a0f24" stroke-width=0.2
+        rect x=9.3 y=8.6 width=2.2 height=1.2 rx=0.3 fill="#e8e0c8" stroke="#0a0f24" stroke-width=0.18
+        path d="M11.5 8.2 L12 7.8 L12 10.6 L11.5 10.2 Z" fill="#e8e0c8" stroke="#0a0f24" stroke-width=0.18
+      if look == "zealot"
+        rect x=9.4 y=4.2 width=0.45 height=6.4 fill="#6b4a32"
+        rect x=8.6 y=3.1 width=2.1 height=1.3 rx=0.4 fill="#3f6fe0" stroke="#0a0f24" stroke-width=0.18
+        circle cx=9.2 cy=4.9 r=0.25 fill="#3f6fe0"
+      if look == "novice"
+        rect x=0.9 y=9.2 width=1.9 height=2.4 fill="#f4f0e0" stroke="#0a0f24" stroke-width=0.18
+        circle cx=1.85 cy=10.2 r=0.4 fill="none" stroke="#3f6fe0" stroke-width=0.2
+      // Head, hair and headband.
+      circle cx=6 cy=3.4 r=2.5 fill="#f0cdb0" stroke="#0a0f24" stroke-width=0.22
+      path d="M3.6 2.9 Q6 -0.4 8.4 2.9 L8.4 2.2 Q6 0.2 3.6 2.2 Z" stroke="#0a0f24" stroke-width=0.15
+        fill=(look == "elder" ? "#c8c8c8" : (look == "novice" ? "#c08a50" : "#5a4636"))
+      rect x=3.55 y=1.9 width=4.9 height=0.65 fill="#3f6fe0" stroke="#0a0f24" stroke-width=0.12
+      if look == "elder"
+        path d="M4 4.2 Q6 7.6 8 4.2 Q6 5.2 4 4.2 Z" fill="#d8d8d8" stroke="#0a0f24" stroke-width=0.15
+      // The smile: closed, happy eyes, cheeks, and a grin.
+      path d="M4.5 3.3 l0.5 -0.5 l0.5 0.5 M6.5 3.3 l0.5 -0.5 l0.5 0.5" fill="none" stroke="#1a1a1a" stroke-width=0.22
+      circle cx=4.3 cy=4 r=0.35 fill="#f0a0a0"
+      circle cx=7.7 cy=4 r=0.35 fill="#f0a0a0"
+      if look != "elder"
+        path d="M4.9 4.3 Q6 5.5 7.1 4.3 Z" fill="#7a2a2a" stroke="#1a1a1a" stroke-width=0.15
+
+// One wheel of a meter: a strip of 9–0 over a blank that turns to `pos`. It
+// stacks upward from the window, so no digit lies below the screen's edge.
+component Wheel
+  props
+    left: number
+    top: number
+    pos: number
+  view
+    column position="absolute" left=left top=top width=22 height=26 overflow="hidden"
+      column position="absolute" left=0 bottom=0 width=22 height=286 translate=`0px ${pos * 26}px`
+        transition="translate 70ms linear"
+        for d in ["9", "8", "7", "6", "5", "4", "3", "2", "1", "0", " "] key=`d${d}`
+          text d width=22 height=26 flex-shrink=0 line-height="26px" text-align="center" font-size=20 font-weight=800
+            font-variant-numeric="tabular-nums"
+
+// A hero's box: name, and HP and PP on rolling digit wheels.
+component Meter
+  props
+    i: number
+    hero: Hero
+    hp: number
+    active: bool
+  view
+    column position="relative" width=150 height=120
+      svg viewBox="0 0 150 120" width=150 height=120 position="absolute" left=0 top=0
+        rect x=1.5 y=1.5 width=147 height=117 rx=12 fill="#d9d6cc" stroke="#101010" stroke-width=3
+        rect x=8 y=8 width=134 height=104 rx=4 fill=(active ? "#5b4bb0" : "#7a6ccb")
+        for k in range(48) key=`c${k}`
+          if (floor(k / 8) + k % 8) % 2 == 0
+            rect x=(8 + (k % 8) * 17) y=(36 + floor(k / 8) * 13) width=17 height=13 fill="#ffffff1c"
+        rect x=8 y=8 width=134 height=28 rx=4 fill=(active ? "#3a2c80" : "#5a4ca8")
+        for row in [44, 80] key=`r${row}`
+          rect x=58 y=row width=78 height=28 rx=3 fill="#0c0c14" stroke="#e8e4f8" stroke-width=1.5
+          line x1=84 y1=(row + 2) x2=84 y2=(row + 26) stroke="#3a3a4a" stroke-width=1.5
+          line x1=110 y1=(row + 2) x2=110 y2=(row + 26) stroke="#3a3a4a" stroke-width=1.5
+      text hero.name position="absolute" left=16 top=11 font-size=16 font-weight=800
+      text "HP" position="absolute" left=18 top=48 font-size=15 font-weight=800
+      text "PP" position="absolute" left=18 top=84 font-size=15 font-weight=800
+      Wheel(left=60, top=45, pos=wheel(hp, 100))
+      Wheel(left=86, top=45, pos=wheel(hp, 10))
+      Wheel(left=112, top=45, pos=wheel(hp, 1))
+      Wheel(left=60, top=81, pos=wheel(hero.pp, 100))
+      Wheel(left=86, top=81, pos=wheel(hero.pp, 10))
+      Wheel(left=112, top=81, pos=wheel(hero.pp, 1))
 
 component Battle
   props
     foes: Foe[]
     foeHp: number[]
     foeHits: number[]
-    partyHp: number[]
+    shownHp: number[]
     heroHits: number[]
+    shake: number
     phase: string
     actor: number
     cursor: number
-    msg1: string
-    msg2: string
+    auto: bool
+    line1: string
+    line2: string
     seed: string
     musicPaused: bool
     attack: action
+    autoOn: action
+    autoOff: action
     run: action
     next: action
     pick0: action
     pick1: action
     pick2: action
+    pick3: action
     toggleMusic: action
     musicPlaying: action
     musicPause: action
@@ -109,62 +211,81 @@ component Battle
       canvas surface=aurora(seed) width="100%" height="100%" testId="sky"
         column color-scheme="dark" width="100%" height="100%" box-sizing="border-box" padding=24 gap=12
           justify-content="space-between" color="CanvasText"
-          // The top: the command window on a hero's turn, else the messages.
-          row height=128 gap=12 align-items="flex-start"
-            if phase == "menu" or phase == "target"
-              column width=260 box-sizing="border-box" padding="10px 16px" gap=6 background-color="Canvas"
-                border="3px solid CanvasText" border-radius=10 testId="commands"
+          // The top: the command window on a hero's turn, else the messages. The
+          // message box shakes when the party is hit.
+          row height=128 gap=12 align-items="flex-start" justify-content="center"
+            if (phase == "menu" or phase == "target") and not auto
+              column width=240 box-sizing="border-box" padding="10px 16px" gap=4 background-color="Canvas"
+                border="3px solid CanvasText" border-radius=10 animation="pop 160ms ease-out both" testId="commands"
                 text heroAt(actor).name font-size=13 font-weight=700 color="-exact-secondary-label" testId="actor"
                 row gap=8 press=attack testId="cmd-attack"
-                  text (phase == "menu" and cursor == 0 ? "▸" : " ") width=14 font-size=20 font-weight=700
-                  text "Attack" font-size=20 font-weight=700
+                  text (phase == "menu" and cursor == 0 ? "▸" : " ") width=14 font-size=19 font-weight=700
+                  text "Attack" font-size=19 font-weight=700
+                row gap=8 press=autoOn testId="cmd-auto"
+                  text (phase == "menu" and cursor == 1 ? "▸" : " ") width=14 font-size=19 font-weight=700
+                  text "Auto Fight" font-size=19 font-weight=700
                 row gap=8 press=run testId="cmd-run"
-                  text (phase == "menu" and cursor == 1 ? "▸" : " ") width=14 font-size=20 font-weight=700
-                  text "Run" font-size=20 font-weight=700
+                  text (phase == "menu" and cursor == 2 ? "▸" : " ") width=14 font-size=19 font-weight=700
+                  text "Run" font-size=19 font-weight=700
               if phase == "target"
                 column box-sizing="border-box" padding="10px 16px" margin-top=40 background-color="Canvas"
-                  border="3px solid CanvasText" border-radius=10 testId="target"
-                  text `To ${foeLabel(foes, cursor)}` font-size=20 font-weight=700 testId="target-name"
+                  border="3px solid CanvasText" border-radius=10 animation="pop 160ms ease-out both" testId="target"
+                  text `To ${foeLabel(foes, cursor)}` font-size=19 font-weight=700 testId="target-name"
             else
-              column flex=1 max-width=680 margin="0 auto" box-sizing="border-box" padding="12px 18px" gap=6
-                background-color="Canvas" border="3px solid CanvasText" border-radius=10 press=next
-                testId="battle-dialog"
-                text msg1 font-size=20 font-weight=700 testId="battle-text"
-                text msg2 font-size=20 font-weight=700 testId="battle-text-2"
-          // The middle: the foes still standing. A hit replays the jolt.
-          row gap=24 justify-content="center" align-items="flex-end" testId="foes"
-            for f, i in foes key=`${i}`
+              for s in [shake] key=`shake-${s}`
+                column flex=1 max-width=680 min-height=92 box-sizing="border-box" padding="12px 18px" gap=6
+                  background-color="Canvas" border="3px solid CanvasText" border-radius=10 press=next
+                  animation=(s > 0 ? "jolt 360ms ease-out" : "pop 200ms ease-out both") testId="battle-dialog"
+                  text line1 font-size=20 font-weight=700 testId="battle-text"
+                  text line2 font-size=20 font-weight=700 testId="battle-text-2"
+          // The middle: the foes still standing. They drop in at the start, and a
+          // hit replays the jolt.
+          row gap=20 justify-content="center" align-items="flex-end" position="relative" testId="foes"
+            for f, i in foes key=`${f.look}-${i}`
               if hpAt(foeHp, i) > 0
-                column align-items="center" gap=4 -exact-exit-animation="fade 400ms ease-in both"
-                  testId=`foe-${i}`
-                  for hit in [hpAt(foeHits, i)] key=`${i}-${hit}`
-                    column animation=(hit > 0 ? "jolt 320ms ease-out" : "none")
-                      column animation=(phase == "target" and cursor == i ? "blink 600ms ease-in-out infinite" : "none")
-                        if i == 0
-                          column press=pick0
-                            Robe(look=f.look)
-                        if i == 1
-                          column press=pick1
-                            Robe(look=f.look)
-                        if i == 2
-                          column press=pick2
-                            Robe(look=f.look)
-          // The bottom: the party's boxes. The hero choosing rises.
-          row gap=12 justify-content="center" align-items="flex-end" color-scheme="light"
+                column align-items="center" -exact-exit-animation="fade 450ms ease-in both"
+                  animation=`drop 520ms ${200 + i * 140}ms ease-out both` testId=`foe-${i}`
+                  // The target being chosen: a bouncing arrow, a ring of light at its
+                  // feet, and a pulse.
+                  text "▼" font-size=34 font-weight=900 color="CanvasText" height=40
+                    opacity=(phase == "target" and cursor == i ? 1 : 0)
+                    animation=(phase == "target" and cursor == i ? "bob 520ms ease-in-out infinite" : "none")
+                    testId=`aim-${i}`
+                  column position="relative" align-items="center"
+                    if phase == "target" and cursor == i
+                      svg viewBox="0 0 100 30" width=150 height=45 position="absolute" bottom=-20
+                        animation="glow 700ms ease-in-out infinite"
+                        ellipse cx=50 cy=15 rx=48 ry=13 fill="#fff6b0" opacity=0.35
+                        ellipse cx=50 cy=15 rx=40 ry=9 fill="none" stroke="#fff6b0" stroke-width=3
+                    for hit in [hpAt(foeHits, i)] key=`${i}-${hit}`
+                      column animation=(hit > 0 ? "jolt 320ms ease-out" : "none")
+                        column animation=(phase == "target" and cursor == i ? "pulse 700ms ease-in-out infinite" : "none")
+                          if i == 0
+                            column press=pick0
+                              Robe(look=f.look)
+                          if i == 1
+                            column press=pick1
+                              Robe(look=f.look)
+                          if i == 2
+                            column press=pick2
+                              Robe(look=f.look)
+                          if i == 3
+                            column press=pick3
+                              Robe(look=f.look)
+            if auto
+              column position="absolute" right=0 bottom=0 padding="2px 10px" border="2px solid CanvasText"
+                border-radius=6 background-color="Canvas" press=autoOff testId="auto"
+                text "AUTO" font-size=14 font-weight=900 letter-spacing=2
+          // The bottom: the party's meters. They rise in at the start; the hero
+          // choosing stands higher.
+          row gap=12 justify-content="center" align-items="flex-end"
             for h, i in party() key=h.name
-              column width=150 box-sizing="border-box" padding="8px 12px" gap=4 background-color="Canvas" color="CanvasText"
-                border="3px solid CanvasText" border-radius=10
-                translate=((phase == "menu" or phase == "target") and actor == i ? "0px -14px" : "0px 0px")
-                transition="translate -exact-spring(260, 22, 1)" testId=`hero-${i}`
-                for hit in [hpAt(heroHits, i)] key=`${i}-${hit}`
-                  row gap=8 align-items="center" animation=(hit > 0 ? "jolt 320ms ease-out" : "none")
-                    column width=10 height=10 border-radius=5 background-color=h.color
-                    text h.name font-size=15 font-weight=800
-                row gap=6 align-items="baseline"
-                  text "HP" font-size=12 font-weight=700 color="-exact-secondary-label"
-                  text `${hpAt(partyHp, i)}` font-size=22 font-weight=800 font-variant-numeric="tabular-nums"
-                    color=(hpAt(partyHp, i) == 0 ? "-exact-secondary-label" : "CanvasText") testId=`hp-${i}`
-                  text `/ ${h.maxHp}` font-size=12 color="-exact-secondary-label"
+              column animation=`rise 480ms ${120 + i * 90}ms ease-out both`
+                column translate=((phase == "menu" or phase == "target") and actor == i and not auto ? "0px -14px" : "0px 0px")
+                  transition="translate -exact-spring(260, 22, 1)" testId=`hero-${i}`
+                  for hit in [hpAt(heroHits, i)] key=`${i}-${hit}`
+                    column animation=(hit > 0 ? "jolt 320ms ease-out" : "none")
+                      Meter(i=i, hero=h, hp=hpAt(shownHp, i), active=((phase == "menu" or phase == "target") and actor == i))
           row justify-content="flex-end"
             button press=toggleMusic testId="music-toggle"
               text (musicPaused ? "Play music" : "Pause music")

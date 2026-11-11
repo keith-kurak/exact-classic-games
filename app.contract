@@ -1,12 +1,13 @@
 // Exactbound: walk around Cheery Cheery Village and talk to the Order of the
-// Placid Blue. Everyone in a robe says a line or two and then starts a battle.
+// Placid Blue. Everyone in a blue t-shirt says a line or two and then starts a battle.
 // The field (world.contract) is larger than the window: the camera follows the
-// player, and both glide one tile per step. The battle (battle.contract) is the
-// aurora GPU surface with Attack and Run for a party of three.
-// Arrow keys or WASD walk (hold to keep walking); Space, Enter or Z talks and
-// confirms; Escape or X goes back from choosing a target.
-use Npc, Foe, Scenery, Person, npcs, blocked, dx, dy, stands, tile, cols, rows, camera from "./world.contract"
-use Battle, party, hpAt, living, hurt, bump, orFirst, livingFrom, nextLiving, prevLiving, foeLabel, roundQueue, canAct, heroAt, foeAt, heroDmg, foeDmg, foeTarget, verb from "./battle.contract"
+// player, and both glide one tile per step, in eight directions. The battle
+// (battle.contract) is the aurora GPU surface with Attack, Auto Fight and Run
+// for a party of three.
+// Arrow keys or WASD walk (hold two for a diagonal); Space, Enter or Z talks and
+// confirms; Escape or X goes back from a target and stops Auto Fight.
+use Npc, Foe, Scenery, Person, npcs, blocked, stands, tile, cols, rows, camera, opposite from "./world.contract"
+use Battle, party, hpAt, living, hurt, hurtAll, bump, bumpAll, orFirst, roll, livingFrom, nextLiving, prevLiving, weakest, foeLabel, roundQueue, canAct, heroAt, foeAt, heroRoll, foeRoll, heroDmg, foeMiss, foeHymn, foeDmg, verb from "./battle.contract"
 
 shape Viewport
   width: number
@@ -19,100 +20,167 @@ routes nav
 fn dirOf(k: string): string = (k == "ArrowUp" or k == "w" ? "up" : (k == "ArrowDown" or k == "s" ? "down"
   : (k == "ArrowLeft" or k == "a" ? "left" : (k == "ArrowRight" or k == "d" ? "right" : ""))))
 fn confirmKey(k: string): bool = k == " " or k == "Enter" or k == "z"
+fn cancelKey(k: string): bool = k == "Escape" or k == "x"
+fn sign(n: number): number = n < 0 ? -1 : (n > 0 ? 1 : 0)
+fn faceOf(mx: number, my: number): string = mx < 0 ? "left" : (mx > 0 ? "right" : (my < 0 ? "up" : "down"))
+
+keyframes swirl
+  from rotate="0deg" scale=0.05 opacity=0.4
+  to rotate="540deg" scale=2.6 opacity=1
+keyframes dim
+  from opacity=0
+  to opacity=1
 
 component Exactbound
   resource vp = exactViewport() as shape Viewport
-  state px = 21
+  state px = 22
   state py = 31
   state facing = "up"
   state stride = 0
-  state held = ""
+  // The direction keys held, as a step in x and in y.
+  state hx = 0
+  state hy = 0
   state talkTo = ""
   state line = 0
   state beaten: string[] = []
   state fights = 0
   state musicPaused = false
+  // How many characters of the current message are shown.
+  state typed = 0
   // The battle.
+  state swirl = false
   state foeId = ""
   state foeHp: number[] = []
   state foeHits: number[] = []
   state partyHp: number[] = []
-  state heroHits: number[] = []
+  state shownHp: number[] = []
+  state heroHits: number[] = [0, 0, 0]
+  state shake = 0
   state orders: number[] = [0, 0, 0]
   state queue: number[] = []
   state round = 0
   state phase = ""
   state actor = 0
   state cursor = 0
+  state auto = false
   state outcome = ""
   state msg1 = ""
   state msg2 = ""
   derive onField = top(nav).name == "home"
+  derive inBattle = top(nav).name == "battle"
   derive talking = npcs().filter(n => n.id == talkTo)
   derive calm = beaten.includes(talkTo)
   derive lines = match first(talking) { case some(n) => (calm ? [n.after] : n.lines), case none => [] }
   derive speaker = talking.map(n => n.name).join("")
-  derive shown = match lines.at(line) { case some(s) => s, case none => "" }
+  derive shown = match lines.at(line) { case some(s) => `• ${s}`, case none => "" }
+  derive total = onField ? shown.length : msg1.length + msg2.length
+  derive typing = typed < total
   derive foes = npcs().filter(n => n.id == foeId).map(n => n.foes).flat()
   derive camX = camera(vp.width, cols() * tile(), (px + 0.5) * tile())
   derive camY = camera(vp.height, rows() * tile(), (py + 0.5) * tile())
 
+  // ── Text ──
+
+  // Messages type in, three characters at a time.
+  task typewriter when typed < total
+    every(30, typeOn)
+  action typeOn
+    typed = typed + 3
+  action say(a: string, b: string)
+    msg1 = a
+    msg2 = b
+    typed = 0
+
   // ── The field ──
 
-  // One step: face that way, then move unless the tile is taken.
-  action step(dir: string)
-    facing = dir
-    if not blocked(px + dx(dir), py + dy(dir))
-      px = px + dx(dir)
-      py = py + dy(dir)
+  // One step, straight or diagonal. A diagonal into a wall slides along it.
+  action move(mx: number, my: number)
+    let diag = mx != 0 and my != 0
+    let goX = mx != 0 and not blocked(px + mx, py)
+    let goY = my != 0 and not blocked(px, py + my)
+    facing = faceOf(mx, my)
+    if (not diag and (goX or goY)) or (diag and not blocked(px + mx, py + my) and (goX or goY))
+      px = px + mx
+      py = py + my
       stride = 1 - stride
+    else
+      if diag and goX
+        px = px + mx
+        stride = 1 - stride
+      else
+        if diag and goY
+          py = py + my
+          stride = 1 - stride
 
   // While a direction is held, a step every 160 ms: the glide's own length.
-  task walk when held != "" and talkTo == "" and onField
+  task walk when (hx != 0 or hy != 0) and talkTo == "" and onField and not swirl
     every(160, walkOn)
   action walkOn
-    if held != ""
-      step(held)
+    move(hx, hy)
 
   // Talk to whoever stands on the tile the player faces.
   action talk
-    let near = npcs().filter(n => stands(n, px + dx(facing), py + dy(facing))).map(n => n.id).join("")
+    let fx = px + (facing == "left" ? -1 : (facing == "right" ? 1 : 0))
+    let fy = py + (facing == "up" ? -1 : (facing == "down" ? 1 : 0))
+    let near = npcs().filter(n => stands(n, fx, fy)).map(n => n.id).join("")
     if near != ""
-      held = ""
+      hx = 0
+      hy = 0
       talkTo = near
       line = 0
+      typed = 0
 
   // The next line, or the end of the talk: a member of the Order then fights.
   action advance
     let who = talkTo
     let fighter = npcs().filter(n => n.id == who and n.kind == "cultist").length > 0
-    if line + 1 < lines.length
-      line = line + 1
+    if typing
+      typed = total
     else
-      talkTo = ""
-      line = 0
-      if fighter and not beaten.includes(who)
-        startBattle(who)
+      if line + 1 < lines.length
+        line = line + 1
+        typed = 0
+      else
+        talkTo = ""
+        line = 0
+        if fighter and not beaten.includes(who)
+          startBattle(who)
 
   // ── The battle ──
 
+  // The battle is set up at once; the swirl covers the field, then the route moves.
   action startBattle(id: string)
     let fs = npcs().filter(n => n.id == id).map(n => n.foes).flat()
     fights = fights + 1
-    held = ""
+    hx = 0
+    hy = 0
     foeId = id
     foeHp = fs.map(f => f.hp)
     foeHits = fs.map(f => 0)
     partyHp = party().map(h => h.maxHp)
+    shownHp = party().map(h => h.maxHp)
     heroHits = [0, 0, 0]
+    shake = 0
     orders = [0, 0, 0]
     queue = []
     round = 0
     outcome = ""
+    auto = false
     phase = "play"
-    msg1 = fs.length > 1 ? `• ${foeAt(fs, 0).name} and friends block the way!` : `• You engage the ${foeAt(fs, 0).name}!`
-    msg2 = ""
-    nav = push(nav, path("battle", id))
+    swirl = true
+    say(fs.length > 1 ? `• ${foeAt(fs, 0).name} and ${fs.length - 1} more block the way!` : `• You engage the ${foeAt(fs, 0).name}!`, "")
+
+  task swirling when swirl
+    after(900, enter)
+  action enter
+    swirl = false
+    nav = push(nav, path("battle", foeId))
+
+  // Shown HP rolls toward the real HP, like an odometer.
+  task meters when inBattle and shownHp.join(",") != partyHp.join(",")
+    every(45, rollMeters)
+  action rollMeters
+    shownHp = roll(shownHp, partyHp)
 
   // A hero's turn: Attack picks a target when more than one foe stands.
   action attack
@@ -134,14 +202,23 @@ component Exactbound
       round = round + 1
       queue = roundQueue(partyHp, foeHp)
       phase = "play"
-      msg1 = "• The party springs into action!"
-      msg2 = ""
+      say("• The party springs into action!", "")
+
+  // Auto Fight: each hero attacks the weakest foe, until it is turned off.
+  action autoOn
+    auto = true
+  action autoOff
+    auto = false
+  task autoPick when auto and inBattle and phase == "menu" key=`${round}-${actor}`
+    after(350, autoChoose)
+  action autoChoose
+    if auto and phase == "menu"
+      choose(weakest(foeHp))
 
   action run
     outcome = "fled"
     phase = "play"
-    msg1 = "• The party ran away!"
-    msg2 = ""
+    say("• The party ran away!", "")
 
   action pick0
     if phase == "target"
@@ -152,119 +229,161 @@ component Exactbound
   action pick2
     if phase == "target"
       choose(2)
+  action pick3
+    if phase == "target"
+      choose(3)
 
-  // The messages move on by themselves, or at once on a key or a click.
-  task battleClock when top(nav).name == "battle" and phase == "play" key=`${msg1}|${msg2}`
-    every(1400, next)
+  // A message moves on by itself once it is typed, or at once on a key or click.
+  task battleClock when inBattle and phase == "play" and not typing key=`${msg1}|${msg2}`
+    every(1300, next)
 
   // The next message: the outcome, the next turn, or back to the menu.
   action next
     let q = queue.filter(ev => canAct(ev, partyHp, foeHp))
-    if outcome != ""
-      leave()
+    if typing
+      typed = total
     else
-      if living(foeHp).length == 0
-        outcome = "won"
-        msg1 = "• You won!"
-        msg2 = "• The Order's grip on them loosens."
+      if outcome != ""
+        leave()
       else
-        if living(partyHp).length == 0
-          outcome = "lost"
-          msg1 = "• The party lost the will to fight..."
-          msg2 = "• You wake up at the village gate."
+        if living(foeHp).length == 0
+          outcome = "won"
+          say("• YOU WON!", "• The Order's grip on them loosens.")
         else
-          if q.length == 0
-            phase = "menu"
-            actor = livingFrom(partyHp, 0)
-            cursor = 0
-            msg1 = ""
-            msg2 = ""
+          if living(partyHp).length == 0
+            outcome = "lost"
+            say("• The party lost the will to fight...", "• You wake up at the village gate.")
           else
-            queue = q.slice(1)
-            turn(orFirst(q))
+            if q.length == 0
+              phase = "menu"
+              actor = livingFrom(partyHp, 0)
+              cursor = 0
+            else
+              queue = q.slice(1)
+              turn(orFirst(q))
 
   // One attack. Heroes are 0–2 and hit the foe they chose (or the next one
-  // standing); foes are 10 and up and pick a hero by the round.
+  // standing); foes are 10 and up and pick a hero by their roll.
   action turn(ev: number)
+    let seed = fights * 131
     if ev < 10
       let want = hpAt(orders, ev)
       let t = hpAt(foeHp, want) > 0 ? want : livingFrom(foeHp, 0)
-      let d = heroDmg(ev, t, round)
-      let down = hpAt(foeHp, t) <= d
+      let r = heroRoll(seed, round, ev, t)
+      let d = heroDmg(ev, r)
+      let down = d > 0 and hpAt(foeHp, t) <= d
       foeHp = hurt(foeHp, t, d)
-      foeHits = bump(foeHits, t)
-      msg1 = `• ${heroAt(ev).name} attacks!`
-      msg2 = down ? `• ${d} HP of damage to ${foeLabel(foes, t)}! They calm down.` : `• ${d} HP of damage to ${foeLabel(foes, t)}!`
+      if d > 0
+        foeHits = bump(foeHits, t)
+      say(r >= 92 ? `• ${heroAt(ev).name} attacks! SMAAAASH!!` : `• ${heroAt(ev).name} attacks!`,
+        d == 0 ? "• Just missed!" : (down ? `• ${d} HP of damage to ${foeLabel(foes, t)}! They calm down.`
+          : `• ${d} HP of damage to ${foeLabel(foes, t)}!`))
     else
       let e = ev - 10
       let f = foeAt(foes, e)
-      let t = foeTarget(partyHp, e, round)
-      let d = foeDmg(f, e, round)
-      let down = hpAt(partyHp, t) <= d
-      partyHp = hurt(partyHp, t, d)
-      heroHits = bump(heroHits, t)
-      msg1 = `• ${foeLabel(foes, e)} ${verb(f, round)}!`
-      msg2 = down ? `• ${heroAt(t).name} took ${d} HP of damage and can't go on!` : `• ${heroAt(t).name} took ${d} HP of damage!`
+      let r = foeRoll(seed, round, e)
+      let t = livingFrom(partyHp, r % 3)
+      let d = foeDmg(f, r)
+      let ko = hpAt(partyHp, t) <= d
+      if foeMiss(r)
+        say(`• ${foeLabel(foes, e)} ${verb(f, r)}!`, `• ${heroAt(t).name} dodged quickly!`)
+      else
+        shake = shake + 1
+        if foeHymn(f, r)
+          partyHp = hurtAll(partyHp, d)
+          heroHits = bumpAll(heroHits)
+          say(`• ${foeLabel(foes, e)} leads a cheerful chant!`, `• The whole party took ${d} HP of damage!`)
+        else
+          partyHp = hurt(partyHp, t, d)
+          heroHits = bump(heroHits, t)
+          say(`• ${foeLabel(foes, e)} ${verb(f, r)}!`, ko
+            ? `• ${heroAt(t).name} took ${d} HP of damage and can't go on!` : `• ${heroAt(t).name} took ${d} HP of damage!`)
 
   action leave
     if outcome == "won"
       beaten = beaten.concat([foeId])
     if outcome == "lost"
-      px = 21
+      px = 22
       py = 31
       facing = "up"
     phase = ""
     outcome = ""
+    auto = false
     nav = back(nav)
 
   action battleKey(k: string)
-    if phase == "play"
-      if confirmKey(k)
-        next()
-    if phase == "menu"
-      if k == "ArrowUp" or k == "ArrowDown" or k == "w" or k == "s"
-        cursor = 1 - cursor
-      if confirmKey(k)
-        if cursor == 0
-          attack()
+    if cancelKey(k) and auto
+      auto = false
+    else
+      if phase == "play"
+        if confirmKey(k)
+          next()
+      else
+        if phase == "menu"
+          if k == "ArrowDown" or k == "s"
+            cursor = (cursor + 1) % 3
+          else
+            if k == "ArrowUp" or k == "w"
+              cursor = (cursor + 2) % 3
+            else
+              if confirmKey(k) and cursor == 0
+                attack()
+              else
+                if confirmKey(k) and cursor == 1
+                  autoOn()
+                else
+                  if confirmKey(k) and cursor == 2
+                    run()
         else
-          run()
-    if phase == "target"
-      if k == "ArrowRight" or k == "d"
-        cursor = nextLiving(foeHp, cursor)
-      if k == "ArrowLeft" or k == "a"
-        cursor = prevLiving(foeHp, cursor)
-      if confirmKey(k)
-        choose(cursor)
-      if k == "Escape" or k == "x"
-        phase = "menu"
-        cursor = 0
+          if phase == "target"
+            if k == "ArrowRight" or k == "d"
+              cursor = nextLiving(foeHp, cursor)
+            else
+              if k == "ArrowLeft" or k == "a"
+                cursor = prevLiving(foeHp, cursor)
+              else
+                if confirmKey(k)
+                  choose(cursor)
+                else
+                  if cancelKey(k)
+                    phase = "menu"
+                    cursor = 0
 
   // ── Keys ──
 
-  action onKey(k: string)
+  // The game's keys are taken (preventDefault), so macOS plays no alert sound.
+  action onKey(k: string, e: KeyboardEvent)
     let d = dirOf(k)
-    if not onField
-      battleKey(k)
-    else
-      if talkTo != ""
-        if confirmKey(k)
-          advance()
+    let nx = d == "left" ? -1 : (d == "right" ? 1 : hx)
+    let ny = d == "up" ? -1 : (d == "down" ? 1 : hy)
+    if d != "" or confirmKey(k) or cancelKey(k)
+      preventDefault()
+    if not swirl
+      if inBattle
+        battleKey(k)
       else
-        if d != ""
-          if held != d
-            held = d
-            step(d)
-        else
+        if talkTo != ""
           if confirmKey(k)
-            talk()
+            advance()
+        else
+          if d != ""
+            if nx != hx or ny != hy
+              hx = nx
+              hy = ny
+              move(nx, ny)
+          else
+            if confirmKey(k)
+              talk()
 
   action onKeyUp(k: string)
-    if dirOf(k) == held
-      held = ""
+    let d = dirOf(k)
+    if (d == "left" and hx == -1) or (d == "right" and hx == 1)
+      hx = 0
+    if (d == "up" and hy == -1) or (d == "down" and hy == 1)
+      hy = 0
 
   action back
-    if not onField
+    if inBattle
       run()
   action follow(url: string)
     nav = go(nav, url)
@@ -282,37 +401,52 @@ component Exactbound
         if e.name == "home"
           column navigationKey=`${e.id}` position="absolute" inset=0 overflow="hidden"
             background-color="Canvas" testId="field-screen"
-            if onField
+            if onField and not swirl
               audio "assets/field.mp3" autoplay=true loop=true testId="field-music"
             // The world, moved by the camera. The player glides over the scenery.
             column position="absolute" left=0 top=0 width=(cols() * tile()) height=(rows() * tile())
               translate=`${camX}px ${camY}px` transition="translate 160ms linear" testId="world"
               Scenery(talkTo=talkTo, facing=facing, beaten=beaten)
-              column position="absolute" left=(17 * tile()) top=(28.68 * tile()) width=(3 * tile())
-                height=(0.8 * tile()) align-items="center" justify-content="center" color="CanvasText"
-                text "CHEERY CHEERY" font-size=10 font-weight=800 letter-spacing=0.5
-                text "VILLAGE" font-size=10 font-weight=800 letter-spacing=0.5
+              column color-scheme="light" position="absolute" left=(14.25 * tile()) top=(26.65 * tile())
+                width=(4.5 * tile()) height=(1.35 * tile()) align-items="center" justify-content="center" gap=1
+                color="CanvasText" testId="sign-text"
+                text "CHEERY CHEERY" font-size=19 font-weight=900 letter-spacing=2
+                text "VILLAGE" font-size=19 font-weight=900 letter-spacing=6
               column position="absolute" left=0 top=0 width=tile() height=tile()
                 translate=`${px * tile()}px ${py * tile()}px` transition="translate 160ms linear" testId="player"
                 svg viewBox="0 0 1 1" width=tile() height=tile()
                   Person(facing=facing, shirt="#3d6fd6", hair="#3a2a1a", cap="#d23b3b", stride=stride)
             if talkTo != ""
               column position="absolute" top=24 left=24 right=24 align-items="center"
-                column color-scheme="dark" width="100%" max-width=640 box-sizing="border-box"
+                column width="100%" max-width=640 box-sizing="border-box" min-height=96
                   padding=4 background-color="Canvas" color="CanvasText"
                   border="3px solid CanvasText" border-radius=14 press=advance testId="dialog"
+                  animation="dim 140ms ease-out both"
                   column padding="12px 18px" gap=6 border="2px solid -exact-secondary-label" border-radius=9
                     text speaker font-size=13 font-weight=700
                       color="-exact-secondary-label" testId="speaker"
-                    text `• ${shown}` font-size=22 font-weight=700
+                    text shown.slice(0, typed) font-size=22 font-weight=700
                       line-height=1.35 testId="line"
             else
-              column color-scheme="dark" position="absolute" bottom=16 left=0 right=0 align-items="center"
-                text "Arrow keys to walk · Space to talk" font-size=12 color="-exact-secondary-label" testId="hint"
+              if not swirl
+                column position="absolute" bottom=16 left=0 right=0 align-items="center"
+                  text "Arrow keys to walk · Space to talk" font-size=12 color="-exact-secondary-label" testId="hint"
+            // The battle entrance: a spinning burst that covers the field.
+            if swirl
+              column position="absolute" inset=0 overflow="hidden" align-items="center" justify-content="center"
+                testId="swirl"
+                column position="absolute" inset=0 background-color="Canvas" animation="dim 900ms ease-in both"
+                svg viewBox="-50 -50 100 100" width=900 height=900 animation="swirl 900ms ease-in both"
+                  for k in range(12) key=`w${k}`
+                    polygon points=`0,0 ${50 * cos(k * 0.5236)},${50 * sin(k * 0.5236)} ${50 * cos(k * 0.5236 + 0.2618)},${50 * sin(k * 0.5236 + 0.2618)}`
+                      fill=(k % 2 == 0 ? "#3e57b8" : "#8a6cd8")
+                  circle cx=0 cy=0 r=6 fill="#0d1230"
         if e.name == "battle"
           column navigationKey=`${e.id}` position="absolute" inset=0 testId="battle-screen"
-            Battle(foes=foes, foeHp=foeHp, foeHits=foeHits, partyHp=partyHp, heroHits=heroHits,
-              phase=phase, actor=actor, cursor=cursor, msg1=msg1, msg2=msg2,
+            Battle(foes=foes, foeHp=foeHp, foeHits=foeHits, shownHp=shownHp, heroHits=heroHits,
+              shake=shake, phase=phase, actor=actor, cursor=cursor, auto=auto,
+              line1=msg1.slice(0, typed), line2=msg2.slice(0, max(0, typed - msg1.length)),
               seed=`${e.params.npc}-${fights}`, musicPaused=musicPaused,
-              attack=attack, run=run, next=next, pick0=pick0, pick1=pick1, pick2=pick2,
+              attack=attack, autoOn=autoOn, autoOff=autoOff, run=run, next=next,
+              pick0=pick0, pick1=pick1, pick2=pick2, pick3=pick3,
               toggleMusic=toggleMusic, musicPlaying=musicPlaying, musicPause=musicPause)
