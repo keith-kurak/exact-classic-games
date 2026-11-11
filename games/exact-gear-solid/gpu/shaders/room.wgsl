@@ -90,7 +90,7 @@ fn capsule(p: vec3<f32>, a: vec3<f32>, b: vec3<f32>, r: f32) -> f32 {
 fn walls(p: vec3<f32>) -> f32 {
     let w = min(min(p.x, ROOM_W - p.x), min(p.z, ROOM_D - p.z));
     var h = WALL_H;
-    if (u.mode == 0.0 && ROOM_D - p.z <= min(min(max(p.x, 0.0), max(ROOM_W - p.x, 0.0)), max(p.z, 0.0))) { h = 0.35; }
+    if (u.mode < 0.5 && ROOM_D - p.z <= min(min(max(p.x, 0.0), max(ROOM_W - p.x, 0.0)), max(p.z, 0.0))) { h = 0.35; }
     if (p.y < h) { return w; }
     if (w > 0.0) { return length(vec2<f32>(w, p.y - h)); }
     return p.y - h;
@@ -146,7 +146,7 @@ fn scene(p: vec3<f32>) -> vec2<f32> {
     if (w < d) { d = w; id = 2.0; }
     let b = blocks(p);
     if (b < d) { d = b; id = 3.0; }
-    if (u.mode == 1.0) {
+    if (u.mode > 0.6 && u.cam_y < 3.8) {
         let c = WALL_H - p.y;
         if (c < d) { d = c; id = 4.0; }
     }
@@ -307,7 +307,7 @@ fn fs(f: Fragment) -> @location(0) vec4<f32> {
     let right = normalize(cross(fwd, vec3<f32>(0.0, 1.0, 0.0)));
     let up = cross(right, fwd);
     let uv = (vec2<f32>(px.x, res.y - px.y) - res * 0.5) / res.y;
-    let focal = select(1.35, 1.05, u.mode == 1.0);
+    let focal = mix(1.35, 1.05, u.mode);
     let rd = normalize(fwd * focal + right * uv.x + up * uv.y);
     var col = render(ro, rd);
     // Spotted: the room flushes red.

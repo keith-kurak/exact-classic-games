@@ -39,3 +39,34 @@ test "standing in a guard's aisle gets you caught"
   type "root" key " "
   expect state phase == "play"
   expect state px == 1.5
+
+test "sliding past the end of a container leans round its corner"
+  type "root" key "ArrowUp" down
+  clock +1000
+  type "root" key "ArrowUp" up
+  type "root" key "ArrowRight" down
+  clock +1200
+  type "root" key "ArrowRight" up
+  expect state pressed == true
+  clock +600
+  expect state ct == 1
+  type "root" key "ArrowUp" down
+  clock +2000
+  expect state peek == true
+  expect text "hint" == "Round the corner · let go to lean back"
+  clock +600
+  expect state pk == 1
+  type "root" key "ArrowUp" up
+  clock +600
+  expect state peek == false
+  expect state pk == 0
+
+test "a guard at a waypoint looks left, then right, then turns"
+  clock +14600
+  expect state g0.fx == 1
+  clock +600
+  expect state g0.fy == -1
+  clock +500
+  expect state g0.fy == 1
+  clock +500
+  expect state g0.fx == -1

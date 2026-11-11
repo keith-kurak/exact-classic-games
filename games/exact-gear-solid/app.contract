@@ -3,7 +3,7 @@
 // rows of containers. The camera looks down from above; push against a wall to
 // press your back to it, and the camera drops beside you to look along it. The
 // radar shows every guard and its view cone. If a guard clearly sees you
-// (about 0.3 s in its cone), you are caught.
+// (about 0.7 s in its cone), you are caught.
 use Spot, Guard, roomW, roomD, radius, sq, mag, sgn, nth, solid, atExit, guard, advI, advT, advW, sees, cone, blockSpots from "./room.contract"
 
 fn dirX(k: string): number = (k == "ArrowLeft" or k == "a" ? -1 : (k == "ArrowRight" or k == "d" ? 1 : 0))
@@ -12,7 +12,11 @@ fn isMove(k: string): bool = dirX(k) != 0 or dirY(k) != 0
 fn isGo(k: string): bool = k == " " or k == "Enter"
 fn clock(ticks: number): string = `${floor(ticks * 33 / 60000)}:${floor(ticks * 33 / 1000) % 60 < 10 ? "0" : ""}${floor(ticks * 33 / 1000) % 60}`
 fn step(): number = 0.085
-fn spotLimit(): number = 9
+fn spotLimit(): number = 21
+// v a step d closer to target.
+fn approach(v: number, target: number, d: number): number = (v < target ? min(target, v + d) : max(target, v - d))
+fn ease(t: number): number = t * t * (3 - 2 * t)
+fn mix(a: number, b: number, t: number): number = a + (b - a) * t
 
 component ExactGearSolid
   state px = 1.5
@@ -31,6 +35,11 @@ component ExactGearSolid
   state ny = 0
   state lx = 1
   state ly = 0
+  // At the end of a wall, still pushing along it: leaning round the corner.
+  state peek = false
+  // The camera's transitions, 0 to 1: overhead to the wall, and the wall to the corner.
+  state ct = 0
+  state pk = 0
   // The guards: leg, distance along it, and pause left.
   state si: number[] = [0, 0, 1, 2]
   state st: number[] = [5, 10, 2, 1]
@@ -47,13 +56,26 @@ component ExactGearSolid
   derive g2 = guard(2, nth(si, 2), nth(st, 2), nth(sw, 2))
   derive g3 = guard(3, nth(si, 3), nth(st, 3), nth(sw, 3))
   derive guards = [g0, g1, g2, g3]
-  // The camera: high above the player, or low beside them along the wall.
-  derive camX = pressed ? px + nx * 0.95 - lx * 2.1 : px
-  derive camY = pressed ? 1.5 : 10
-  derive camZ = pressed ? py + ny * 0.95 - ly * 2.1 : min(py + 5, roomD() + 1.5)
-  derive lookX = pressed ? px + lx * 5 + nx * 0.7 : px
-  derive lookY = pressed ? 1.1 : 0
-  derive lookZ = pressed ? py + ly * 5 + ny * 0.7 : py - 0.6
+  // The camera: high above the player (O); low beside them, looking along the
+  // wall (W); or past the wall's end, looking round the corner (K). It glides
+  // between them: ct from O to the wall, pk from W to K.
+  derive e1 = ease(ct)
+  derive e2 = ease(pk)
+  derive wX = mix(px + nx * 0.95 - lx * 2.1, px + lx * 0.9 + nx * 2.0, e2)
+  derive wY = mix(1.5, 1.55, e2)
+  derive wZ = mix(py + ny * 0.95 - ly * 2.1, py + ly * 0.9 + ny * 2.0, e2)
+  derive wlX = mix(px + lx * 5 + nx * 0.7, px + lx * 1.4 - nx * 5, e2)
+  derive wlY = mix(1.1, 1.0, e2)
+  derive wlZ = mix(py + ly * 5 + ny * 0.7, py + ly * 1.4 - ny * 5, e2)
+  derive camX = mix(px, wX, e1)
+  derive camY = mix(10, wY, e1)
+  derive camZ = mix(min(py + 5, roomD() + 1.5), wZ, e1)
+  derive lookX = mix(px, wlX, e1)
+  derive lookY = mix(0, wlY, e1)
+  derive lookZ = mix(py - 0.6, wlZ, e1)
+  // Leaning out: the figure shifts toward the corner.
+  derive drawX = px + lx * 0.22 * e2
+  derive drawY = py + ly * 0.22 * e2
   derive alert = phase == "caught" ? 1 : spot / spotLimit() * 0.5
 
   // ── One frame: the guards walk, the player moves, the guards look ──
@@ -73,6 +95,8 @@ component ExactGearSolid
     st = ks.map(k => advT(k, nth(i0, k), nth(t0, k), nth(w0, k)))
     sw = ks.map(k => advW(k, nth(i0, k), nth(t0, k), nth(w0, k)))
     ticks = ticks + 1
+    ct = approach(ct, (pressed ? 1 : 0), 0.07)
+    pk = approach(pk, (pressed and peek ? 1 : 0), 0.09)
     if pressed
       slide()
     else
@@ -122,6 +146,7 @@ component ExactGearSolid
     let along = hx * ny - hy * nx
     if away
       pressed = false
+      peek = false
       push = 0
     else
       if along != 0
@@ -134,11 +159,14 @@ component ExactGearSolid
         lx = dx
         ly = dy
         moving = backed and free
+        // Past the wall's end with open floor ahead: lean round the corner.
+        peek = free and not backed
         if backed and free
           px = tx
           py = ty
       else
         moving = false
+        peek = false
 
   task caughtPause when phase == "caught"
     after(900, showOver)
@@ -154,6 +182,9 @@ component ExactGearSolid
     hy = 0
     moving = false
     pressed = false
+    peek = false
+    ct = 0
+    pk = 0
     push = 0
     si = [0, 0, 1, 2]
     st = [5, 10, 2, 1]
@@ -187,8 +218,8 @@ component ExactGearSolid
   view
     main testId="root" key=onKey keyup=onKeyUp width="100%" height="100%" color-scheme="dark"
       background-color="#000000" position="relative" overflow="hidden"
-      canvas surface=room((pressed ? 1 : 0), camX, camY, camZ, alert, lookX, lookY, lookZ, (moving ? 1 : 0),
-        px, py, fx, fy, g0.x, g0.y, g0.fx, g0.fy, g1.x, g1.y, g1.fx, g1.fy,
+      canvas surface=room(e1, camX, camY, camZ, alert, lookX, lookY, lookZ, (moving ? 1 : 0),
+        drawX, drawY, fx, fy, g0.x, g0.y, g0.fx, g0.fy, g1.x, g1.y, g1.fx, g1.fy,
         g2.x, g2.y, g2.fx, g2.fy, g3.x, g3.y, g3.fx, g3.fy)
         position="absolute" left=0 top=0 width="100%" height="100%" testId="room"
       // The radar: the room from above, the guards' view cones, and you.
@@ -208,7 +239,7 @@ component ExactGearSolid
         border-left="3px solid #3fdc7a"
         text "STORAGE ROOM B" font-size=13 font-weight=900 letter-spacing=3 color="#3fdc7a"
         text clock(ticks) font-size=20 font-weight=800 font-variant-numeric="tabular-nums" color="#e8f5ec" testId="clock"
-        text (pressed ? "Against the wall · slide along it, step away to leave" : "Reach the exit, top right · press into a wall to hug it")
+        text (pressed and peek ? "Round the corner · let go to lean back" : (pressed ? "Against the wall · slide along it, step away to leave" : "Reach the exit, top right · press into a wall to hug it"))
           font-size=12 color="#a9c4b2" testId="hint"
       if spot > 0 and phase == "play"
         text "?" position="absolute" top="30%" left=0 right=0 text-align="center" font-size=72 font-weight=900

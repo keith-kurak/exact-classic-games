@@ -86,7 +86,7 @@ menu (Fire and Heal). **Auto Fight** plays the battle for you; Escape or X takes
 
 Reach the exit at the top right of the radar. A guard sees 6 m ahead, 30° either side, unless
 a container is in the way. A question mark means a guard has half-seen you; stay in its cone
-for about 0.3 s and you are spotted.
+for about 0.7 s and you are spotted.
 
 ### Links Exact86
 
