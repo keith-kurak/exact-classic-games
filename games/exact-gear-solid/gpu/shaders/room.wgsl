@@ -166,16 +166,27 @@ fn normalAt(p: vec3<f32>) -> vec3<f32> {
         + e.yxy * scene(p + e.yxy).x + e.xxx * scene(p + e.xxx).x);
 }
 
-fn shadow(p: vec3<f32>) -> f32 {
+// A soft shadow toward the light: a wide penumbra (k = 3), small steps, and
+// each pixel's ray started a little further along, so the penumbra is smooth
+// and leftover banding breaks up into grain.
+fn shadow(p: vec3<f32>, seed: vec2<f32>) -> f32 {
+    let k = 3.0;
     var s = 1.0;
-    var t = 0.05;
-    for (var i = 0; i < 24; i = i + 1) {
-        let d = scene(p + LIGHT * t).x;
-        s = min(s, 10.0 * d / t);
-        t = t + clamp(d, 0.05, 0.6);
-        if (s < 0.02 || t > 12.0) { break; }
+    var t = 0.02 + 0.08 * hash(seed);
+    var ph = 1e10;
+    for (var i = 0; i < 48; i = i + 1) {
+        let h = scene(p + LIGHT * t).x;
+        // Improved soft shadows (Quílez): estimate the closest pass from the
+        // last two samples, not the sample itself.
+        let y = h * h / (2.0 * ph);
+        let d = sqrt(max(h * h - y * y, 0.0));
+        s = min(s, k * d / max(0.0, t - y));
+        ph = h;
+        t = t + clamp(h, 0.03, 0.35);
+        if (s < 0.005 || t > 14.0) { break; }
     }
-    return clamp(s, 0.0, 1.0);
+    s = clamp(s, 0.0, 1.0);
+    return s * s * (3.0 - 2.0 * s);
 }
 
 fn figureColour(p: vec3<f32>, pos: vec2<f32>, f: vec2<f32>, player: bool) -> vec3<f32> {
@@ -276,7 +287,7 @@ fn render(ro: vec3<f32>, rd: vec3<f32>) -> vec3<f32> {
     var c = surface(p, n, id);
     // Emissive: the strip lights and the exit lamp are brighter than 1.
     if (max(c.r, max(c.g, c.b)) > 1.0) { return c * 0.6; }
-    let sh = shadow(p + n * 0.01);
+    let sh = shadow(p + n * 0.01, p.xz * 37.0 + p.y * 11.0);
     let diff = max(dot(n, LIGHT), 0.0);
     // Ambient occlusion from the nearby geometry.
     let ao = clamp(scene(p + n * 0.25).x / 0.25, 0.3, 1.0);
