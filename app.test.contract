@@ -1,0 +1,45 @@
+test "the round starts on the tee, aimed at the corner with the 3 wood"
+  expect tree has "course"
+  expect tree has "golfer"
+  expect tree has "meter"
+  expect state phase == "aim"
+  expect text "lie" == "Lie: Tee"
+  expect text "club" == "3W"
+  expect text "to-pin" == "To pin: 329 yds"
+
+test "arrows change the club and the aim"
+  type "root" key "ArrowUp"
+  expect text "club" == "1W"
+  type "root" key "ArrowUp"
+  expect text "club" == "1W"
+  type "root" key "ArrowDown"
+  type "root" key "ArrowDown"
+  expect text "club" == "3I"
+  type "root" key "t"
+  expect state top == true
+
+test "three presses hit the ball, and the view cuts to it"
+  type "root" key " "
+  expect state phase == "back"
+  clock +460
+  type "root" key " "
+  expect state phase == "down"
+  clock +300
+  type "root" key " "
+  expect state phase == "flight"
+  expect state strokes == 1
+  clock +3000
+  expect state phase == "result"
+  expect tree has "msg"
+  clock +2000
+  expect state phase == "aim"
+  expect text "shot" == "Shot 2"
+
+test "no third press slices the ball"
+  type "root" key " "
+  clock +2000
+  expect state phase == "flight"
+  expect state msg == "Slice · 110%"
+
+test "the course rules"
+  expect state phase == "aim"

@@ -1,0 +1,28 @@
+{
+  "$schema": "../../exact/scripts/app.schema.json",
+  "name": "Links Exact86",
+  "short_name": "Links Exact86",
+  "id": "com.example.linksexact86",
+  "start_url": "/",
+  "display": "standalone",
+  "app": {
+    "id": "com.example.linksexact86",
+    "name": "Links Exact86"
+  },
+  "host": {
+    "web": {},
+    "macos": {
+      "minimumOS": "14.0",
+      "window": {
+        "width": 900,
+        "height": 700
+      }
+    }
+  },
+  "deploy": {
+    "store": {
+      "web": "0",
+      "macos": "0"
+    }
+  }
+}
