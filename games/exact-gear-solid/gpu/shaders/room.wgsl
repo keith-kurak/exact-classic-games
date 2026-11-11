@@ -84,16 +84,16 @@ fn capsule(p: vec3<f32>, a: vec3<f32>, b: vec3<f32>, r: f32) -> f32 {
     return length(pa - ba * h) - r;
 }
 
-// The walls: solid outside the room, up to WALL_H.
-// From above, the south wall (nearest the camera) is cut down to a lip, so it
-// never hides the player.
+// The walls: four slabs 1 m thick round the room, WALL_H high. From above
+// (mode below 0.5), the south slab, nearest the camera, is cut down to a lip so
+// it never hides the player. Past the slabs is empty black.
 fn walls(p: vec3<f32>) -> f32 {
-    let w = min(min(p.x, ROOM_W - p.x), min(p.z, ROOM_D - p.z));
-    var h = WALL_H;
-    if (u.mode < 0.5 && ROOM_D - p.z <= min(min(max(p.x, 0.0), max(ROOM_W - p.x, 0.0)), max(p.z, 0.0))) { h = 0.35; }
-    if (p.y < h) { return w; }
-    if (w > 0.0) { return length(vec2<f32>(w, p.y - h)); }
-    return p.y - h;
+    let south = select(WALL_H, 0.35, u.mode < 0.5);
+    let w = sdBox(p - vec3<f32>(-0.5, WALL_H * 0.5, ROOM_D * 0.5), vec3<f32>(0.5, WALL_H * 0.5, ROOM_D * 0.5 + 1.0));
+    let e = sdBox(p - vec3<f32>(ROOM_W + 0.5, WALL_H * 0.5, ROOM_D * 0.5), vec3<f32>(0.5, WALL_H * 0.5, ROOM_D * 0.5 + 1.0));
+    let n = sdBox(p - vec3<f32>(ROOM_W * 0.5, WALL_H * 0.5, -0.5), vec3<f32>(ROOM_W * 0.5 + 1.0, WALL_H * 0.5, 0.5));
+    let sd = sdBox(p - vec3<f32>(ROOM_W * 0.5, south * 0.5, ROOM_D + 0.5), vec3<f32>(ROOM_W * 0.5 + 1.0, south * 0.5, 0.5));
+    return min(min(w, e), min(n, sd));
 }
 
 // The container nearest p: column 0–3 at x = 5 + 6c, row 0–2 at z = 4.75 + 5.5r,
@@ -142,7 +142,8 @@ fn soldierPos(i: i32) -> vec4<f32> {
 // The nearest thing: (distance, id). Ids: 1 floor, 2 wall, 3 container,
 // 4 ceiling, 5 the player, 6–9 a soldier.
 fn scene(p: vec3<f32>) -> vec2<f32> {
-    var d = p.y;
+    // The floor stops at the walls' outer faces.
+    var d = max(p.y, sdBox(vec3<f32>(p.x - ROOM_W * 0.5, 0.0, p.z - ROOM_D * 0.5), vec3<f32>(ROOM_W * 0.5 + 1.0, 1.0, ROOM_D * 0.5 + 1.0)));
     var id = 1.0;
     let w = walls(p);
     if (w < d) { d = w; id = 2.0; }
@@ -168,21 +169,14 @@ fn normalAt(p: vec3<f32>) -> vec3<f32> {
         + e.yxy * scene(p + e.yxy).x + e.xxx * scene(p + e.xxx).x);
 }
 
-// A soft shadow toward the light: a wide penumbra (k = 3) and small, even
-// steps, so the penumbra is smooth, with no banding and no grain.
+// A soft shadow toward the light: the classic penumbra estimate (k = 8) over
+// small, even steps, so it is smooth, with no banding, grain or creases.
 fn shadow(p: vec3<f32>) -> f32 {
-    let k = 3.0;
     var s = 1.0;
     var t = 0.04;
-    var ph = 1e10;
     for (var i = 0; i < 64; i = i + 1) {
         let h = scene(p + LIGHT * t).x;
-        // Improved soft shadows (Quílez): estimate the closest pass from the
-        // last two samples, not the sample itself.
-        let y = h * h / (2.0 * ph);
-        let d = sqrt(max(h * h - y * y, 0.0));
-        s = min(s, k * d / max(0.0, t - y));
-        ph = h;
+        s = min(s, 8.0 * h / t);
         t = t + clamp(h, 0.02, 0.25);
         if (s < 0.005 || t > 14.0) { break; }
     }
@@ -292,7 +286,7 @@ fn render(ro: vec3<f32>, rd: vec3<f32>) -> vec3<f32> {
     let diff = max(dot(n, LIGHT), 0.0);
     // Ambient occlusion from the nearby geometry.
     let ao = clamp(scene(p + n * 0.25).x / 0.25, 0.3, 1.0);
-    var lit = c * (0.32 * ao + 0.75 * diff * sh);
+    var lit = c * (0.45 * ao + 0.75 * diff * sh);
     // Cyan spill from the north wall's lights.
     lit = lit + vec3<f32>(0.10, 0.22, 0.24) * exp(-p.z * 0.35) * (0.5 + 0.5 * max(n.z, 0.0));
     // Darkness with distance, as in a dim building.
