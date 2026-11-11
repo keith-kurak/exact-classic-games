@@ -12,10 +12,11 @@
 //! 5. windows: `x,y,w,h[,spacing]|line|line` joined by `^`, in tiles; a
 //!    spacing of 2 puts a blank row between lines. In lines, `~` and a digit
 //!    0–8 is a gauge tile filled that many pixels (ATB and stagger gauges),
-//!    and text inside `{` `}` is yellow. An entry `@x,y|text` is a label with
-//!    no window, on the backdrop (digits, `%`, gauges): stagger bars.
-//! 6. enemies: `name:tx:ty:fx` joined by `;`. fx 0 is normal, 1 a hit flash,
-//!    2–5 a defeat dissolving top-down, a tile row a step.
+//!    and text inside `{` `}` is yellow. An entry `@x,y|~n~n…` is a gauge
+//!    with no window, on the backdrop: the HP bars under enemies.
+//! 6. enemies: `name:tx:ty:fx` joined by `;`, all one type (a battle uses
+//!    that type's CHR bank). fx 0 is normal, 1 a hit flash, 2–5 a defeat
+//!    dissolving top-down, a tile row a step, 7 juggled: upside down, 16 px up.
 //! 7. fade: 0 (full colour) to 4 (black), the NES palette fade.
 
 pub mod art;
@@ -47,6 +48,8 @@ fn art() -> &'static Art {
 #[derive(Default)]
 struct Spec {
     battle: bool,
+    /// The battle's CHR bank: its enemy type.
+    bank: String,
     scroll_x: i32,
     scroll_y: i32,
     sprites: String,
@@ -100,16 +103,12 @@ fn parse_windows(spec: &str) -> Vec<Option<Cell>> {
             let at: Vec<i32> = parts.next().unwrap_or("").split(',').filter_map(|v| v.trim().parse().ok()).collect();
             let [x, y] = at[..] else { continue };
             let mut chars = parts.next().unwrap_or("").chars();
-            let (mut col, mut gold) = (0, false);
+            let mut col = 0;
             while let Some(ch) = chars.next() {
-                if ch == '{' || ch == '}' {
-                    gold = ch == '{';
-                    continue;
-                }
                 let tile = if ch == '~' {
                     ui.clear_bars[chars.next().and_then(|d| d.to_digit(10)).unwrap_or(0).min(8) as usize]
                 } else {
-                    *(if gold { &ui.clear_yellow } else { &ui.clear }).get(&ch).unwrap_or(&0)
+                    0
                 };
                 put(x + col, y, tile);
                 col += 1;
@@ -190,16 +189,21 @@ fn parse_stage(spec: &str) -> Vec<Option<Cell>> {
         let f: Vec<&str> = item.split(':').collect();
         let [name, tx, ty, fx] = f[..] else { continue };
         let (Ok(tx), Ok(ty), Ok(fx)) = (tx.parse::<usize>(), ty.parse::<usize>(), fx.parse::<usize>()) else { continue };
-        let Some((w, h, tiles)) = art.enemies.get(name) else { continue };
+        let Some(e) = art.enemies.get(name) else { continue };
+        let (w, h) = (e.w, e.h);
         let palette = match (fx, name) {
             (1, _) => WINDOW_PALETTE,
             (_, "drone") => 1,
             _ => 3,
         };
+        // Juggled: the upside-down tiles, two rows higher (still on the
+        // attribute grid).
+        let juggled = fx == 7;
+        let (tiles, ty) = if juggled { (&e.flipped, ty.saturating_sub(2)) } else { (&e.tiles, ty) };
         // Defeated: the enemy's rows clear away from the top, one a step.
-        let gone = if fx >= 2 { (fx - 1) * h / 4 } else { 0 };
-        for y in gone..*h {
-            for x in 0..*w {
+        let gone = if (2..=5).contains(&fx) { (fx - 1) * h / 4 } else { 0 };
+        for y in gone..h {
+            for x in 0..w {
                 let (cx, cy) = (tx + x, ty + y);
                 if cx < COLS && cy < ROWS {
                     cells[cy * COLS + cx] = Some(Cell { tile: tiles[y * w + x], palette });
@@ -242,7 +246,7 @@ fn draw(spec: &Spec, frame: u64, rgba: &mut [u8]) {
     let mut sprites = Vec::new();
     parse_sprites(&spec.sprites, frame, &mut sprites);
     let out = render(&Scene {
-        bg_table: if spec.battle { &art.bg_battle } else { &art.bg },
+        bg_table: if spec.battle { art.battle_banks.get(spec.bank.as_str()).unwrap_or(&art.battle_banks["drone"]) } else { &art.bg },
         spr_table: &art.spr,
         palettes,
         background: if spec.battle { &stage } else { &field },
@@ -260,7 +264,10 @@ pub fn write_sheets(dir: &std::path::Path) -> std::io::Result<()> {
     let art = art();
     std::fs::create_dir_all(dir)?;
     std::fs::write(dir.join("bg-field.png"), nes_ppu::png::sheet(&art.bg, FIELD.bg[0], false))?;
-    std::fs::write(dir.join("bg-battle.png"), nes_ppu::png::sheet(&art.bg_battle, BATTLE.bg[3], false))?;
+    for (name, bank) in &art.battle_banks {
+        let pal = if *name == "drone" { BATTLE.bg[1] } else { BATTLE.bg[3] };
+        std::fs::write(dir.join(format!("bg-battle-{name}.png")), nes_ppu::png::sheet(bank, pal, false))?;
+    }
     for (i, pal) in art::SPRITES.iter().enumerate() {
         std::fs::write(dir.join(format!("sprites-{i}.png")), nes_ppu::png::sheet(&art.spr, *pal, true))?;
     }
@@ -300,13 +307,16 @@ impl Surface for PpuSurface {
             return Err(SurfaceError(format!("ppu: expected {INPUTS} inputs, got {}", inputs.len())));
         };
         let battle = text(scene, "scene")? == "battle";
+        let enemy_spec = text(enemies, "enemies")?;
+        let bank = enemy_spec.split(':').next().unwrap_or("drone").to_string();
         self.spec = Spec {
             battle,
             scroll_x: number(sx, "scroll x")?.round() as i32,
             scroll_y: number(sy, "scroll y")?.round() as i32,
             sprites: text(sprites, "sprites")?,
             overlay: parse_windows(&text(windows, "windows")?),
-            stage: if battle { parse_stage(&text(enemies, "enemies")?) } else { vec![None; COLS * ROWS] },
+            stage: if battle { parse_stage(&enemy_spec) } else { vec![None; COLS * ROWS] },
+            bank,
             fade: number(fade, "fade")?.clamp(0.0, 4.0) as u8,
         };
         Ok(())
@@ -453,7 +463,7 @@ mod tests {
         field.sprites = "down*:120:96;villager*:160:64".into();
         draw(&field, 0, &mut rgba);
         std::fs::write(dir.join("frame-field.png"), nes_ppu::png::encode(256, 240, &rgba)).unwrap();
-        let mut battle = Spec { battle: true, stage: parse_stage("drone:2:8:0;hound:12:8:0"), overlay: parse_windows("0,20,10,10|Drone|~8~3~0~0 131||{Hound}|~8~8~6~0 {205}^10,20,9,10,2|Fire|Ice|Flee|<Stance^19,20,13,10|Assault|Rook 120~8~8~8|  {Blast}|Ivy  100~4~0~0|  {Blast}|Kai   90~8~8~2|  {Blast}^@2,16|~8~8~3~0~0 131^@12,16|~8~8~8~6~0{205}"), ..Default::default() };
+        let mut battle = Spec { battle: true, bank: "hound".into(), stage: parse_stage("hound:2:8:0;hound:12:8:7"), overlay: parse_windows("0,20,10,10|Drone|~8~3~0~0 131||{Hound}|~8~8~6~0 {205}^10,20,9,10,2|Fire|Ice|Flee|<Stance^19,20,13,10|Assault|Rook 120~8~8~8|  {Blast}|Ivy  100~4~0~0|  {Blast}|Kai   90~8~8~2|  {Blast}^@2,16|~8~8~8~8~8~3~0~0^@12,16|~8~8~4~0~0~0~0~0^0,0,14,4|{Hound}  212%|~8~8~8~8~8~8~8~4~0~0~0~0"), ..Default::default() };
         battle.sprites = "idle:200:56;idle:208:88:1;strike:184:120:2;hand:66:168".into();
         draw(&battle, 0, &mut rgba);
         std::fs::write(dir.join("frame-battle.png"), nes_ppu::png::encode(256, 240, &rgba)).unwrap();

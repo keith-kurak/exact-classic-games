@@ -23,7 +23,8 @@ fn drone(): Foe = Foe(name="Drone", hp=600, atk=24, breakAt=180, speed=0.4, par=
 fn hound(): Foe = Foe(name="Hound", hp=420, atk=30, breakAt=150, speed=0.5, par=225)
 fn foeOf(name: string): Foe = (name == "Drone" ? drone() : hound())
 // Enemy groups, and where each enemy stands, in tiles (even, for attributes).
-fn group(k: number): string[] = (k == 0 ? ["Drone"] : (k == 1 ? ["Hound", "Hound"] : ["Drone", "Hound"]))
+// One enemy type a group: each type has its own CHR bank.
+fn group(k: number): string[] = (k == 0 ? ["Drone"] : (k == 1 ? ["Hound", "Hound"] : ["Hound"]))
 // Enemies are 64×64 (8×8 tiles); two stand side by side, one stands centred.
 fn foeTx(i: number, count: number): number = (count == 1 ? 6 : (i == 0 ? 2 : 12))
 fn foeTy(i: number): number = 8
@@ -68,6 +69,15 @@ fn maxChain(): number = 400
 // How fast a chain drains a tick: slowly while a Strike hit steadies it.
 fn drain(held: bool): number = (held ? 0.08 : 0.3)
 fn staggerTicks(): number = 120
+// A Strike hit on a staggered enemy launches it: upside down in the air for
+// this long, unable to act; more Strike hits keep it up.
+fn juggleTicks(): number = 30
+// The stagger panel, top left, for the enemy last targeted: name and chain,
+// and a long bar: progress to the stagger point, or the stagger wearing off.
+fn panelName(name: string, chain: number, brk: number): string =
+  (brk > 0 ? `{${padTo(name, 6)}${floor(chain)}%}` : `${padTo(name, 6)}${floor(chain)}%`)
+fn panelBar(chain: number, brk: number, breakAt: number): string =
+  (brk > 0 ? gauge(brk / staggerTicks() * 80, 10) : gauge((chain - 100) / (breakAt - 100) * 80, 10))
 
 // The living member with the smallest share of their HP left.
 fn ratio(hp: number[], i: number): number = (nth(hp, i) <= 0 ? 99999 : nth(hp, i) * 1000 / maxHp(i))
@@ -104,4 +114,4 @@ fn pad3(n: number): string = (n < 10 ? `  ${n}` : (n < 100 ? ` ${n}` : `${n}`))
 fn padTo(s: string, n: number): string = `${s}${"            ".slice(0, max(0, n - s.length))}`
 // A gauge as bar tiles: `~0`–`~8` a tile, that many pixels filled.
 fn barTile(v: number): string = `~${max(0, min(8, floor(v)))}`
-fn gauge(v: number, tiles: number): string = [0, 1, 2, 3].filter(i => i < tiles).map(i => barTile(v - i * 8)).join("")
+fn gauge(v: number, tiles: number): string = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].filter(i => i < tiles).map(i => barTile(v - i * 8)).join("")

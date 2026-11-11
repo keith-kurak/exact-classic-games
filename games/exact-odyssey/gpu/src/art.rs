@@ -740,17 +740,19 @@ const EDGE_LEFT: &str = "
 
 /// Everything the picture processor needs, built from the art above.
 pub struct Art {
-    /// Background CHR banks: the field's, and the battle's. Each starts with
-    /// the same window tiles, so text indices match in both; the battle bank
-    /// swaps the field's terrain for big enemies, as NES RPGs swapped banks.
+    /// Background CHR banks: the field's, and one per enemy type for battles.
+    /// Each starts with the same window tiles (and battle banks the same cave
+    /// rock), so their indices match; a battle bank then holds its enemy and
+    /// an upside-down copy for juggling, as NES RPGs swapped banks per fight.
     pub bg: PatternTable,
-    pub bg_battle: PatternTable,
+    pub battle_banks: HashMap<&'static str, PatternTable>,
     pub spr: PatternTable,
     /// Background metatiles by map character (field bank, and the cave rock
     /// in the battle bank).
     pub metatiles: HashMap<char, Metatile>,
-    /// Enemies (battle bank): (width, height) in tiles and their tiles.
-    pub enemies: HashMap<&'static str, (usize, usize, Vec<u8>)>,
+    /// Enemies (each in its own bank): size in tiles, their tiles row by
+    /// row, and the upside-down tiles (each tile flipped, rows reversed).
+    pub enemies: HashMap<&'static str, Enemy>,
     pub sprites: HashMap<&'static str, Metasprite>,
     pub ui: Ui,
     /// Animated metatiles: frames by map character, swapped like CHR banks.
@@ -759,14 +761,19 @@ pub struct Art {
     pub digits: HashMap<char, u8>,
 }
 
+pub struct Enemy {
+    pub w: usize,
+    pub h: usize,
+    pub tiles: Vec<u8>,
+    pub flipped: Vec<u8>,
+}
+
 /// Window and label tiles, at the same index in every background bank.
 pub struct Ui {
     /// Glyphs on window blue: white, and yellow for the characters yellow text uses.
     pub glyphs: HashMap<char, u8>,
     pub yellow: HashMap<char, u8>,
-    /// Glyphs and gauges on the black backdrop, for labels under enemies.
-    pub clear: HashMap<char, u8>,
-    pub clear_yellow: HashMap<char, u8>,
+    /// Gauges on the black backdrop, for HP bars under enemies.
     pub clear_bars: [u8; 9],
     pub border: Border,
     /// ATB gauge tiles on window blue, 0–8 pixels filled.
@@ -844,17 +851,11 @@ fn ui(bg: &mut PatternTable) -> Ui {
     };
     let mut glyphs = HashMap::new();
     let mut yellow = HashMap::new();
-    let mut clear = HashMap::new();
-    let mut clear_yellow = HashMap::new();
-    let yellow_chars: Vec<char> = "StrikeBlastMendGuardHoundDroneVictoryAttackSlashFireIceCureHealProvokeSteelPotion*0123456789".chars().collect();
+    let yellow_chars: Vec<char> = "StrikeBlastMendGuardHoundDroneVictoryAttackSlashFireIceCureHealProvokeSteelPotion*%0123456789".chars().collect();
     for (ch, rows) in FONT {
         glyphs.insert(*ch, bg.add(glyph_tile(rows, 3, 1)));
         if yellow_chars.contains(ch) {
             yellow.insert(*ch, bg.add(glyph_tile(rows, 2, 1)));
-        }
-        if ch.is_ascii_digit() || *ch == '%' || *ch == ' ' {
-            clear.insert(*ch, bg.add(glyph_tile(rows, 3, 0)));
-            clear_yellow.insert(*ch, bg.add(glyph_tile(rows, 2, 0)));
         }
     }
     let gauge = |n: usize, empty: u8| -> Tile {
@@ -874,17 +875,13 @@ fn ui(bg: &mut PatternTable) -> Ui {
         bars[n] = bg.add(gauge(n, 1));
         clear_bars[n] = bg.add(gauge(n, 0));
     }
-    Ui { glyphs, yellow, clear, clear_yellow, clear_bars, border, bars }
+    Ui { glyphs, yellow, clear_bars, border, bars }
 }
 
 pub fn build() -> Art {
     let mut bg = PatternTable::default();
-    let mut bg_battle = PatternTable::default();
     let mut spr = PatternTable::default();
     let ui_tiles = ui(&mut bg);
-    let battle_ui = ui(&mut bg_battle);
-    assert_eq!(battle_ui.border.fill, ui_tiles.border.fill, "both banks share the window tiles");
-    assert_eq!(battle_ui.clear_bars, ui_tiles.clear_bars);
 
     let mut metatiles = HashMap::new();
     for (ch, art, pal) in [
@@ -904,16 +901,33 @@ pub fn build() -> Art {
     ] {
         metatiles.insert(ch, metatile(&mut bg, art, pal));
     }
-    for (ch, art, pal) in [('k', ROCK, 0), ('K', SHARD, 0)] {
-        metatiles.insert(ch, metatile(&mut bg_battle, art, pal));
-    }
 
-    // Enemies: 64×64, the 32×32 art doubled with Scale2x.
+    // A battle bank per enemy type: the window tiles, the cave rock, then the
+    // enemy (64×64, its 32×32 art doubled with Scale2x) and upside down.
+    let mut battle_banks = HashMap::new();
     let mut enemies = HashMap::new();
     for (name, art) in [("drone", DRONE), ("hound", HOUND)] {
+        let mut bank = PatternTable::default();
+        let bank_ui = ui(&mut bank);
+        assert_eq!(bank_ui.border.fill, ui_tiles.border.fill, "every bank shares the window tiles");
+        assert_eq!(bank_ui.clear_bars, ui_tiles.clear_bars);
+        for (ch, rock, pal) in [('k', ROCK, 0), ('K', SHARD, 0)] {
+            let m = metatile(&mut bank, rock, pal);
+            if let Some(prev) = metatiles.get(&ch) {
+                assert_eq!(prev.tiles, m.tiles, "every battle bank has the rock at the same place");
+            }
+            metatiles.insert(ch, m);
+        }
         let (w, h, tiles) = parse_art(&scale2x(art));
-        let ids = tiles.into_iter().map(|t| bg_battle.add(t)).collect();
-        enemies.insert(name, (w, h, ids));
+        let ids: Vec<u8> = tiles.iter().map(|t| bank.add(*t)).collect();
+        let mut flipped = Vec::with_capacity(ids.len());
+        for row in (0..h).rev() {
+            for col in 0..w {
+                flipped.push(bank.add(tiles[row * w + col].flipped()));
+            }
+        }
+        enemies.insert(name, Enemy { w, h, tiles: ids, flipped });
+        battle_banks.insert(name, bank);
     }
 
     let mut sprites = HashMap::new();
@@ -958,7 +972,7 @@ pub fn build() -> Art {
         .collect();
     frames.insert('~', water_frames);
 
-    Art { bg, bg_battle, spr, metatiles, enemies, sprites, ui: ui_tiles, frames, digits }
+    Art { bg, battle_banks, spr, metatiles, enemies, sprites, ui: ui_tiles, frames, digits }
 }
 
 // ── Maps ──
@@ -1003,7 +1017,9 @@ mod tests {
     fn the_art_fits_the_tables() {
         let art = build();
         assert!(art.bg.tiles.len() <= 256, "bg tiles: {}", art.bg.tiles.len());
-        assert!(art.bg_battle.tiles.len() <= 256, "battle bg tiles: {}", art.bg_battle.tiles.len());
+        for (name, bank) in &art.battle_banks {
+            assert!(bank.tiles.len() <= 256, "{name} bank: {}", bank.tiles.len());
+        }
         assert!(art.spr.tiles.len() <= 256, "sprite tiles: {}", art.spr.tiles.len());
         for row in FIELD_MAP {
             assert_eq!(row.chars().count(), 32, "{row}");
@@ -1011,6 +1027,10 @@ mod tests {
                 assert!(art.metatiles.contains_key(&ch), "no metatile `{ch}`");
             }
         }
-        println!("field bank {} tiles, battle bank {} tiles, sprites {} tiles", art.bg.tiles.len(), art.bg_battle.tiles.len(), art.spr.tiles.len());
+        for (name, bank) in &art.battle_banks {
+            println!("{name} bank {} tiles", bank.tiles.len());
+        }
+        println!("field bank {} tiles, sprites {} tiles", art.bg.tiles.len(), art.spr.tiles.len());
     }
 }
+

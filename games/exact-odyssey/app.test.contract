@@ -246,4 +246,6 @@ test "Auto in Balance staggers the hounds and wins, with a rank"
   expect state wins == 1
   expect state rank == 4
   expect state staggers == 2
+  expect state juggles == 7
+  expect state hp.2 == 90
   expect state scene == "field"

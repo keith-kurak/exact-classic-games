@@ -114,9 +114,11 @@ slots by his role; Space commits them. Escape takes back a slot. **Item** commit
 heals the whole party. Ivy and Kai fill theirs by role (shown in yellow) and act. Press **Left**
 for the stance menu, free at any time: **Assault** (all Blast), **Rush** (Strike, Strike,
 Blast), **Balance** and **Bulwark**. Only Strike attacks; Blast's Fire and Ice build an enemy's
-chain fast, and it drains over time, slower just after a Strike hit. Fill the stagger bar under
-an enemy and it is staggered, taking far more damage. A win shows your time and a 1–5 star rank;
-five stars finds a Potion.
+chain fast, and it drains over time, slower just after a Strike hit. The stagger panel at the top
+left follows the enemy you last targeted: its chain and a bar to its stagger point. Staggered, an
+enemy takes far more damage, and Strike hits launch it: upside down in the air, it can't act.
+Each enemy's HP shows as a bar beneath it. A win shows your time and a 1–5 star rank (five stars
+finds a Potion), and the party is healed in full after every fight.
 
 The picture comes from [`engines/nes-ppu`](engines/nes-ppu). To write the game's pattern tables
 as PNG sprite sheets and two sample frames to `games/exact-odyssey/assets/sheets/`:

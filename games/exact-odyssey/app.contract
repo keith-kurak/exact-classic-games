@@ -3,7 +3,7 @@
 // it walks the field, starts fights, runs the battle, and tells the surface
 // what is on screen as small text specs (see gpu/src/lib.rs).
 use Npc, fieldMap, tileAt, walkable, thicket, npcs, npcAt, blocked, dx, dy, camAxis, nextRng from "./field.contract"
-use Foe, foeOf, group, foeTx, foeTy, labelRow, staggerText, potionHeal, startPotions, parOf, nameOf, maxHp, atkOf, speedOf, full, stances, stanceName, roleOf, abilityOf, needsTarget, isStrike, power, chainGain, hitFor, chainUp, maxChain, drain, staggerTicks, rolePlan, segments, announce, slotText, lowest, stars, starLine, clockOf, nth, word, put, pad3, padTo, gauge from "./battle.contract"
+use Foe, foeOf, group, foeTx, foeTy, labelRow, juggleTicks, panelName, panelBar, potionHeal, startPotions, parOf, nameOf, maxHp, atkOf, speedOf, full, stances, stanceName, roleOf, abilityOf, needsTarget, isStrike, power, chainGain, hitFor, chainUp, maxChain, drain, staggerTicks, rolePlan, segments, announce, slotText, lowest, stars, starLine, clockOf, nth, word, put, pad3, padTo, gauge from "./battle.contract"
 
 fn keyDir(k: string): string = (k == "ArrowUp" or k == "w" ? "up" : (k == "ArrowDown" or k == "s" ? "down"
   : (k == "ArrowLeft" or k == "a" ? "left" : (k == "ArrowRight" or k == "d" ? "right" : ""))))
@@ -76,6 +76,9 @@ component ExactOdyssey
   state wins = 0
   // Ticks each enemy's chain stays steadied by a Strike hit.
   state hold: number[] = []
+  // Ticks each enemy stays juggled (launched, upside down), and how often.
+  state juggle: number[] = []
+  state juggles = 0
   // The fight's length and par in ticks, and its rank in stars.
   state bticks = 0
   state par = 0
@@ -114,13 +117,16 @@ component ExactOdyssey
   // OAM order is draw priority: damage numbers and the cursor in front.
   derive battleSprites = dmgSprite.concat(handSprite).concat(partySprites)
   derive enemySpec = ([0, 1].filter(i => i < foes.length and nth(fx, i) < 6)
-    .map(i => `${word(foes, i) == "Drone" ? "drone" : "hound"}:${foeTx(i, foes.length)}:${foeTy(i)}:${nth(fx, i)}`).join(";"))
-  // The enemy window lists names (yellow while staggered). Under each enemy
-  // sprite, on the backdrop: its stagger bar and chain.
+    .map(i => `${word(foes, i) == "Drone" ? "drone" : "hound"}:${foeTx(i, foes.length)}:${foeTy(i)}:${nth(fx, i) > 0 ? nth(fx, i) : (nth(juggle, i) > 0 ? 7 : 0)}`).join(";"))
+  // The enemy window lists names (yellow while staggered). Under each enemy,
+  // on the backdrop, its HP bar; the stagger panel, top left, follows the
+  // enemy last targeted.
   derive foeLines = [0, 1].filter(i => i < foes.length).map(i => (nth(foeHp, i) <= 0 ? ""
     : (nth(brk, i) > 0 ? `{${word(foes, i)}}` : word(foes, i))))
-  derive staggerLabels = ([0, 1].filter(i => i < foes.length and nth(foeHp, i) > 0).map(i =>
-    `@${foeTx(i, foes.length)},${labelRow()}|${staggerText(nth(chain, i), nth(brk, i), foeOf(word(foes, i)).breakAt)}`))
+  derive hpBars = ([0, 1].filter(i => i < foes.length and nth(foeHp, i) > 0).map(i =>
+    `@${foeTx(i, foes.length)},${labelRow()}|${gauge(nth(foeHp, i) / foeOf(word(foes, i)).hp * 64, 8)}`))
+  derive panel = (foes.length > 0 and nth(foeHp, aimAt) > 0
+    ? [`0,0,12,4|${panelName(word(foes, aimAt), nth(chain, aimAt), nth(brk, aimAt))}|${panelBar(nth(chain, aimAt), nth(brk, aimAt), foeOf(word(foes, aimAt)).breakAt)}`] : [])
   derive menuLines = (fighting ? ["Auto", abilityOf(roleOf(stance, 0), 0), abilityOf(roleOf(stance, 0), 1), "Item"] : [])
   // Rook's ATB, above the commands: two slots, each an ability over its own
   // segment filling. Committed slots turn yellow.
@@ -138,10 +144,11 @@ component ExactOdyssey
   derive battleWindows = ([`0,20,10,10,2|${foeLines.join("|")}`, `10,20,9,10,2|${menuLines.join("|")}`,
     `19,20,13,10|${statusLines.join("|")}`]
     .concat(fighting and plan.length > 0 ? [`10,17,21,3|${slotLine}`] : [])
-    .concat(staggerLabels)
+    .concat(hpBars)
+    .concat(fighting ? panel : [])
     .concat(fighting and ui == "stance" ? [`0,20,10,10,2|${stanceLines.join("|")}`] : [])
     .concat(fighting and ui == "item" ? [`0,20,10,10,2| Potion|   x${potions}`] : [])
-    .concat(topMsg != "" ? [`6,1,20,3|${topMsg}`] : [])
+    .concat(topMsg != "" ? [`12,1,20,3|${topMsg}`] : [])
     .concat(phase == "won" ? [`7,6,18,10,2|${rankLines.join("|")}`] : []).join("^"))
 
   // ── Walking ──
@@ -196,6 +203,7 @@ component ExactOdyssey
     foeAtb = g.map(n => r % 9)
     fx = g.map(n => 0)
     hold = g.map(n => 0)
+    juggle = g.map(n => 0)
     atb = [r % 8, r % 5, r % 7]
     phase = "intro"
     ui = "menu"
@@ -234,8 +242,9 @@ component ExactOdyssey
         if scene == "battle"
           phase = "fight"
 
+  // After a fight the party is healed in full.
   action leaveBattle
-    hp = hp.map(h => max(1, h))
+    hp = [maxHp(0), maxHp(1), maxHp(2)]
     phase = ""
     play = ""
     msg = ""
@@ -269,11 +278,14 @@ component ExactOdyssey
       let b0 = brk
       let c0 = chain
       let hd0 = hold
+      let j0 = juggle
       let a0 = atb
       let fa0 = foeAtb
       let newAtb = [0, 1, 2].map(i => (nth(hp, i) > 0 ? min(full(), nth(a0, i) + speedOf(i)) : 0))
-      let newFoe = [0, 1].filter(i => i < foes.length).map(i => (nth(foeHp, i) > 0 ? min(full(), nth(fa0, i) + foeOf(word(foes, i)).speed) : 0))
+      // A juggled enemy's gauge does not fill: it is in the air.
+      let newFoe = [0, 1].filter(i => i < foes.length).map(i => (nth(foeHp, i) > 0 ? (nth(j0, i) > 0 ? nth(fa0, i) : min(full(), nth(fa0, i) + foeOf(word(foes, i)).speed)) : 0))
       bticks = bticks + 1
+      juggle = ks.filter(i => i < foes.length).map(i => max(0, nth(j0, i) - 1))
       brk = ks.filter(i => i < foes.length).map(i => max(0, nth(b0, i) - 1))
       hold = ks.filter(i => i < foes.length).map(i => max(0, nth(hd0, i) - 1))
       chain = ks.filter(i => i < foes.length).map(i => (nth(b0, i) == 1 ? 100 : (nth(b0, i) > 0 ? nth(c0, i) : max(100, nth(c0, i) - drain(nth(hd0, i) > 0)))))
@@ -413,10 +425,15 @@ component ExactOdyssey
       let d = hitFor(power(c, atkOf(actor)), ch, broken, r)
       let up = chainUp(ch, chainGain(c), broken)
       let breaks = not broken and up >= foe.breakAt
-      foeHp = put(foeHp, t, max(0, nth(foeHp, t) - d))
+      let hpBefore = nth(foeHp, t)
+      foeHp = put(foeHp, t, max(0, hpBefore - d))
       chain = put(chain, t, min(maxChain(), breaks ? up + 50 : up))
       brk = breaks ? put(brk, t, staggerTicks()) : brk
       hold = isStrike(c) ? put(hold, t, 40) : hold
+      // Strike hits on a staggered enemy launch it and keep it in the air.
+      if isStrike(c) and broken and hpBefore > d
+        juggle = put(juggle, t, juggleTicks())
+        juggles = juggles + 1
       fx = put(fx, t, 1)
       dmgText = `${d}`
       dmgX = foeTx(t, foes.length) * 8 + 24
