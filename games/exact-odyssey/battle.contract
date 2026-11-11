@@ -1,0 +1,58 @@
+// Battle rules. Each party member's ATB gauge has three segments; when it is
+// full, the game waits and that member chooses: FIGHT, their role's SKILL,
+// STANCE (switch the party's roles, free), or FLEE. Hits raise an enemy's
+// chain; at its break point the enemy is BROKEN for a while and takes far
+// more damage. STRIKE keeps the chain from draining, BLAST builds it fast,
+// MEND heals, GUARD draws attacks and halves them.
+
+shape Foe
+  name: string
+  hp: number
+  atk: number
+  breakAt: number
+  speed: number
+
+fn drone(): Foe = Foe(name="DRONE", hp=140, atk=12, breakAt=180, speed=0.36)
+fn hound(): Foe = Foe(name="HOUND", hp=100, atk=16, breakAt=150, speed=0.46)
+fn foeOf(name: string): Foe = (name == "DRONE" ? drone() : hound())
+// Enemy groups, and where each enemy stands, in tiles (even, for attributes).
+fn group(k: number): string[] = (k == 0 ? ["DRONE"] : (k == 1 ? ["HOUND", "HOUND"] : ["DRONE", "HOUND"]))
+fn foeTx(i: number): number = (i == 0 ? 4 : 4)
+fn foeTy(i: number): number = (i == 0 ? 6 : 12)
+
+fn names(): string[] = ["ROOK", "IVY", "KAI"]
+fn nameOf(i: number): string = match names().at(i) { case some(n) => n, case none => "" }
+fn maxHp(i: number): number = (i == 0 ? 120 : (i == 1 ? 100 : 90))
+fn atkOf(i: number): number = (i == 0 ? 14 : (i == 1 ? 10 : 12))
+fn speedOf(i: number): number = (i == 0 ? 0.5 : (i == 1 ? 0.42 : 0.46))
+fn full(): number = 24
+
+// Stances: the role each member plays in each.
+fn stanceName(s: number): string = (s == 0 ? "ASSAULT" : (s == 1 ? "BALANCE" : "BULWARK"))
+fn roleOf(s: number, i: number): string = (s == 0 ? (i == 0 ? "STRIKE" : "BLAST")
+  : (s == 1 ? (i == 0 ? "STRIKE" : (i == 1 ? "MEND" : "BLAST"))
+  : (i == 0 ? "GUARD" : "MEND")))
+fn skillOf(role: string): string = (role == "STRIKE" ? "SLASH" : (role == "BLAST" ? "FIRE" : (role == "MEND" ? "CURE" : "PROVOKE")))
+fn needsTarget(cmd: string): bool = cmd == "FIGHT" or cmd == "SLASH" or cmd == "FIRE"
+// Damage before the chain, and how much it adds to the chain.
+fn power(cmd: string, atk: number): number = (cmd == "SLASH" ? atk * 2 : (cmd == "FIRE" ? atk * 1.5 : atk * 1.2))
+fn chainGain(cmd: string): number = (cmd == "SLASH" ? 8 : (cmd == "FIRE" ? 25 : 5))
+fn hitFor(base: number, chain: number, broken: bool, r: number): number =
+  round(base * chain / 100 * (broken ? 1.5 : 1) * (0.9 + (r % 21) / 100))
+
+// The living member with the smallest share of their HP left.
+fn ratio(hp: number[], i: number): number = (nth(hp, i) <= 0 ? 99999 : nth(hp, i) * 1000 / maxHp(i))
+fn lowest(hp: number[]): number = (ratio(hp, 0) <= ratio(hp, 1) and ratio(hp, 0) <= ratio(hp, 2) ? 0 : (ratio(hp, 1) <= ratio(hp, 2) ? 1 : 2))
+
+fn commands(): string[] = ["FIGHT", "SKILL", "STANCE", "FLEE"]
+fn commandAt(i: number): string = match commands().at(i) { case some(c) => c, case none => "" }
+
+// ── Small helpers ──
+fn nth(xs: number[], k: number): number = match xs.at(k) { case some(v) => v, case none => 0 }
+fn word(xs: string[], k: number): string = match xs.at(k) { case some(v) => v, case none => "" }
+fn put(xs: number[], k: number, v: number): number[] = [0, 1, 2].filter(i => i < xs.length).map(i => (i == k ? v : nth(xs, i)))
+fn pad3(n: number): string = (n < 10 ? `  ${n}` : (n < 100 ? ` ${n}` : `${n}`))
+fn padTo(s: string, n: number): string = `${s}${"            ".slice(0, max(0, n - s.length))}`
+// A gauge as bar tiles: a letter a–i a tile, 0–8 pixels filled.
+fn barTile(v: number): string = "abcdefghi".slice(max(0, min(8, floor(v))), max(0, min(8, floor(v))) + 1)
+fn gauge(v: number, tiles: number): string = [0, 1, 2, 3].filter(i => i < tiles).map(i => barTile(v - i * 8)).join("")

@@ -1,0 +1,10 @@
+[package]
+name = "nes-ppu"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "An NES-style picture processor: 2C02 palette, 2bpp CHR tiles, attribute-limited backgrounds, OAM sprites with the 8-per-line limit, rendered to a 256x240 frame."
+
+[lib]
+path = "src/lib.rs"

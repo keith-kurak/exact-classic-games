@@ -1,0 +1,56 @@
+// The field: Reedholm and the road east to the crystal rift. The map is 32×20
+// metatiles of 16×16 pixels; it must match FIELD_MAP in gpu/src/art.rs.
+// `,` is thicket, where monsters lurk.
+
+shape Npc
+  x: number
+  y: number
+  lines: string[]
+
+fn fieldMap(): string[] = [
+  "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+  "TTTT..........TTTTTT~~TTTTTTTTTT",
+  "TT......RRRR...FFFF.~~.,,,,,TTTT",
+  "T.......RRRR...FCCF.~~.,,*,,,,TT",
+  "T.......WWDW...FCCF.~~.,,,,,*,,T",
+  "T..........=...FFFF.~~.,*,,,,,,T",
+  "T....RRR...=........~~.,,,,,*,,T",
+  "T....RRR...=========BB=,,,,,,,,T",
+  "T....WDW...=........~~.,,*,,,,,T",
+  "T.....=====.........~~.,,,,,,*,T",
+  "TT..........####....~~..,,,,,,TT",
+  "TTT.........####....~~..,,*,,TTT",
+  "TT..................~~...,,,,,TT",
+  "T......TT...........~~...,,*,,,T",
+  "T.....TTTT..........~~..,,,,,,,T",
+  "T......TT......TT...~~.,,*,,,,,T",
+  "T.............TTTT..~~..,,,,,,TT",
+  "TT.............TT...~~...,,,TTTT",
+  "TTTT................~~TTTTTTTTTT",
+  "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT"
+]
+fn mapW(): number = 32
+fn mapH(): number = 20
+
+fn tileAt(x: number, y: number): string =
+  (x < 0 or y < 0 or x >= mapW() or y >= mapH() ? "T"
+    : match fieldMap().at(y) { case some(r) => r.slice(x, x + 1), case none => "T" })
+fn walkable(ch: string): bool = ch == "." or ch == "," or ch == "=" or ch == "B"
+fn thicket(x: number, y: number): bool = tileAt(x, y) == ","
+
+fn npcs(): Npc[] = [
+  Npc(x=13, y=5, lines=["THE RIFT EAST OF HERE HAS", "OPENED AGAIN. MACHINES AND", "BEASTS POUR OUT OF IT.", "MIND THE THICKET, ROOK."]),
+  Npc(x=19, y=8, lines=["PAST THE BRIDGE IS THE", "THICKET. SWITCH YOUR STANCE", "WHEN A FIGHT TURNS. BREAK", "THEIR GUARD, THEN HIT HARD."])
+]
+fn npcIs(i: number, x: number, y: number): bool = match npcs().at(i) { case some(n) => n.x == x and n.y == y, case none => false }
+fn npcAt(x: number, y: number): number = (npcIs(0, x, y) ? 0 : (npcIs(1, x, y) ? 1 : -1))
+fn blocked(x: number, y: number): bool = not walkable(tileAt(x, y)) or npcAt(x, y) >= 0
+
+fn dx(dir: string): number = (dir == "left" ? -1 : (dir == "right" ? 1 : 0))
+fn dy(dir: string): number = (dir == "up" ? -1 : (dir == "down" ? 1 : 0))
+
+// The camera: the hero kept near the centre, clamped to the map's edges.
+fn camAxis(p: number, half: number, size: number, screen: number): number = max(0, min(size - screen, p - half))
+
+// The ZX81's little random generator: exact in doubles, deterministic.
+fn nextRng(s: number): number = (s * 75 + 74) % 65537

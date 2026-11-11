@@ -1,0 +1,53 @@
+test "the game starts on the field in Reedholm"
+  expect tree has "screen"
+  expect state scene == "field"
+  expect state tx == 11
+  expect state ty == 7
+
+test "walking one tile, and talking to the elder"
+  type "root" key "ArrowUp" for 250
+  clock +200
+  expect state ty == 6
+  type "root" key "ArrowUp" for 250
+  clock +200
+  type "root" key "ArrowRight" for 250
+  clock +200
+  expect state tx == 12
+  expect state ty == 5
+  expect state dir == "right"
+  type "root" key " "
+  expect state talkTo == 0
+  type "root" key "ArrowLeft" for 250
+  expect state tx == 12
+  type "root" key " "
+  expect state talkTo == -1
+
+test "trees and water block the way"
+  type "root" key "ArrowDown" for 4000
+  clock +300
+  expect state ty == 18
+  expect state moving == false
+
+test "walking into the thicket starts a fight, and the party acts"
+  type "root" key "ArrowRight" for 5300
+  clock +1000
+  expect state scene == "battle"
+  expect state phase == "wait"
+  clock +3000
+  expect state phase == "menu"
+  type "root" key "ArrowDown"
+  type "root" key "ArrowDown"
+  type "root" key " "
+  expect state stance == 1
+  expect state phase == "menu"
+  type "root" key "ArrowUp"
+  type "root" key "ArrowUp"
+  type "root" key " "
+  expect state phase == "target"
+  type "root" key " "
+  expect state phase == "act"
+  expect state cmd == "FIGHT"
+  clock +450
+  expect state step == 1
+  clock +700
+  expect state step == 0

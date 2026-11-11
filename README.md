@@ -6,6 +6,7 @@ Small games made with [Exact](../../exact), each in the style of a classic.
 | --- | --- | --- |
 | **Exactbound** | A 16-bit-era RPG slice: walk Cheery Cheery Village, talk to the Order of the Placid Blue, and fight them in turn-based battles over a GPU aurora background. | [`games/exactbound`](games/exactbound) |
 | **Exact Gear Solid** | A late-90s stealth game: cross a dim storage room past four patrolling guards, with an overhead camera, a radar of their view cones, and a camera that drops beside you when you press your back to a wall. | [`games/exact-gear-solid`](games/exact-gear-solid) |
+| **Exact Odyssey** | An 8-bit console RPG on a real NES-style picture processor: 2C02 colours, 8×8 CHR tiles, attribute-limited backgrounds, 3-colour sprites. Walk Reedholm, then fight in an ATB battle with a break chain and party stances. | [`games/exact-odyssey`](games/exact-odyssey) |
 | **Links Exact86** | An early-90s PC golf game: hole 1, a dogleg-right par 4 laid out after Pebble Beach's first, ray-marched from a fixed camera behind the ball, with a three-press swing. | [`games/links-exact86`](games/links-exact86) |
 
 Each game is its own Exact app, with its own Cargo workspace and tests. Their histories
@@ -39,6 +40,7 @@ From this folder:
 bun run exactbound    # build Exactbound and open it
 bun run links         # build Links Exact86 and open it
 bun run gear          # build Exact Gear Solid and open it
+bun run odyssey       # build Exact Odyssey and open it
 ```
 
 Or from a game's folder, `bun exact.mjs mac --run` (for Exactbound, see [Audio](#audio) first). The first build takes 1–3 minutes;
@@ -55,6 +57,8 @@ bun run test              # every game
 bun run test:exactbound   # 8 tests
 bun run test:links        # 5 tests
 bun run test:gear         # 10 tests
+bun run test:odyssey      # 4 tests
+bun run test:engine       # the NES picture processor's own tests
 ```
 
 The tests are each game's `app.test.contract`. They build the macOS app and drive it.
@@ -93,6 +97,26 @@ a container is in the way. A question mark means a guard has half-seen you; stay
 for about 0.7 s and you are spotted. Leaning round a corner, the wall hides you until a guard is
 near its edge. At each waypoint a guard stops and slowly looks both ways.
 
+### Exact Odyssey
+
+| Key | Action |
+| --- | --- |
+| Arrows or WASD | Walk, tile by tile |
+| Space, Enter or Z | Talk; choose in battle |
+| Escape or X | Back, when choosing a target |
+
+In battle, each member's ATB gauge has three segments. When it fills, choose **FIGHT**, the
+role's skill (**SLASH**, **FIRE**, **CURE** or **PROVOKE**), **STANCE** (switch every member's
+role, free), or **FLEE**. Hits build an enemy's chain (the bar under its name); fill it and the
+enemy is **BROKEN**, taking far more damage for a while.
+
+The picture comes from [`engines/nes-ppu`](engines/nes-ppu). To write the game's pattern tables
+as PNG sprite sheets and two sample frames to `games/exact-odyssey/assets/sheets/`:
+
+```sh
+cd games/exact-odyssey && cargo test -p exact-odyssey-gpu sheets -- --ignored
+```
+
 ### Links Exact86
 
 | Key | Action |
@@ -109,7 +133,10 @@ gets touchier.
 ## Layout
 
 ```
+engines/
+  nes-ppu/          an NES-style picture processor (Rust), shared by NES-style games
 games/
+  exact-odyssey/    app.contract, field.contract, battle.contract, gpu/ (art.rs, the ppu surface)
   exactbound/       app.contract, world.contract, battle.contract, gpu/ (aurora shader), assets/ (audio, not in git)
   exact-gear-solid/ app.contract, room.contract, items.contract, gpu/ (room shader)
   links-exact86/    app.contract, course.contract, golfer.contract, gpu/ (course shader)
