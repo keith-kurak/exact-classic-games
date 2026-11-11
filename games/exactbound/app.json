@@ -1,5 +1,5 @@
 {
-  "$schema": "../../exact/scripts/app.schema.json",
+  "$schema": "../../../../exact/scripts/app.schema.json",
   "name": "Exactbound",
   "short_name": "Exactbound",
   "id": "com.example.exactbound-f02259",

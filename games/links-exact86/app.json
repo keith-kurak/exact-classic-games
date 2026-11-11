@@ -1,5 +1,5 @@
 {
-  "$schema": "../../exact/scripts/app.schema.json",
+  "$schema": "../../../../exact/scripts/app.schema.json",
   "name": "Links Exact86",
   "short_name": "Links Exact86",
   "id": "com.example.linksexact86",

@@ -1,0 +1,11 @@
+{
+  "name": "exact-classic-games",
+  "private": true,
+  "scripts": {
+    "exactbound": "cd games/exactbound && bun exact.mjs mac --run",
+    "links": "cd games/links-exact86 && bun exact.mjs mac --run",
+    "test:exactbound": "cd games/exactbound && bun exact.mjs test macos",
+    "test:links": "cd games/links-exact86 && bun exact.mjs test macos",
+    "test": "bun run test:exactbound && bun run test:links"
+  }
+}
