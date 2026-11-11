@@ -74,6 +74,9 @@ component Exactbound
   state rollAfter = 0
   state fireN = 0
   state healN = 0
+  // An effect is in the view only while it plays; it never relies on its last
+  // keyframe holding.
+  state fxOn = false
   state healT = 0
   state foeId = ""
   state foeHp: number[] = []
@@ -364,6 +367,7 @@ component Exactbound
     foeHits = bumpAll(foeHits)
     ppNow = hurt(ppNow, i, fireCost())
     fireN = fireN + 1
+    fxOn = true
     hitDelay = wait
     playSound("assets/fire.wav")
     if downs > 0
@@ -380,10 +384,16 @@ component Exactbound
     ppNow = hurt(ppNow, i, healCost())
     healN = healN + 1
     healT = t
+    fxOn = true
     hitDelay = wait
     rollAfter = performanceNow() + wait
     playSound("assets/heal.wav", at=performanceNow() + wait)
     say(l1, `• ${heroAt(t).name} recovered ${amt} HP!`)
+
+  task fxClock when fxOn key=`${fireN}-${healN}`
+    after(1600, fxOff)
+  action fxOff
+    fxOn = false
 
   action heroAttack(i: number, want: number)
     let t = hpAt(foeHp, want) > 0 ? want : livingFrom(foeHp, 0)
@@ -607,7 +617,7 @@ component Exactbound
         if e.name == "battle"
           column navigationKey=`${e.id}` position="absolute" inset=0 testId="battle-screen"
             Battle(foes=foes, foeHp=foeHp, foeHits=foeHits, shownHp=shownHp, pp=ppNow, sel=sel, heroHits=heroHits,
-              shake=shake, hitDelay=hitDelay, fireN=fireN, healN=healN, healT=healT, phase=phase, actor=actor, cursor=cursor, auto=auto,
+              shake=shake, hitDelay=hitDelay, fireN=(fxOn ? fireN : 0), healN=(fxOn ? healN : 0), healT=healT, phase=phase, actor=actor, cursor=cursor, auto=auto,
               line1=msg1.slice(0, typed), line2=msg2.slice(0, max(0, typed - msg1.length)),
               seed=`${e.params.npc}-${fights}`, musicPaused=musicPaused, won=(outcome == "won"),
               attack=attack, magic=magic, fire=fire, heal=heal, autoOn=autoOn, autoOff=autoOff, run=run, next=next,

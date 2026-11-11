@@ -250,5 +250,6 @@ test "Juniper's Magic menu casts Fire, which costs PP"
   type "root" key " "
   expect state round == 1
   clock +20000
+  expect tree missing "fire-fx"
   expect state ppNow.1 == 35
   expect state phase == "menu"
