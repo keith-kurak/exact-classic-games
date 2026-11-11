@@ -23,9 +23,13 @@ shape Line
 fn freq(): string = "142.37"
 fn callLines(): Line[] = [
   Line(who="VALE", text="Is that smoke I'm reading on your vitals? In the middle of an infiltration?"),
-  Line(who="VALE", text="Every drag narrows your blood vessels and dulls your reflexes. And one cough in there could give you away."),
+  Line(who="VALE", text="Do you know what you just breathed in? Carbon monoxide. It latches onto your hemoglobin more than two hundred times more tightly than oxygen does."),
+  Line(who="VALE", text="So your blood carries less oxygen, right when your muscles need it most. You'll tire faster and get winded sooner."),
+  Line(who="VALE", text="Then there's the nicotine. It squeezes your blood vessels and pushes your heart rate up. Shaky hands, a pounding pulse... not ideal when you're hiding."),
+  Line(who="VALE", text="And the tar coats the cilia, the tiny hairs lining your airways, so your lungs can't sweep themselves clean. That's where a smoker's cough comes from."),
+  Line(who="VALE", text="There are dozens of carcinogens in that smoke too. Some of them damage the DNA in your lung cells directly."),
   Line(who="YOU", text="Relax, Doc. It helps me think."),
-  Line(who="VALE", text="Then think about this: I'm your medical officer, and I'm telling you to put it out."),
+  Line(who="VALE", text="Then think about this: one cough in that room and it's over. Put it out... please? For me?"),
   Line(who="YOU", text="...Noted.")
 ]
 fn lineAt(i: number): Line = match callLines().at(i) { case some(l) => l, case none => Line(who="", text="") }
@@ -60,25 +64,53 @@ component Portrait
     svg viewBox="0 0 100 130" width=150 height=195 opacity=(lit ? 1 : 0.5)
       rect x=0 y=0 width=100 height=130 fill="#06200f"
       if who == "VALE"
-        ellipse cx=50 cy=136 rx=46 ry=34 fill="#2f7a50"
-        polygon points="38,86 62,86 58,104 42,104" fill="#6cc293"
-        ellipse cx=50 cy=56 rx=27 ry=30 fill="#1d5236"
-        ellipse cx=50 cy=62 rx=19 ry=24 fill="#8fdcb0"
-        polygon points="28,52 50,34 72,52 70,40 50,28 30,40" fill="#1d5236"
-        rect x=36 y=56 width=11 height=7 rx=1.5 fill="none" stroke="#123a24" stroke-width=1.6
-        rect x=53 y=56 width=11 height=7 rx=1.5 fill="none" stroke="#123a24" stroke-width=1.6
-        line x1=47 y1=59 x2=53 y2=59 stroke="#123a24" stroke-width=1.4
-        line x1=44 y1=76 x2=56 y2=75 stroke="#2c6b48" stroke-width=1.6
-        line x1=34 y1=110 x2=50 y2=126 stroke="#9ff0c4" stroke-width=1.4
-        line x1=66 y1=110 x2=50 y2=126 stroke="#9ff0c4" stroke-width=1.4
+        // Long hair behind, a soft sweater and lab coat, a gentle face.
+        ellipse cx=50 cy=74 rx=34 ry=48 fill="#1d5236"
+        ellipse cx=50 cy=138 rx=44 ry=32 fill="#3e8f62"
+        polygon points="30,112 44,104 50,128 26,130" fill="#bff5d6"
+        polygon points="70,112 56,104 50,128 74,130" fill="#bff5d6"
+        rect x=43 y=78 width=14 height=18 fill="#86d6aa"
+        ellipse cx=50 cy=60 rx=20 ry=23 fill="#a6edc4"
+        // Side-swept bangs and a hair clip.
+        path d="M28,56 Q30,30 50,29 Q70,30 72,56 Q68,42 60,42 Q52,36 44,44 Q36,42 28,56 Z" fill="#1d5236"
+        rect x=63 y=40 width=7 height=2.6 rx=1.2 fill="#d8ffe9"
+        // Big eyes with highlights, soft brows, lashes.
+        path d="M36,53 Q41,50.5 46,53" fill="none" stroke="#1d5236" stroke-width=1.4
+        path d="M54,53 Q59,50.5 64,53" fill="none" stroke="#1d5236" stroke-width=1.4
+        ellipse cx=41.5 cy=61 rx=4.4 ry=5.4 fill="#0d2e1d"
+        ellipse cx=58.5 cy=61 rx=4.4 ry=5.4 fill="#0d2e1d"
+        ellipse cx=43 cy=59 rx=1.5 ry=1.6 fill="#effff6"
+        ellipse cx=60 cy=59 rx=1.5 ry=1.6 fill="#effff6"
+        line x1=37 y1=57.5 x2=35.5 y2=56 stroke="#0d2e1d" stroke-width=1.1
+        line x1=63 y1=57.5 x2=64.5 y2=56 stroke="#0d2e1d" stroke-width=1.1
+        // Blush, a small nose and a smile.
+        ellipse cx=36.5 cy=69 rx=4.5 ry=2.2 fill="#d4ffe6" opacity=0.55
+        ellipse cx=63.5 cy=69 rx=4.5 ry=2.2 fill="#d4ffe6" opacity=0.55
+        path d="M49.5,66 Q50.5,68.5 49,69" fill="none" stroke="#4f9a72" stroke-width=1
+        path d="M44.5,74 Q50,78.5 55.5,74" fill="none" stroke="#2c6b48" stroke-width=1.6
       if who == "YOU"
-        ellipse cx=50 cy=138 rx=48 ry=36 fill="#1f5236"
-        ellipse cx=50 cy=60 rx=30 ry=34 fill="#163d28"
-        ellipse cx=50 cy=68 rx=18 ry=22 fill="#6cb98f"
-        rect x=29 y=54 width=42 height=11 rx=4 fill="#b6ffd8"
-        rect x=31 y=56 width=38 height=3 fill="#e8fff2" opacity=0.7
-        line x1=44 y1=80 x2=57 y2=80 stroke="#1f5236" stroke-width=1.8
-        polygon points="20,70 30,50 30,96 22,100" fill="#163d28"
-        polygon points="80,70 70,50 70,96 78,100" fill="#163d28"
+        // Broad shoulders, a tactical collar and hood, goggles pushed up.
+        ellipse cx=50 cy=140 rx=50 ry=36 fill="#1f5236"
+        polygon points="26,108 40,96 50,104 60,96 74,108 62,116 38,116" fill="#163d28"
+        ellipse cx=50 cy=56 rx=31 ry=36 fill="#123222"
+        polygon points="33,50 67,50 69,70 60,88 40,88 31,70" fill="#6cb98f"
+        rect x=31 y=38 width=38 height=10 rx=3 fill="#b6ffd8"
+        rect x=33 y=40 width=34 height=2.5 fill="#e8fff2" opacity=0.7
+        // Heavy brows driven down, narrowed eyes, a hard mouth.
+        polygon points="34,56 47,60 47,63 34,59" fill="#0d2e1d"
+        polygon points="66,56 53,60 53,63 66,59" fill="#0d2e1d"
+        polygon points="37,64 46,65.5 45,67.5 38,66.5" fill="#0d2e1d"
+        polygon points="63,64 54,65.5 55,67.5 62,66.5" fill="#0d2e1d"
+        ellipse cx=42.5 cy=66 rx=1 ry=0.8 fill="#e8fff2"
+        ellipse cx=57.5 cy=66 rx=1 ry=0.8 fill="#e8fff2"
+        line x1=50 y1=63 x2=49 y2=74 stroke="#3d8a62" stroke-width=1.4
+        line x1=46.5 y1=75 x2=52 y2=75 stroke="#3d8a62" stroke-width=1.2
+        line x1=43 y1=81 x2=57 y2=80 stroke="#0d2e1d" stroke-width=2
+        line x1=43 y1=81 x2=41 y2=83 stroke="#0d2e1d" stroke-width=1.4
+        // Stubble, cheekbones and a scar through the brow.
+        polygon points="36,77 64,77 59,88 41,88" fill="#3f8a60" opacity=0.55
+        line x1=33 y1=70 x2=40 y2=73 stroke="#3d8a62" stroke-width=1.2
+        line x1=67 y1=70 x2=60 y2=73 stroke="#3d8a62" stroke-width=1.2
+        line x1=58 y1=53 x2=63 y2=71 stroke="#c8ffe0" stroke-width=1.2
       for y in [6, 16, 26, 36, 46, 56, 66, 76, 86, 96, 106, 116, 126] key=`s${y}`
         rect x=0 y=y width=100 height=1.2 fill="#000000" opacity=0.25
