@@ -28,7 +28,7 @@ test "three presses hit the ball, and the view cuts to it"
   type "root" key " "
   expect state phase == "flight"
   expect state strokes == 1
-  clock +3000
+  clock +2500
   expect state phase == "result"
   expect tree has "msg"
   clock +2000
@@ -37,7 +37,7 @@ test "three presses hit the ball, and the view cuts to it"
 
 test "no third press slices the ball"
   type "root" key " "
-  clock +2000
+  clock +3200
   expect state phase == "flight"
   expect state msg == "Slice · 110%"
 

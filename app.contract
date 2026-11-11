@@ -75,9 +75,13 @@ component LinksExact86
   derive r = nRoll > 0 ? max(0, min(1, (ft - nAir) / nRoll)) : 1
   derive ease = 1 - (1 - r) * (1 - r)
   derive inAir = inFlight and ft <= nAir and nAir > 0
-  derive showX = inFlight ? (inAir ? sX + (lX - sX) * s : lX + (fX - lX) * ease) : ballX
-  derive showY = inFlight ? (inAir ? sY + (lY - sY) * s : lY + (fY - lY) * ease) : ballY
-  derive showZ = inAir ? apex * 4 * s * (1 - s) : 0
+  // Drag: the ball leaves fast and arrives at a third of that speed. Its height
+  // peaks about 60% of the way out and falls more steeply than it rose.
+  derive xs = s * (1.5 - 0.5 * s)
+  derive us = xs * (0.6 + 0.4 * xs)
+  derive showX = inFlight ? (inAir ? sX + (lX - sX) * xs : lX + (fX - lX) * ease) : ballX
+  derive showY = inFlight ? (inAir ? sY + (lY - sY) * xs : lY + (fY - lY) * ease) : ballY
+  derive showZ = inAir ? apex * 4 * us * (1 - us) : 0
   derive pose = phase == "back" or phase == "down" ? "back" : (phase == "aim" ? (isPutt ? "putt" : "address") : (shots > 0 and sX == camX and sY == camY ? "follow" : "address"))
   derive toPinText = onGreen ? `${round(toPin * 3)} ft` : yds(round(toPin))
 
@@ -113,7 +117,7 @@ component LinksExact86
     every(20, swingTick)
   action swingTick
     if phase == "back"
-      let up = m + 0.022
+      let up = m + 0.014
       if up >= 1.1
         m = 1.1
         power = 1.1
@@ -121,7 +125,7 @@ component LinksExact86
       else
         m = up
     else
-      let down = m - 0.03
+      let down = m - 0.02
       if down <= -0.22
         m = -0.22
         strike(1)
@@ -156,7 +160,7 @@ component LinksExact86
     fY = holed ? pinY() : fy
     willHole = holed
     apex = carry * club.loft
-    nAir = isPutt ? 0 : round(18 + carry / 7)
+    nAir = isPutt ? 0 : round(30 + carry / 5)
     nRoll = isPutt ? round(10 + carry * 1.5) : round(6 + rl * 1.2)
     ft = 0
     strokes = strokes + 1
