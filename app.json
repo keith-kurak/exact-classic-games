@@ -1,0 +1,28 @@
+{
+  "$schema": "../../exact/scripts/app.schema.json",
+  "name": "Exactbound",
+  "short_name": "Exactbound",
+  "id": "com.example.exactbound-f02259",
+  "start_url": "/",
+  "display": "standalone",
+  "app": {
+    "id": "com.example.exactbound-f02259",
+    "name": "Exactbound"
+  },
+  "host": {
+    "web": {},
+    "macos": {
+      "minimumOS": "14.0",
+      "window": {
+        "width": 900,
+        "height": 700
+      }
+    }
+  },
+  "deploy": {
+    "store": {
+      "web": "0",
+      "macos": "0"
+    }
+  }
+}

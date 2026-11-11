@@ -1,0 +1,170 @@
+// The battle: the `aurora` GPU surface (gpu/) with the battle's UI inside it,
+// drawn through the shader. Three heroes against one to three members of the
+// Order. The rules are pure functions here; the root keeps the state.
+use Foe from "./world.contract"
+
+shape Hero
+  name: string
+  maxHp: number
+  atk: number
+  color: string
+
+fn party(): Hero[] = [
+  Hero(name="Rory", maxHp=96, atk=21, color="#d23b3b"),
+  Hero(name="Juniper", maxHp=78, atk=17, color="#e0a43a"),
+  Hero(name="Teo", maxHp=84, atk=19, color="#4fa36b")
+]
+
+fn heroAt(i: number): Hero = match party().at(i) { case some(h) => h, case none => Hero(name="", maxHp=1, atk=0, color="") }
+fn foeAt(foes: Foe[], i: number): Foe = match foes.at(i) { case some(f) => f, case none => Foe(name="", look="", hp=0, atk=0) }
+
+fn hpAt(xs: number[], i: number): number = match xs.at(i) { case some(h) => h, case none => 0 }
+fn living(xs: number[]): number[] = range(xs.length).filter(i => hpAt(xs, i) > 0)
+fn hurt(xs: number[], i: number, d: number): number[] = xs.map((h, k) => k == i ? max(0, h - d) : h)
+fn bump(xs: number[], i: number): number[] = xs.map((h, k) => k == i ? h + 1 : h)
+fn orFirst(xs: number[]): number = match first(xs) { case some(i) => i, case none => -1 }
+
+// The first one standing at or after `start`, wrapping round; -1 for none.
+fn livingFrom(xs: number[], start: number): number = orFirst(living(xs).filter(i => i >= start).concat(living(xs)))
+// The next one standing to the right, or to the left, wrapping round.
+fn nextLiving(xs: number[], from: number): number = orFirst(living(xs).filter(i => i > from).concat(living(xs)))
+fn prevLiving(xs: number[], from: number): number = orFirst(sortBy(living(xs).filter(i => i < from), i => -i)
+  .concat(sortBy(living(xs), i => -i)))
+
+fn letter(i: number): string = "ABC".slice(i, i + 1)
+fn foeLabel(foes: Foe[], i: number): string = foes.length > 1 ? `${foeAt(foes, i).name} ${letter(i)}` : foeAt(foes, i).name
+
+// A round's turns: hero 0, foe 0, hero 1, foe 1, … Heroes are 0–2, foes 10 and up.
+fn roundQueue(partyHp: number[], foeHp: number[]): number[] = range(3).map(i =>
+  (hpAt(partyHp, i) > 0 ? [i] : [-1]).concat(hpAt(foeHp, i) > 0 ? [10 + i] : [-1])).flat().filter(ev => ev >= 0)
+fn canAct(ev: number, partyHp: number[], foeHp: number[]): bool = ev < 10 ? hpAt(partyHp, ev) > 0 : hpAt(foeHp, ev - 10) > 0
+
+// Damage varies by round, attacker and target, without a random source.
+fn heroDmg(i: number, t: number, round: number): number = heroAt(i).atk + ((round * 5 + i * 3 + t * 7) % 9) - 4
+fn foeDmg(f: Foe, e: number, round: number): number = f.atk + ((round * 3 + e * 5) % 7) - 3
+fn foeTarget(partyHp: number[], e: number, round: number): number = livingFrom(partyHp, (round + e * 2) % 3)
+fn verb(f: Foe, round: number): string = (f.look == "elder" ? "chants something soothing at the party"
+  : (f.look == "zealot" ? (round % 2 == 0 ? "swings a dripping paintbrush" : "flicks blue paint")
+  : (round % 2 == 0 ? "hums ominously and lunges" : "tries to hug you, menacingly")))
+
+keyframes jolt
+  0% translate="0px 0px"
+  25% translate="-10px 0px"
+  50% translate="8px 0px"
+  75% translate="-4px 0px"
+  100% translate="0px 0px"
+keyframes blink
+  50% opacity=0.35
+keyframes fade
+  to opacity=0 scale=0.85 animation-timing-function="ease-in"
+
+// One member of the Order, drawn large. `look` picks the robe.
+component Robe
+  props
+    look: string
+  view
+    svg viewBox="0 0 12 17" width=120 height=170
+      path d="M6 3.5 L10.8 16.4 L1.2 16.4 Z"
+        fill=(look == "elder" ? "#5a3fa8" : (look == "zealot" ? "#23338a" : "#3e57b8"))
+      rect x=2.6 y=9.2 width=6.8 height=0.6 fill=(look == "elder" ? "#e3c46a" : "#c9d3ff")
+      rect x=1.6 y=7.6 width=1.6 height=3.2 rx=0.8 fill=(look == "zealot" ? "#1b2870" : "#344aa3")
+      rect x=8.8 y=7.6 width=1.6 height=3.2 rx=0.8 fill=(look == "zealot" ? "#1b2870" : "#344aa3")
+      if look == "zealot"
+        rect x=9.4 y=4.4 width=0.5 height=6 fill="#6b4a32"
+        rect x=9.1 y=3.2 width=1.1 height=1.6 rx=0.3 fill="#7fa2ff"
+      if look == "elder"
+        path d="M6 0.2 L8.2 3.6 L3.8 3.6 Z" fill="#4a3392"
+      circle cx=6 cy=4.6 r=3.1 fill=(look == "elder" ? "#4a3392" : "#2f449c")
+      circle cx=6 cy=5 r=2.1 fill="#0d1230"
+      circle cx=5.2 cy=4.8 r=0.32 fill="#d8e6ff"
+      circle cx=6.8 cy=4.8 r=0.32 fill="#d8e6ff"
+
+component Battle
+  props
+    foes: Foe[]
+    foeHp: number[]
+    foeHits: number[]
+    partyHp: number[]
+    heroHits: number[]
+    phase: string
+    actor: number
+    cursor: number
+    msg1: string
+    msg2: string
+    seed: string
+    musicPaused: bool
+    attack: action
+    run: action
+    next: action
+    pick0: action
+    pick1: action
+    pick2: action
+    toggleMusic: action
+    musicPlaying: action
+    musicPause: action
+  view
+    column width="100%" height="100%"
+      audio "assets/battle.mp3" autoplay=true loop=true paused=musicPaused
+        playing=musicPlaying pause=musicPause testId="music"
+      canvas surface=aurora(seed) width="100%" height="100%" testId="sky"
+        column color-scheme="dark" width="100%" height="100%" box-sizing="border-box" padding=24 gap=12
+          justify-content="space-between" color="CanvasText"
+          // The top: the command window on a hero's turn, else the messages.
+          row height=128 gap=12 align-items="flex-start"
+            if phase == "menu" or phase == "target"
+              column width=260 box-sizing="border-box" padding="10px 16px" gap=6 background-color="Canvas"
+                border="3px solid CanvasText" border-radius=10 testId="commands"
+                text heroAt(actor).name font-size=13 font-weight=700 color="-exact-secondary-label" testId="actor"
+                row gap=8 press=attack testId="cmd-attack"
+                  text (phase == "menu" and cursor == 0 ? "▸" : " ") width=14 font-size=20 font-weight=700
+                  text "Attack" font-size=20 font-weight=700
+                row gap=8 press=run testId="cmd-run"
+                  text (phase == "menu" and cursor == 1 ? "▸" : " ") width=14 font-size=20 font-weight=700
+                  text "Run" font-size=20 font-weight=700
+              if phase == "target"
+                column box-sizing="border-box" padding="10px 16px" margin-top=40 background-color="Canvas"
+                  border="3px solid CanvasText" border-radius=10 testId="target"
+                  text `To ${foeLabel(foes, cursor)}` font-size=20 font-weight=700 testId="target-name"
+            else
+              column flex=1 max-width=680 margin="0 auto" box-sizing="border-box" padding="12px 18px" gap=6
+                background-color="Canvas" border="3px solid CanvasText" border-radius=10 press=next
+                testId="battle-dialog"
+                text msg1 font-size=20 font-weight=700 testId="battle-text"
+                text msg2 font-size=20 font-weight=700 testId="battle-text-2"
+          // The middle: the foes still standing. A hit replays the jolt.
+          row gap=24 justify-content="center" align-items="flex-end" testId="foes"
+            for f, i in foes key=`${i}`
+              if hpAt(foeHp, i) > 0
+                column align-items="center" gap=4 -exact-exit-animation="fade 400ms ease-in both"
+                  testId=`foe-${i}`
+                  for hit in [hpAt(foeHits, i)] key=`${i}-${hit}`
+                    column animation=(hit > 0 ? "jolt 320ms ease-out" : "none")
+                      column animation=(phase == "target" and cursor == i ? "blink 600ms ease-in-out infinite" : "none")
+                        if i == 0
+                          column press=pick0
+                            Robe(look=f.look)
+                        if i == 1
+                          column press=pick1
+                            Robe(look=f.look)
+                        if i == 2
+                          column press=pick2
+                            Robe(look=f.look)
+          // The bottom: the party's boxes. The hero choosing rises.
+          row gap=12 justify-content="center" align-items="flex-end" color-scheme="light"
+            for h, i in party() key=h.name
+              column width=150 box-sizing="border-box" padding="8px 12px" gap=4 background-color="Canvas" color="CanvasText"
+                border="3px solid CanvasText" border-radius=10
+                translate=((phase == "menu" or phase == "target") and actor == i ? "0px -14px" : "0px 0px")
+                transition="translate -exact-spring(260, 22, 1)" testId=`hero-${i}`
+                for hit in [hpAt(heroHits, i)] key=`${i}-${hit}`
+                  row gap=8 align-items="center" animation=(hit > 0 ? "jolt 320ms ease-out" : "none")
+                    column width=10 height=10 border-radius=5 background-color=h.color
+                    text h.name font-size=15 font-weight=800
+                row gap=6 align-items="baseline"
+                  text "HP" font-size=12 font-weight=700 color="-exact-secondary-label"
+                  text `${hpAt(partyHp, i)}` font-size=22 font-weight=800 font-variant-numeric="tabular-nums"
+                    color=(hpAt(partyHp, i) == 0 ? "-exact-secondary-label" : "CanvasText") testId=`hp-${i}`
+                  text `/ ${h.maxHp}` font-size=12 color="-exact-secondary-label"
+          row justify-content="flex-end"
+            button press=toggleMusic testId="music-toggle"
+              text (musicPaused ? "Play music" : "Pause music")

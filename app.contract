@@ -1,0 +1,318 @@
+// Exactbound: walk around Cheery Cheery Village and talk to the Order of the
+// Placid Blue. Everyone in a robe says a line or two and then starts a battle.
+// The field (world.contract) is larger than the window: the camera follows the
+// player, and both glide one tile per step. The battle (battle.contract) is the
+// aurora GPU surface with Attack and Run for a party of three.
+// Arrow keys or WASD walk (hold to keep walking); Space, Enter or Z talks and
+// confirms; Escape or X goes back from choosing a target.
+use Npc, Foe, Scenery, Person, npcs, blocked, dx, dy, stands, tile, cols, rows, camera from "./world.contract"
+use Battle, party, hpAt, living, hurt, bump, orFirst, livingFrom, nextLiving, prevLiving, foeLabel, roundQueue, canAct, heroAt, foeAt, heroDmg, foeDmg, foeTarget, verb from "./battle.contract"
+
+shape Viewport
+  width: number
+  height: number
+
+routes nav
+  home "/"
+    battle "/battle/:npc"
+
+fn dirOf(k: string): string = (k == "ArrowUp" or k == "w" ? "up" : (k == "ArrowDown" or k == "s" ? "down"
+  : (k == "ArrowLeft" or k == "a" ? "left" : (k == "ArrowRight" or k == "d" ? "right" : ""))))
+fn confirmKey(k: string): bool = k == " " or k == "Enter" or k == "z"
+
+component Exactbound
+  resource vp = exactViewport() as shape Viewport
+  state px = 21
+  state py = 31
+  state facing = "up"
+  state stride = 0
+  state held = ""
+  state talkTo = ""
+  state line = 0
+  state beaten: string[] = []
+  state fights = 0
+  state musicPaused = false
+  // The battle.
+  state foeId = ""
+  state foeHp: number[] = []
+  state foeHits: number[] = []
+  state partyHp: number[] = []
+  state heroHits: number[] = []
+  state orders: number[] = [0, 0, 0]
+  state queue: number[] = []
+  state round = 0
+  state phase = ""
+  state actor = 0
+  state cursor = 0
+  state outcome = ""
+  state msg1 = ""
+  state msg2 = ""
+  derive onField = top(nav).name == "home"
+  derive talking = npcs().filter(n => n.id == talkTo)
+  derive calm = beaten.includes(talkTo)
+  derive lines = match first(talking) { case some(n) => (calm ? [n.after] : n.lines), case none => [] }
+  derive speaker = talking.map(n => n.name).join("")
+  derive shown = match lines.at(line) { case some(s) => s, case none => "" }
+  derive foes = npcs().filter(n => n.id == foeId).map(n => n.foes).flat()
+  derive camX = camera(vp.width, cols() * tile(), (px + 0.5) * tile())
+  derive camY = camera(vp.height, rows() * tile(), (py + 0.5) * tile())
+
+  // ── The field ──
+
+  // One step: face that way, then move unless the tile is taken.
+  action step(dir: string)
+    facing = dir
+    if not blocked(px + dx(dir), py + dy(dir))
+      px = px + dx(dir)
+      py = py + dy(dir)
+      stride = 1 - stride
+
+  // While a direction is held, a step every 160 ms: the glide's own length.
+  task walk when held != "" and talkTo == "" and onField
+    every(160, walkOn)
+  action walkOn
+    if held != ""
+      step(held)
+
+  // Talk to whoever stands on the tile the player faces.
+  action talk
+    let near = npcs().filter(n => stands(n, px + dx(facing), py + dy(facing))).map(n => n.id).join("")
+    if near != ""
+      held = ""
+      talkTo = near
+      line = 0
+
+  // The next line, or the end of the talk: a member of the Order then fights.
+  action advance
+    let who = talkTo
+    let fighter = npcs().filter(n => n.id == who and n.kind == "cultist").length > 0
+    if line + 1 < lines.length
+      line = line + 1
+    else
+      talkTo = ""
+      line = 0
+      if fighter and not beaten.includes(who)
+        startBattle(who)
+
+  // ── The battle ──
+
+  action startBattle(id: string)
+    let fs = npcs().filter(n => n.id == id).map(n => n.foes).flat()
+    fights = fights + 1
+    held = ""
+    foeId = id
+    foeHp = fs.map(f => f.hp)
+    foeHits = fs.map(f => 0)
+    partyHp = party().map(h => h.maxHp)
+    heroHits = [0, 0, 0]
+    orders = [0, 0, 0]
+    queue = []
+    round = 0
+    outcome = ""
+    phase = "play"
+    msg1 = fs.length > 1 ? `• ${foeAt(fs, 0).name} and friends block the way!` : `• You engage the ${foeAt(fs, 0).name}!`
+    msg2 = ""
+    nav = push(nav, path("battle", id))
+
+  // A hero's turn: Attack picks a target when more than one foe stands.
+  action attack
+    if living(foeHp).length > 1
+      phase = "target"
+      cursor = livingFrom(foeHp, 0)
+    else
+      choose(livingFrom(foeHp, 0))
+
+  // The target for the hero choosing; then the next hero, or the round.
+  action choose(t: number)
+    let nx = orFirst(living(partyHp).filter(i => i > actor))
+    orders = orders.map((o, k) => k == actor ? t : o)
+    cursor = 0
+    if nx >= 0
+      actor = nx
+      phase = "menu"
+    else
+      round = round + 1
+      queue = roundQueue(partyHp, foeHp)
+      phase = "play"
+      msg1 = "• The party springs into action!"
+      msg2 = ""
+
+  action run
+    outcome = "fled"
+    phase = "play"
+    msg1 = "• The party ran away!"
+    msg2 = ""
+
+  action pick0
+    if phase == "target"
+      choose(0)
+  action pick1
+    if phase == "target"
+      choose(1)
+  action pick2
+    if phase == "target"
+      choose(2)
+
+  // The messages move on by themselves, or at once on a key or a click.
+  task battleClock when top(nav).name == "battle" and phase == "play" key=`${msg1}|${msg2}`
+    every(1400, next)
+
+  // The next message: the outcome, the next turn, or back to the menu.
+  action next
+    let q = queue.filter(ev => canAct(ev, partyHp, foeHp))
+    if outcome != ""
+      leave()
+    else
+      if living(foeHp).length == 0
+        outcome = "won"
+        msg1 = "• You won!"
+        msg2 = "• The Order's grip on them loosens."
+      else
+        if living(partyHp).length == 0
+          outcome = "lost"
+          msg1 = "• The party lost the will to fight..."
+          msg2 = "• You wake up at the village gate."
+        else
+          if q.length == 0
+            phase = "menu"
+            actor = livingFrom(partyHp, 0)
+            cursor = 0
+            msg1 = ""
+            msg2 = ""
+          else
+            queue = q.slice(1)
+            turn(orFirst(q))
+
+  // One attack. Heroes are 0–2 and hit the foe they chose (or the next one
+  // standing); foes are 10 and up and pick a hero by the round.
+  action turn(ev: number)
+    if ev < 10
+      let want = hpAt(orders, ev)
+      let t = hpAt(foeHp, want) > 0 ? want : livingFrom(foeHp, 0)
+      let d = heroDmg(ev, t, round)
+      let down = hpAt(foeHp, t) <= d
+      foeHp = hurt(foeHp, t, d)
+      foeHits = bump(foeHits, t)
+      msg1 = `• ${heroAt(ev).name} attacks!`
+      msg2 = down ? `• ${d} HP of damage to ${foeLabel(foes, t)}! They calm down.` : `• ${d} HP of damage to ${foeLabel(foes, t)}!`
+    else
+      let e = ev - 10
+      let f = foeAt(foes, e)
+      let t = foeTarget(partyHp, e, round)
+      let d = foeDmg(f, e, round)
+      let down = hpAt(partyHp, t) <= d
+      partyHp = hurt(partyHp, t, d)
+      heroHits = bump(heroHits, t)
+      msg1 = `• ${foeLabel(foes, e)} ${verb(f, round)}!`
+      msg2 = down ? `• ${heroAt(t).name} took ${d} HP of damage and can't go on!` : `• ${heroAt(t).name} took ${d} HP of damage!`
+
+  action leave
+    if outcome == "won"
+      beaten = beaten.concat([foeId])
+    if outcome == "lost"
+      px = 21
+      py = 31
+      facing = "up"
+    phase = ""
+    outcome = ""
+    nav = back(nav)
+
+  action battleKey(k: string)
+    if phase == "play"
+      if confirmKey(k)
+        next()
+    if phase == "menu"
+      if k == "ArrowUp" or k == "ArrowDown" or k == "w" or k == "s"
+        cursor = 1 - cursor
+      if confirmKey(k)
+        if cursor == 0
+          attack()
+        else
+          run()
+    if phase == "target"
+      if k == "ArrowRight" or k == "d"
+        cursor = nextLiving(foeHp, cursor)
+      if k == "ArrowLeft" or k == "a"
+        cursor = prevLiving(foeHp, cursor)
+      if confirmKey(k)
+        choose(cursor)
+      if k == "Escape" or k == "x"
+        phase = "menu"
+        cursor = 0
+
+  // ── Keys ──
+
+  action onKey(k: string)
+    let d = dirOf(k)
+    if not onField
+      battleKey(k)
+    else
+      if talkTo != ""
+        if confirmKey(k)
+          advance()
+      else
+        if d != ""
+          if held != d
+            held = d
+            step(d)
+        else
+          if confirmKey(k)
+            talk()
+
+  action onKeyUp(k: string)
+    if dirOf(k) == held
+      held = ""
+
+  action back
+    if not onField
+      run()
+  action follow(url: string)
+    nav = go(nav, url)
+  action toggleMusic
+    musicPaused = not musicPaused
+  action musicPlaying
+    musicPaused = false
+  action musicPause
+    musicPaused = true
+
+  view
+    main testId="root" navigationKey=`${top(nav).id}` navigationBack="back" navigate=follow
+      key=onKey keyup=onKeyUp width="100%" height="100%" color-scheme="dark" background-color="Canvas"
+      for e in stack(nav) key=e.id
+        if e.name == "home"
+          column navigationKey=`${e.id}` position="absolute" inset=0 overflow="hidden"
+            background-color="Canvas" testId="field-screen"
+            if onField
+              audio "assets/field.mp3" autoplay=true loop=true testId="field-music"
+            // The world, moved by the camera. The player glides over the scenery.
+            column position="absolute" left=0 top=0 width=(cols() * tile()) height=(rows() * tile())
+              translate=`${camX}px ${camY}px` transition="translate 160ms linear" testId="world"
+              Scenery(talkTo=talkTo, facing=facing, beaten=beaten)
+              column position="absolute" left=(17 * tile()) top=(28.68 * tile()) width=(3 * tile())
+                height=(0.8 * tile()) align-items="center" justify-content="center" color="CanvasText"
+                text "CHEERY CHEERY" font-size=10 font-weight=800 letter-spacing=0.5
+                text "VILLAGE" font-size=10 font-weight=800 letter-spacing=0.5
+              column position="absolute" left=0 top=0 width=tile() height=tile()
+                translate=`${px * tile()}px ${py * tile()}px` transition="translate 160ms linear" testId="player"
+                svg viewBox="0 0 1 1" width=tile() height=tile()
+                  Person(facing=facing, shirt="#3d6fd6", hair="#3a2a1a", cap="#d23b3b", stride=stride)
+            if talkTo != ""
+              column position="absolute" top=24 left=24 right=24 align-items="center"
+                column color-scheme="dark" width="100%" max-width=640 box-sizing="border-box"
+                  padding=4 background-color="Canvas" color="CanvasText"
+                  border="3px solid CanvasText" border-radius=14 press=advance testId="dialog"
+                  column padding="12px 18px" gap=6 border="2px solid -exact-secondary-label" border-radius=9
+                    text speaker font-size=13 font-weight=700
+                      color="-exact-secondary-label" testId="speaker"
+                    text `• ${shown}` font-size=22 font-weight=700
+                      line-height=1.35 testId="line"
+            else
+              column color-scheme="dark" position="absolute" bottom=16 left=0 right=0 align-items="center"
+                text "Arrow keys to walk · Space to talk" font-size=12 color="-exact-secondary-label" testId="hint"
+        if e.name == "battle"
+          column navigationKey=`${e.id}` position="absolute" inset=0 testId="battle-screen"
+            Battle(foes=foes, foeHp=foeHp, foeHits=foeHits, partyHp=partyHp, heroHits=heroHits,
+              phase=phase, actor=actor, cursor=cursor, msg1=msg1, msg2=msg2,
+              seed=`${e.params.npc}-${fights}`, musicPaused=musicPaused,
+              attack=attack, run=run, next=next, pick0=pick0, pick1=pick1, pick2=pick2,
+              toggleMusic=toggleMusic, musicPlaying=musicPlaying, musicPause=musicPause)

@@ -1,0 +1,255 @@
+// The field: Cheery Cheery Village, home of the Order of the Placid Blue. The map
+// is 44 × 34 tiles and is larger than the window, so a camera follows the player.
+// One tile is one unit of the scenery SVG, and tile() points on the screen.
+// The palette is overcast and grey-blue: the village is not as cheery as its sign.
+
+shape Foe
+  name: string
+  look: string
+  hp: number
+  atk: number
+
+shape Npc
+  id: string
+  name: string
+  kind: string
+  x: number
+  y: number
+  w: number
+  facing: string
+  lines: string[]
+  after: string
+  foes: Foe[]
+
+shape Box
+  x: number
+  y: number
+  w: number
+  h: number
+  wall: string
+  roof: string
+
+shape Spot
+  x: number
+  y: number
+
+fn tile(): number = 48
+fn cols(): number = 44
+fn rows(): number = 34
+
+fn acolyte(): Foe = Foe(name="Placid Acolyte", look="acolyte", hp=46, atk=9)
+fn zealot(): Foe = Foe(name="Blue Zealot", look="zealot", hp=58, atk=12)
+fn elder(): Foe = Foe(name="Placid Elder", look="elder", hp=90, atk=15)
+
+fn chapel(): Box = Box(x=17, y=2, w=10, h=6, wall="#55679e", roof="#26305c")
+
+fn houses(): Box[] = [
+  chapel(),
+  Box(x=4, y=4, w=6, h=4, wall="#8f9aa6", roof="#4a5878"),
+  Box(x=31, y=4, w=7, h=4, wall="#a39e92", roof="#3f4f6e"),
+  Box(x=12, y=11, w=5, h=3, wall="#8c97a3", roof="#56607e"),
+  Box(x=28, y=11, w=5, h=3, wall="#9a958a", roof="#3b4a6a"),
+  Box(x=5, y=21, w=6, h=4, wall="#99a2ab", roof="#4b4f72"),
+  Box(x=31, y=21, w=6, h=4, wall="#8d9196", roof="#344466")
+]
+
+fn pond(): Box = Box(x=34, y=27, w=6, h=4, wall="#4f6f86", roof="#3c566b")
+
+// The forest ring around the village, and a few clumps inside it.
+fn trees(): Spot[] = (range(22).map(i => Spot(x=i * 2, y=0))
+  .concat(range(22).map(i => Spot(x=i * 2 + 1, y=33)))
+  .concat(range(16).map(i => Spot(x=0, y=i * 2 + 1)))
+  .concat(range(16).map(i => Spot(x=43, y=i * 2 + 2)))
+  .concat([Spot(x=2, y=13), Spot(x=3, y=15), Spot(x=2, y=17), Spot(x=24, y=13),
+    Spot(x=25, y=14), Spot(x=40, y=13), Spot(x=39, y=16), Spot(x=14, y=26),
+    Spot(x=15, y=28), Spot(x=13, y=30), Spot(x=27, y=26), Spot(x=28, y=29),
+    Spot(x=11, y=2), Spot(x=29, y=2), Spot(x=40, y=24), Spot(x=3, y=29)]))
+
+fn flowers(): Spot[] = [
+  Spot(x=8, y=9), Spot(x=9, y=10), Spot(x=19, y=10), Spot(x=25, y=10),
+  Spot(x=6, y=15), Spot(x=36, y=10), Spot(x=12, y=24), Spot(x=26, y=23),
+  Spot(x=38, y=19), Spot(x=7, y=30), Spot(x=31, y=30), Spot(x=18, y=24)
+]
+
+fn npcs(): Npc[] = [
+  Npc(id="sign", name="Sign", kind="sign", x=17, y=29, w=3, facing="down", after="", foes=[],
+    lines=["CHEERY CHEERY VILLAGE",
+      "Home of the Order of the Placid Blue. Everyone here is very, very cheery."]),
+  Npc(id="greeter", name="Placid Acolyte", kind="cultist", x=23, y=26, w=1, facing="left",
+    after="Huh. Why am I wearing a blue sheet?", foes=[acolyte()],
+    lines=["Welcome, traveler. Have you considered being blue?",
+      "Everything is calmer when it's blue. Hold still."]),
+  Npc(id="painter", name="Blue Zealot", kind="cultist", x=8, y=12, w=1, facing="down",
+    after="I think I'll paint something yellow next.", foes=[zealot()],
+    lines=["I'm painting the whole village blue. Every fence. Every cow.",
+      "You're not blue yet. Let me help with that."]),
+  Npc(id="twins", name="Placid Acolytes", kind="cultist", x=34, y=15, w=1, facing="left",
+    after="We are just two people now. Not twins. Just two.", foes=[acolyte(), acolyte()],
+    lines=["We are the Blue Twins.", "We say everything twice. Twice!"]),
+  Npc(id="choir", name="Blue Zealot", kind="cultist", x=14, y=19, w=1, facing="down",
+    after="I never liked that hymn anyway.", foes=[acolyte(), zealot()],
+    lines=["La la la... blue, blue, blue...", "You're off-key. That isn't very blue of you."]),
+  Npc(id="guard", name="Blue Zealot", kind="cultist", x=21, y=9, w=1, facing="down",
+    after="The chapel is open now. There is nothing in it. It was always just a room.",
+    foes=[zealot(), acolyte(), zealot()],
+    lines=["The Chapel of Calm is closed to the un-blue.", "And you look extremely un-blue."]),
+  Npc(id="elder", name="Placid Elder", kind="cultist", x=37, y=9, w=1, facing="left",
+    after="Thank you. I had forgotten what green looked like.",
+    foes=[acolyte(), elder(), acolyte()],
+    lines=["Ah. A visitor with color still in their cheeks.", "We can fix that, child."]),
+  Npc(id="drifter", name="Placid Acolyte", kind="cultist", x=9, y=28, w=1, facing="right",
+    after="Is it Tuesday? It feels like a Tuesday.", foes=[acolyte()],
+    lines=["Blue isn't a color, man. It's a feeling.", "And right now I feel like fighting."])
+]
+
+// The four directions as a step in x and y.
+fn dx(facing: string): number = facing == "left" ? -1 : (facing == "right" ? 1 : 0)
+fn dy(facing: string): number = facing == "up" ? -1 : (facing == "down" ? 1 : 0)
+fn opposite(facing: string): string = facing == "up" ? "down" : (facing == "down" ? "up" : (facing == "left" ? "right" : "left"))
+
+fn inBox(b: Box, x: number, y: number): bool = x >= b.x and x < b.x + b.w and y >= b.y and y < b.y + b.h
+fn stands(n: Npc, x: number, y: number): bool = y == n.y and x >= n.x and x < n.x + n.w
+
+// A tile the player cannot enter: off the map, a house, the pond, a tree or someone.
+fn blocked(x: number, y: number): bool = (x < 0 or y < 0 or x >= cols() or y >= rows()
+  or houses().filter(b => inBox(b, x, y)).length > 0
+  or inBox(pond(), x, y)
+  or trees().filter(t => t.x == x and t.y == y).length > 0
+  or npcs().filter(n => stands(n, x, y)).length > 0)
+
+// The camera: the world's left (or top) edge on the screen, so the focus is in the
+// middle, but the world's edge never shows inside the window.
+fn camera(view: number, world: number, focus: number): number = (world <= view ? (view - world) / 2
+  : min(0, max(view - world, view / 2 - focus)))
+
+// A person, drawn in one tile: shadow, legs, shirt, head, hair, and the eyes for
+// the way they face. `stride` swaps the legs on each step. `cap` is "" for none.
+component Person
+  props
+    facing: string
+    shirt: string
+    hair: string
+    cap: string
+    stride: number
+  view
+    g
+      rect x=0.2 y=0.86 width=0.6 height=0.12 rx=0.06 fill="#00000038"
+      rect x=0.31 y=(stride == 1 ? 0.7 : 0.74) width=0.15 height=0.2 fill="#2f3048"
+      rect x=0.54 y=(stride == 1 ? 0.74 : 0.7) width=0.15 height=0.2 fill="#2f3048"
+      rect x=0.24 y=0.46 width=0.52 height=0.32 rx=0.08 fill=shirt
+      rect x=0.27 y=0.08 width=0.46 height=0.42 rx=0.12 fill="#f0cdb0"
+      if facing == "up"
+        rect x=0.25 y=0.04 width=0.5 height=0.44 rx=0.12 fill=hair
+      else
+        rect x=0.25 y=0.04 width=0.5 height=0.16 rx=0.08 fill=hair
+      if cap != ""
+        rect x=0.23 y=0.02 width=0.54 height=0.14 rx=0.06 fill=cap
+        if facing != "up"
+          rect x=(facing == "left" ? 0.12 : (facing == "right" ? 0.5 : 0.3)) y=0.12 width=0.38 height=0.06 fill=cap
+      if facing == "down"
+        rect x=0.36 y=0.26 width=0.06 height=0.08 fill="#2b2b2b"
+        rect x=0.58 y=0.26 width=0.06 height=0.08 fill="#2b2b2b"
+      if facing == "left"
+        rect x=0.32 y=0.26 width=0.06 height=0.08 fill="#2b2b2b"
+      if facing == "right"
+        rect x=0.62 y=0.26 width=0.06 height=0.08 fill="#2b2b2b"
+
+// A member of the Order: a blue robe and a round hood, a shadowed face, and two
+// pale eyes. `calm` is a member the party has beaten: the hood is down.
+component Cultist
+  props
+    x: number
+    y: number
+    facing: string
+    calm: bool
+  view
+    g transform=`translate(${x} ${y})`
+      rect x=0.14 y=0.86 width=0.72 height=0.12 rx=0.06 fill="#00000038"
+      path d="M0.5 0.3 L0.84 0.92 L0.16 0.92 Z" fill=(calm ? "#8a93b8" : "#3e57b8")
+      rect x=0.3 y=0.62 width=0.4 height=0.05 fill=(calm ? "#b8b0a0" : "#c9d3ff")
+      if calm
+        rect x=0.29 y=0.1 width=0.42 height=0.38 rx=0.12 fill="#f0cdb0"
+        rect x=0.27 y=0.06 width=0.46 height=0.14 rx=0.07 fill="#6b5a4a"
+        if facing != "up"
+          rect x=0.38 y=0.27 width=0.06 height=0.07 fill="#2b2b2b"
+          rect x=0.56 y=0.27 width=0.06 height=0.07 fill="#2b2b2b"
+      else
+        circle cx=0.5 cy=0.3 r=0.26 fill="#344aa3"
+        if facing == "up"
+          circle cx=0.5 cy=0.3 r=0.2 fill="#2c3f8f"
+        else
+          circle cx=(facing == "left" ? 0.44 : (facing == "right" ? 0.56 : 0.5)) cy=0.33 r=0.16 fill="#131a3a"
+          circle cx=(facing == "left" ? 0.38 : (facing == "right" ? 0.52 : 0.44)) cy=0.32 r=0.03 fill="#cfe0ff"
+          circle cx=(facing == "left" ? 0.48 : (facing == "right" ? 0.62 : 0.56)) cy=0.32 r=0.03 fill="#cfe0ff"
+
+component Tree
+  props
+    x: number
+    y: number
+  view
+    g transform=`translate(${x} ${y})`
+      rect x=0.05 y=0.82 width=0.9 height=0.16 rx=0.08 fill="#00000030"
+      rect x=0.42 y=0.62 width=0.16 height=0.3 fill="#4f3f33"
+      circle cx=0.5 cy=0.42 r=0.46 fill="#3c5e55"
+      circle cx=0.42 cy=0.34 r=0.26 fill="#4d7066"
+      circle cx=0.6 cy=0.52 r=0.18 fill="#2f4b45"
+
+component House
+  props
+    b: Box
+  view
+    g
+      rect x=(b.x + 0.1) y=(b.y + 0.15) width=(b.w - 0.2) height=(b.h + 0.1) rx=0.1 fill="#00000030"
+      rect x=b.x y=(b.y + 1) width=b.w height=(b.h - 1) fill=b.wall stroke="#00000050" stroke-width=0.06
+      rect x=(b.x - 0.2) y=b.y width=(b.w + 0.4) height=1.1 rx=0.2 fill=b.roof stroke="#00000050" stroke-width=0.06
+      rect x=(b.x + b.w / 2 - 0.4) y=(b.y + b.h - 1) width=0.8 height=1 fill="#3f3128"
+      rect x=(b.x + 0.6) y=(b.y + 1.5) width=0.8 height=0.6 fill="#8fa3b3" stroke="#d6dde3" stroke-width=0.06
+      rect x=(b.x + b.w - 1.4) y=(b.y + 1.5) width=0.8 height=0.6 fill="#8fa3b3" stroke="#d6dde3" stroke-width=0.06
+
+// The village sign, three tiles wide on two posts. Its words are drawn by the field.
+component Sign
+  props
+    n: Npc
+  view
+    g
+      rect x=(n.x + 0.35) y=(n.y + 0.3) width=0.14 height=0.66 fill="#4a3a2c"
+      rect x=(n.x + n.w - 0.49) y=(n.y + 0.3) width=0.14 height=0.66 fill="#4a3a2c"
+      rect x=(n.x + 0.05) y=(n.y - 0.35) width=(n.w - 0.1) height=0.85 rx=0.1 fill="#8a7458"
+        stroke="#3e3024" stroke-width=0.08
+
+// The scenery, in tiles: ground, roads, pond, flowers, houses, trees, the sign and
+// the cult. The player is drawn by the caller, over it.
+component Scenery
+  props
+    talkTo: string
+    facing: string
+    beaten: string[]
+  view
+    svg viewBox=`0 0 ${cols()} ${rows()}` width=(cols() * tile()) height=(rows() * tile()) testId="field"
+      rect x=0 y=0 width=cols() height=rows() fill="#7d8a6c"
+      rect x=3 y=17 width=38 height=2 fill="#9a937c"
+      rect x=21 y=8 width=2 height=26 fill="#9a937c"
+      rect x=6 y=8 width=1 height=9 fill="#9a937c"
+      rect x=34 y=8 width=1 height=9 fill="#9a937c"
+      rect x=7 y=19 width=1 height=2 fill="#9a937c"
+      rect x=33 y=19 width=1 height=2 fill="#9a937c"
+      rect x=17 y=8 width=10 height=2 fill="#8d8a80"
+      rect x=(pond().x) y=(pond().y) width=(pond().w) height=(pond().h) rx=1.4 fill=pond().wall stroke=pond().roof stroke-width=0.12
+      rect x=(pond().x + 1) y=(pond().y + 1) width=1.4 height=0.2 rx=0.1 fill="#ffffff40"
+      for f, i in flowers() key=`f${i}`
+        g transform=`translate(${f.x} ${f.y})`
+          circle cx=0.3 cy=0.5 r=0.1 fill="#6f86c9"
+          circle cx=0.6 cy=0.4 r=0.1 fill="#5068ad"
+          circle cx=0.5 cy=0.7 r=0.1 fill="#8597c9"
+      for b, i in houses() key=`h${i}`
+        House(b=b)
+      rect x=21.4 y=3.2 width=1.2 height=0.3 fill="#c9d3ff"
+      rect x=21.85 y=2.6 width=0.3 height=1.5 fill="#c9d3ff"
+      for t, i in trees() key=`t${i}`
+        Tree(x=t.x, y=t.y)
+      for n in npcs() key=n.id
+        if n.kind == "sign"
+          Sign(n=n)
+        else
+          Cultist(x=n.x, y=n.y, facing=(talkTo == n.id ? opposite(facing) : n.facing), calm=beaten.includes(n.id))
+      rect x=0 y=0 width=cols() height=rows() fill="#1c2440" opacity=0.16
