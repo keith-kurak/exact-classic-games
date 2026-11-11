@@ -103,6 +103,8 @@ keyframes drop
   from opacity=0 translate="0px -60px" scale=0.7
 keyframes rise
   from translate="0px 180px"
+keyframes roll
+  from translate="0px -26px"
 keyframes pop
   from opacity=0 scale=0.9
 
@@ -153,8 +155,9 @@ component Robe
       if look != "elder"
         path d="M4.9 4.3 Q6 5.5 7.1 4.3 Z" fill="#7a2a2a" stroke="#1a1a1a" stroke-width=0.15
 
-// One wheel of a meter: a strip of 9–0 over a blank that turns to `pos`. It
-// stacks upward from the window, so no digit lies below the screen's edge.
+// One wheel of a meter: its digit (`pos` 0 is a blank, 1–10 are 0–9). Each new
+// digit slides in from above, so a falling HP reads as a rolling wheel. Only the
+// digit shown is drawn, always inside the wheel's window.
 component Wheel
   props
     left: number
@@ -162,11 +165,9 @@ component Wheel
     pos: number
   view
     column position="absolute" left=left top=top width=22 height=26 overflow="hidden"
-      column position="absolute" left=0 bottom=0 width=22 height=286 translate=`0px ${pos * 26}px`
-        transition="translate 70ms linear"
-        for d in ["9", "8", "7", "6", "5", "4", "3", "2", "1", "0", " "] key=`d${d}`
-          text d width=22 height=26 flex-shrink=0 line-height="26px" text-align="center" font-size=20 font-weight=800
-            font-variant-numeric="tabular-nums"
+      for d in [pos] key=`d${d}`
+        text (d == 0 ? " " : `${d - 1}`) width=22 height=26 line-height="26px" text-align="center"
+          font-size=20 font-weight=800 font-variant-numeric="tabular-nums" animation="roll 90ms linear"
 
 // A hero's box: name, and HP and PP on rolling digit wheels.
 component Meter
