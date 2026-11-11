@@ -1,0 +1,327 @@
+// The field: Cheery Cheery Village, home of the Order of the Placid Blue. The map
+// is 44 × 34 tiles and is larger than the window, so a camera follows the player.
+// One tile is one unit of the scenery SVG, and tile() points on the screen.
+// The art is oblique, as in the 16-bit RPGs it nods to: roads run diagonally,
+// and every building shows its front and its right side, receding up and right.
+// The palette is overcast: the village is not as cheery as its sign.
+
+shape Foe
+  name: string
+  look: string
+  hp: number
+  atk: number
+
+shape Npc
+  id: string
+  name: string
+  kind: string
+  x: number
+  y: number
+  w: number
+  facing: string
+  lines: string[]
+  after: string
+  foes: Foe[]
+
+shape Box
+  x: number
+  y: number
+  w: number
+  h: number
+  wall: string
+  roof: string
+
+shape Spot
+  x: number
+  y: number
+
+fn tile(): number = 48
+fn cols(): number = 44
+fn rows(): number = 34
+// How far a building's side and roof recede, up and to the right, in tiles.
+fn depth(): number = 1
+
+fn novice(): Foe = Foe(name="Blue Novice", look="novice", hp=44, atk=15)
+fn acolyte(): Foe = Foe(name="Placid Acolyte", look="acolyte", hp=66, atk=20)
+fn zealot(): Foe = Foe(name="Blue Zealot", look="zealot", hp=84, atk=25)
+fn elder(): Foe = Foe(name="Placid Elder", look="elder", hp=150, atk=31)
+
+fn chapel(): Box = Box(x=16, y=1, w=11, h=7, wall="#5d6fa6", roof="#2b3566")
+
+fn houses(): Box[] = [
+  chapel(),
+  Box(x=3, y=3, w=6, h=4, wall="#a39684", roof="#5a4f6e"),
+  Box(x=32, y=3, w=6, h=4, wall="#9c9a8c", roof="#3f4f6e"),
+  Box(x=8, y=9, w=5, h=4, wall="#94897a", roof="#4c5a7a"),
+  Box(x=29, y=9, w=5, h=4, wall="#a0998a", roof="#3b4a6a"),
+  Box(x=4, y=21, w=6, h=4, wall="#9a8f80", roof="#4b4f72"),
+  Box(x=31, y=22, w=5, h=4, wall="#8f938c", roof="#344466")
+]
+
+fn pond(): Box = Box(x=35, y=27, w=6, h=4, wall="#56768a", roof="#2f4656")
+
+// The forest ring around the village, and trees inside it.
+fn trees(): Spot[] = (range(22).map(i => Spot(x=i * 2, y=0))
+  .concat(range(22).map(i => Spot(x=i * 2 + 1, y=33)))
+  .concat(range(16).map(i => Spot(x=0, y=i * 2 + 1)))
+  .concat(range(16).map(i => Spot(x=43, y=i * 2 + 2)))
+  .concat([Spot(x=12, y=3), Spot(x=13, y=5), Spot(x=30, y=1), Spot(x=41, y=8),
+    Spot(x=40, y=11), Spot(x=2, y=11), Spot(x=3, y=13), Spot(x=26, y=12),
+    Spot(x=12, y=24), Spot(x=13, y=27), Spot(x=11, y=31), Spot(x=28, y=28),
+    Spot(x=29, y=31), Spot(x=41, y=23), Spot(x=3, y=28), Spot(x=16, y=22), Spot(x=38, y=21)]))
+
+// A tile on a road or a sidewalk (no grass tufts there).
+fn onRoad(x: number, y: number): bool = ((y >= 14 and y <= 19) or (y >= 25 and x >= 19 and x <= 25)
+  or (y >= 18 and y <= 26 and x + y >= 44 and x + y <= 52)
+  or (y >= 7 and y <= 15 and x + y >= 28 and x + y <= 34)
+  or (y >= 7 and y <= 9 and x >= 15 and x <= 29))
+
+// Grass tufts, scattered by a fixed hash so they never move.
+fn hash(n: number): number = floor((sin(n * 12.9898) + 1) * 50000)
+fn tufts(): Spot[] = (range(150).map(i => Spot(x=1 + hash(i) % 42, y=1 + hash(i + 500) % 32))
+  .filter(s => not onRoad(s.x, s.y)))
+
+fn npcs(): Npc[] = [
+  Npc(id="sign", name="Sign", kind="sign", x=14, y=28, w=5, facing="down", after="", foes=[],
+    lines=["CHEERY CHEERY VILLAGE",
+      "Home of the Order of the Placid Blue. Everyone here is very, very cheery."]),
+  Npc(id="greeter", name="Placid Acolyte", kind="cultist", x=25, y=28, w=1, facing="left",
+    after="Huh. Why am I wearing this shirt? It isn't even my size.", foes=[novice(), acolyte()],
+    lines=["Welcome, traveler. Have you considered being blue?",
+      "Everything is calmer when it's blue. Hold still."]),
+  Npc(id="painter", name="Blue Zealot", kind="cultist", x=9, y=13, w=1, facing="down",
+    after="I think I'll paint something yellow next.", foes=[novice(), zealot(), novice()],
+    lines=["I'm painting the whole village blue. Every fence. Every cow.",
+      "You're not blue yet. Let me help with that."]),
+  Npc(id="twins", name="Placid Acolytes", kind="cultist", x=35, y=14, w=1, facing="down",
+    after="We are just two people now. Not twins. Just two.", foes=[acolyte(), acolyte()],
+    lines=["We are the Blue Twins.", "We say everything twice. Twice!"]),
+  Npc(id="choir", name="Blue Zealot", kind="cultist", x=12, y=21, w=1, facing="down",
+    after="I never liked that hymn anyway.", foes=[novice(), acolyte(), zealot(), acolyte()],
+    lines=["La la la... blue, blue, blue...", "You're off-key. That isn't very blue of you."]),
+  Npc(id="guard", name="Blue Zealot", kind="cultist", x=22, y=10, w=1, facing="down",
+    after="The chapel is open now. There is nothing in it. It was always just a room.",
+    foes=[zealot(), acolyte(), zealot()],
+    lines=["The Chapel of Calm is closed to the un-blue.", "And you look extremely un-blue."]),
+  Npc(id="elder", name="Placid Elder", kind="cultist", x=38, y=13, w=1, facing="left",
+    after="Thank you. I had forgotten what green looked like.",
+    foes=[acolyte(), zealot(), elder(), acolyte()],
+    lines=["Ah. A visitor with color still in their cheeks.", "We can fix that, child."]),
+  Npc(id="drifter", name="Placid Acolyte", kind="cultist", x=8, y=29, w=1, facing="right",
+    after="Is it Tuesday? It feels like a Tuesday.", foes=[novice(), acolyte(), novice()],
+    lines=["Blue isn't a color, man. It's a feeling.", "And right now I feel like fighting."])
+]
+
+// The four directions as a step in x and y.
+fn dx(facing: string): number = facing == "left" ? -1 : (facing == "right" ? 1 : 0)
+fn dy(facing: string): number = facing == "up" ? -1 : (facing == "down" ? 1 : 0)
+fn opposite(facing: string): string = facing == "up" ? "down" : (facing == "down" ? "up" : (facing == "left" ? "right" : "left"))
+
+fn inBox(b: Box, x: number, y: number): bool = x >= b.x and x < b.x + b.w and y >= b.y and y < b.y + b.h
+// A building takes its footprint plus the column its receding side covers.
+fn inHouse(b: Box, x: number, y: number): bool = x >= b.x and x < b.x + b.w + depth() and y >= b.y and y < b.y + b.h
+fn stands(n: Npc, x: number, y: number): bool = y == n.y and x >= n.x and x < n.x + n.w
+
+// A tile the player cannot enter: off the map, a building, the pond, a tree or someone.
+fn blocked(x: number, y: number): bool = (x < 0 or y < 0 or x >= cols() or y >= rows()
+  or houses().filter(b => inHouse(b, x, y)).length > 0
+  or inBox(pond(), x, y)
+  or trees().filter(t => t.x == x and t.y == y).length > 0
+  or npcs().filter(n => stands(n, x, y)).length > 0)
+
+// The camera: the world's left (or top) edge on the screen, so the focus is in the
+// middle, but the world's edge never shows inside the window.
+fn camera(view: number, world: number, focus: number): number = (world <= view ? (view - world) / 2
+  : min(0, max(view - world, view / 2 - focus)))
+
+fn pts(xs: number[]): string = xs.map(n => `${n}`).join(" ")
+
+// A person, drawn in one tile: shadow, legs, shirt, head, hair, and the eyes for
+// the way they face. `stride` swaps the legs on each step. `cap` is "" for none.
+component Person
+  props
+    facing: string
+    shirt: string
+    hair: string
+    cap: string
+    stride: number
+  view
+    g
+      rect x=0.2 y=0.86 width=0.6 height=0.12 rx=0.06 fill="#00000038"
+      rect x=0.31 y=(stride == 1 ? 0.7 : 0.74) width=0.15 height=0.2 fill="#2f3048"
+      rect x=0.54 y=(stride == 1 ? 0.74 : 0.7) width=0.15 height=0.2 fill="#2f3048"
+      rect x=0.24 y=0.46 width=0.52 height=0.32 rx=0.08 fill=shirt stroke="#1c1c28" stroke-width=0.04
+      rect x=0.27 y=0.08 width=0.46 height=0.42 rx=0.12 fill="#f0cdb0" stroke="#1c1c28" stroke-width=0.04
+      if facing == "up"
+        rect x=0.25 y=0.04 width=0.5 height=0.44 rx=0.12 fill=hair
+      else
+        rect x=0.25 y=0.04 width=0.5 height=0.16 rx=0.08 fill=hair
+      if cap != ""
+        rect x=0.23 y=0.02 width=0.54 height=0.14 rx=0.06 fill=cap
+        if facing != "up"
+          rect x=(facing == "left" ? 0.12 : (facing == "right" ? 0.5 : 0.3)) y=0.12 width=0.38 height=0.06 fill=cap
+      if facing == "down"
+        rect x=0.36 y=0.26 width=0.06 height=0.08 fill="#2b2b2b"
+        rect x=0.58 y=0.26 width=0.06 height=0.08 fill="#2b2b2b"
+      if facing == "left"
+        rect x=0.32 y=0.26 width=0.06 height=0.08 fill="#2b2b2b"
+      if facing == "right"
+        rect x=0.62 y=0.26 width=0.06 height=0.08 fill="#2b2b2b"
+
+// A member of the Order: an ordinary villager in the Order's blue t-shirt with
+// its white ring, a blue headband and a fixed, too-happy smile. `calm` is a
+// member the party has beaten: a plain shirt, no headband, a normal face.
+component Cultist
+  props
+    x: number
+    y: number
+    facing: string
+    calm: bool
+  view
+    g transform=`translate(${x} ${y})`
+      rect x=0.2 y=0.86 width=0.6 height=0.12 rx=0.06 fill="#00000038"
+      rect x=0.31 y=0.72 width=0.15 height=0.2 fill="#3a4258"
+      rect x=0.54 y=0.72 width=0.15 height=0.2 fill="#3a4258"
+      rect x=0.22 y=0.46 width=0.56 height=0.32 rx=0.08 fill=(calm ? "#9a8f6a" : "#3f6fe0") stroke="#1c1c28" stroke-width=0.04
+      rect x=0.14 y=0.48 width=0.12 height=0.16 rx=0.04 fill=(calm ? "#9a8f6a" : "#3f6fe0") stroke="#1c1c28" stroke-width=0.03
+      rect x=0.74 y=0.48 width=0.12 height=0.16 rx=0.04 fill=(calm ? "#9a8f6a" : "#3f6fe0") stroke="#1c1c28" stroke-width=0.03
+      if not calm and facing != "up"
+        circle cx=0.5 cy=0.6 r=0.07 fill="none" stroke="#f2f4ff" stroke-width=0.035
+      rect x=0.27 y=0.08 width=0.46 height=0.42 rx=0.12 fill="#f0cdb0" stroke="#1c1c28" stroke-width=0.04
+      if facing == "up"
+        rect x=0.25 y=0.04 width=0.5 height=0.44 rx=0.12 fill="#5a4636"
+      else
+        rect x=0.25 y=0.04 width=0.5 height=0.14 rx=0.07 fill="#5a4636"
+      if not calm
+        rect x=0.25 y=0.15 width=0.5 height=0.06 fill="#3f6fe0"
+      if facing != "up"
+        if calm
+          rect x=(facing == "left" ? 0.32 : (facing == "right" ? 0.56 : 0.36)) y=0.27 width=0.06 height=0.07 fill="#2b2b2b"
+          rect x=(facing == "left" ? 0.44 : (facing == "right" ? 0.64 : 0.58)) y=0.27 width=0.06 height=0.07 fill="#2b2b2b"
+        else
+          path d=(facing == "left" ? "M0.3 0.31 l0.04 -0.04 l0.04 0.04 M0.43 0.31 l0.04 -0.04 l0.04 0.04"
+            : (facing == "right" ? "M0.53 0.31 l0.04 -0.04 l0.04 0.04 M0.62 0.31 l0.04 -0.04 l0.04 0.04"
+            : "M0.34 0.31 l0.04 -0.04 l0.04 0.04 M0.56 0.31 l0.04 -0.04 l0.04 0.04"))
+            fill="none" stroke="#2b2b2b" stroke-width=0.03
+          path d=(facing == "left" ? "M0.32 0.38 q0.07 0.07 0.14 0" : (facing == "right" ? "M0.54 0.38 q0.07 0.07 0.14 0" : "M0.4 0.38 q0.1 0.08 0.2 0"))
+            fill="none" stroke="#2b2b2b" stroke-width=0.03
+
+// A round, outlined tree with its shadow cast down and to the left.
+component Tree
+  props
+    x: number
+    y: number
+  view
+    g transform=`translate(${x} ${y})`
+      ellipse cx=0.38 cy=0.9 rx=0.5 ry=0.14 fill="#00000033"
+      rect x=0.42 y=0.6 width=0.16 height=0.32 fill="#4f3f33" stroke="#1e2a26" stroke-width=0.04
+      circle cx=0.5 cy=0.4 r=0.46 fill="#45685c" stroke="#1e2a26" stroke-width=0.05
+      circle cx=0.4 cy=0.3 r=0.24 fill="#587d70"
+      circle cx=0.62 cy=0.52 r=0.17 fill="#37564c"
+
+// A building in oblique view: the front face, the right side receding up and
+// right, and a roof slab joining them. Box (x, y, w, h) is the front's footprint.
+component House
+  props
+    b: Box
+  view
+    g
+      polygon points=pts([b.x - 0.3, b.y + b.h + 0.2, b.x + b.w + depth() - 0.3, b.y + b.h + 0.2, b.x + b.w + depth(), b.y + b.h - depth(), b.x, b.y + b.h])
+        fill="#00000030"
+      // Side.
+      polygon points=pts([b.x + b.w, b.y + 1.4, b.x + b.w + depth(), b.y + 1.4 - depth(), b.x + b.w + depth(), b.y + b.h - depth(), b.x + b.w, b.y + b.h])
+        fill=b.wall stroke="#1c2230" stroke-width=0.06 stroke-linejoin="round"
+      polygon points=pts([b.x + b.w, b.y + 1.4, b.x + b.w + depth(), b.y + 1.4 - depth(), b.x + b.w + depth(), b.y + b.h - depth(), b.x + b.w, b.y + b.h])
+        fill="#00000038"
+      // Front, with siding lines.
+      rect x=b.x y=(b.y + 1.4) width=b.w height=(b.h - 1.4) fill=b.wall stroke="#1c2230" stroke-width=0.06
+      for k in range(floor(b.h - 1.6) * 2) key=`l${k}`
+        line x1=(b.x + 0.06) y1=(b.y + 1.9 + k * 0.5) x2=(b.x + b.w - 0.06) y2=(b.y + 1.9 + k * 0.5) stroke="#00000020" stroke-width=0.04
+      // Roof slab.
+      polygon points=pts([b.x - 0.15, b.y + 1.45, b.x + depth() - 0.15, b.y + 0.45 - depth() + 0.6, b.x + b.w + depth() + 0.15, b.y + 0.45 - depth() + 0.6, b.x + b.w + 0.15, b.y + 1.45])
+        fill=b.roof stroke="#141a2a" stroke-width=0.07 stroke-linejoin="round"
+      line x1=(b.x + 0.4) y1=(b.y + 0.98) x2=(b.x + b.w + 0.4) y2=(b.y + 0.98) stroke="#ffffff22" stroke-width=0.06
+      // Door and windows.
+      rect x=(b.x + b.w / 2 - 0.4) y=(b.y + b.h - 1.05) width=0.8 height=1.05 fill="#3f3128" stroke="#1c2230" stroke-width=0.05
+      rect x=(b.x + 0.6) y=(b.y + 2) width=0.8 height=0.65 fill="#7f93a3" stroke="#e1e4e0" stroke-width=0.07
+      rect x=(b.x + b.w - 1.4) y=(b.y + 2) width=0.8 height=0.65 fill="#7f93a3" stroke="#e1e4e0" stroke-width=0.07
+
+// The chapel's spire and the Order's ring, over the chapel's roof.
+component Spire
+  view
+    g
+      polygon points=pts([20.6, 1.0, 22.4, -0.6, 23.6, -0.6, 21.8, 1.0]) fill="#3b4a8a" stroke="#141a2a" stroke-width=0.07
+      circle cx=21.5 cy=4.6 r=0.75 fill="none" stroke="#c9d3ff" stroke-width=0.18
+      circle cx=21.5 cy=4.6 r=0.25 fill="#c9d3ff"
+
+// The village billboard: a framed board on two posts. Its words are laid over it
+// by the field, as text.
+component Sign
+  props
+    n: Npc
+  view
+    g
+      ellipse cx=(n.x + n.w / 2 - 0.3) cy=(n.y + 0.92) rx=(n.w / 2) ry=0.14 fill="#00000033"
+      rect x=(n.x + 0.6) y=(n.y + 0.1) width=0.22 height=0.85 fill="#5a4030" stroke="#1c1c1c" stroke-width=0.04
+      rect x=(n.x + n.w - 0.82) y=(n.y + 0.1) width=0.22 height=0.85 fill="#5a4030" stroke="#1c1c1c" stroke-width=0.04
+      rect x=(n.x + 0.05) y=(n.y - 1.55) width=(n.w - 0.1) height=1.75 rx=0.12 fill="#a5683a"
+        stroke="#1c1c1c" stroke-width=0.06
+      rect x=(n.x + 0.25) y=(n.y - 1.35) width=(n.w - 0.5) height=1.35 rx=0.06 fill="#e6e0cc"
+
+// The scenery, in tiles: grass, sidewalks and roads, the pond, flowers, houses,
+// trees, the sign and the cult. The player is drawn by the caller, over it.
+// `turn` is the way the one talking faces, "" otherwise: the player's own facing
+// is not a prop, so walking does not redraw the scenery.
+component Scenery
+  props
+    talkTo: string
+    turn: string
+    beaten: string[]
+  view
+    svg viewBox=`0 0 ${cols()} ${rows()}` width=(cols() * tile()) height=(rows() * tile()) testId="field"
+      rect x=0 y=0 width=cols() height=rows() fill="#8b9a78"
+      for s, i in tufts() key=`g${i}`
+        path d=`M${s.x + 0.3} ${s.y + 0.5} l0.1 0.2 l0.1 -0.25 l0.1 0.25 l0.1 -0.2` fill="none" stroke="#5f7052" stroke-width=0.06
+      // Roads: a dark curb line, the pale sidewalk, then the road, in three passes
+      // so where roads meet they join.
+      for k in [0, 1] key=`curb${k}`
+        g fill=(k == 0 ? "#2b302b" : "#c4c0aa") stroke=(k == 0 ? "#2b302b" : "#c4c0aa")
+          stroke-width=(k == 0 ? 1.6 : 1.45) stroke-linejoin="round"
+          polygon points=pts([20, 34.5, 24, 34.5, 24, 26, 31, 19, 27, 19, 20, 26])
+          rect x=3 y=15 width=38 height=3
+          polygon points=pts([14, 15, 18, 15, 24, 9, 20, 9])
+          rect x=16 y=8 width=12 height=1
+      g fill="#8f9a8e"
+        polygon points=pts([20, 34.5, 24, 34.5, 24, 26, 31, 19, 27, 19, 20, 26])
+        rect x=3 y=15 width=38 height=3
+        polygon points=pts([14, 15, 18, 15, 24, 9, 20, 9])
+      rect x=16 y=7.6 width=12 height=1.8 fill="#c4c0aa"
+      line x1=4 y1=16.5 x2=40 y2=16.5 stroke="#e8e4d0" stroke-width=0.08 stroke-dasharray="0.6 0.6"
+      line x1=22 y1=34 x2=22 y2=27 stroke="#e8e4d0" stroke-width=0.08 stroke-dasharray="0.6 0.6"
+      line x1=22 y1=27 x2=29 y2=20 stroke="#e8e4d0" stroke-width=0.08 stroke-dasharray="0.6 0.6"
+      // A lamp post at the corner.
+      rect x=25.6 y=19.2 width=0.12 height=1.4 fill="#3f5a4a"
+      rect x=25.4 y=19 width=0.52 height=0.3 rx=0.08 fill="#d8d0a0" stroke="#1c1c1c" stroke-width=0.04
+      rect x=(pond().x) y=(pond().y) width=(pond().w) height=(pond().h) rx=1.4 fill=pond().wall stroke=pond().roof stroke-width=0.12
+      rect x=(pond().x + 1) y=(pond().y + 1) width=1.4 height=0.2 rx=0.1 fill="#ffffff40"
+      for f, i in [Spot(x=7, y=8), Spot(x=14, y=12), Spot(x=26, y=10), Spot(x=36, y=10), Spot(x=6, y=13),
+        Spot(x=24, y=23), Spot(x=38, y=19), Spot(x=7, y=31), Spot(x=31, y=30), Spot(x=18, y=24)] key=`f${i}`
+        g transform=`translate(${f.x} ${f.y})`
+          circle cx=0.3 cy=0.5 r=0.1 fill="#6f86c9"
+          circle cx=0.6 cy=0.4 r=0.1 fill="#5068ad"
+          circle cx=0.5 cy=0.7 r=0.1 fill="#8597c9"
+      // A low fence along the pond.
+      line x1=33.6 y1=26.6 x2=41.6 y2=26.6 stroke="#5a4636" stroke-width=0.1
+      for k in range(9) key=`p${k}`
+        rect x=(33.6 + k) y=26.3 width=0.12 height=0.55 fill="#5a4636"
+      for b, i in houses() key=`h${i}`
+        House(b=b)
+      Spire()
+      for t, i in trees() key=`t${i}`
+        Tree(x=t.x, y=t.y)
+      for n in npcs() key=n.id
+        if n.kind == "sign"
+          Sign(n=n)
+        else
+          Cultist(x=n.x, y=n.y, facing=(talkTo == n.id ? turn : n.facing), calm=beaten.includes(n.id))
+      rect x=0 y=0 width=cols() height=rows() fill="#1c2440" opacity=0.14

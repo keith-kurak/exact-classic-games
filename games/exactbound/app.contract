@@ -1,0 +1,629 @@
+// Exactbound: walk around Cheery Cheery Village and talk to the Order of the
+// Placid Blue. Everyone in a blue t-shirt says a line or two and then starts a battle.
+// The field (world.contract) is larger than the window: the camera follows the
+// player, and both glide one tile per step, in eight directions. The battle
+// (battle.contract) is the aurora GPU surface with Attack, Auto Fight and Run
+// for a party of three.
+// Arrow keys or WASD walk (hold two for a diagonal); Space, Enter or Z talks and
+// confirms; Escape or X goes back from a target and stops Auto Fight.
+use Npc, Foe, Scenery, Person, npcs, blocked, stands, tile, cols, rows, camera, opposite from "./world.contract"
+use Battle, party, hpAt, living, hurt, hurtAll, bump, bumpAll, orFirst, roll, livingFrom, nextLiving, prevLiving, weakest, menuFor, itemAt, fireCost, healCost, fireDmg, healAmt, neediest, mend, lineMs, foeLabel, roundQueue, canAct, heroAt, foeAt, heroRoll, foeRoll, heroDmg, foeMiss, foeHymn, foeDmg, verb from "./battle.contract"
+
+sound "assets/player-attack.wav"
+sound "assets/enemy-attack.wav"
+sound "assets/enemy-die.wav"
+sound "assets/fire.wav"
+sound "assets/heal.wav"
+sound "assets/text-blip.wav"
+sound "assets/confirm.wav"
+
+shape Viewport
+  width: number
+  height: number
+
+routes nav
+  home "/"
+    battle "/battle/:npc"
+
+fn dirOf(k: string): string = (k == "ArrowUp" or k == "w" ? "up" : (k == "ArrowDown" or k == "s" ? "down"
+  : (k == "ArrowLeft" or k == "a" ? "left" : (k == "ArrowRight" or k == "d" ? "right" : ""))))
+fn confirmKey(k: string): bool = k == " " or k == "Enter" or k == "z"
+fn cancelKey(k: string): bool = k == "Escape" or k == "x"
+fn sign(n: number): number = n < 0 ? -1 : (n > 0 ? 1 : 0)
+fn faceOf(mx: number, my: number): string = mx < 0 ? "left" : (mx > 0 ? "right" : (my < 0 ? "up" : "down"))
+
+keyframes grow
+  from scale=0
+  to scale=1
+keyframes spin
+  from rotate="0deg"
+  to rotate="900deg"
+keyframes darken
+  0% opacity=0
+  70% opacity=0
+  100% opacity=1
+keyframes undim
+  from opacity=1
+  to opacity=0
+keyframes dim
+  from opacity=0
+  to opacity=1
+
+component Exactbound
+  resource vp = exactViewport() as shape Viewport
+  state px = 22
+  state py = 31
+  state facing = "up"
+  state stride = 0
+  // The direction keys held, as a step in x and in y.
+  state hx = 0
+  state hy = 0
+  state talkTo = ""
+  state line = 0
+  state beaten: string[] = []
+  state fights = 0
+  state musicPaused = false
+  // How many characters of the current message are shown.
+  state typed = 0
+  // The battle.
+  state swirl = false
+  state swirlOut = false
+  // When the current hit lands, in ms after its message starts: the damage line's
+  // start. Sounds, shakes and the HP roll wait for it.
+  state hitDelay = 0
+  state rollAfter = 0
+  state fireN = 0
+  state healN = 0
+  // An effect is in the view only while it plays; it never relies on its last
+  // keyframe holding.
+  state fxOn = false
+  state healT = 0
+  state foeId = ""
+  state foeHp: number[] = []
+  state foeHits: number[] = []
+  state partyHp: number[] = []
+  state shownHp: number[] = []
+  state ppNow: number[] = [0, 0, 0]
+  state heroHits: number[] = [0, 0, 0]
+  state shake = 0
+  state orders: number[] = [0, 0, 0]
+  state queue: number[] = []
+  state round = 0
+  state phase = ""
+  state actor = 0
+  state cursor = 0
+  state auto = false
+  state outcome = ""
+  state msg1 = ""
+  state msg2 = ""
+  derive onField = top(nav).name == "home"
+  derive inBattle = top(nav).name == "battle"
+  derive talking = npcs().filter(n => n.id == talkTo)
+  derive calm = beaten.includes(talkTo)
+  derive lines = match first(talking) { case some(n) => (calm ? [n.after] : n.lines), case none => [] }
+  derive speaker = talking.map(n => n.name).join("")
+  derive shown = match lines.at(line) { case some(s) => `• ${s}`, case none => "" }
+  derive total = onField ? shown.length : msg1.length + msg2.length
+  derive typing = typed < total
+  derive sel = itemAt(actor, cursor)
+  derive foes = npcs().filter(n => n.id == foeId).map(n => n.foes).flat()
+  derive camX = camera(vp.width, cols() * tile(), (px + 0.5) * tile())
+  derive discR = max(vp.width, vp.height) * 1.2
+  derive camY = camera(vp.height, rows() * tile(), (py + 0.5) * tile())
+
+  // ── Text ──
+
+  // Messages type in, four characters every 40 ms, with a text blip.
+  task typewriter when typed < total
+    every(40, typeOn)
+  action typeOn
+    let shownNow = typed + 4
+    typed = shownNow
+    // A blip every other tick, while text is still coming in.
+    if shownNow % 8 == 0 and shownNow < total
+      playSound("assets/text-blip.wav", group="blip")
+  action say(a: string, b: string)
+    msg1 = a
+    msg2 = b
+    typed = 0
+
+  // ── The field ──
+
+  // One step, straight or diagonal. A diagonal into a wall slides along it.
+  action move(mx: number, my: number)
+    let diag = mx != 0 and my != 0
+    let goX = mx != 0 and not blocked(px + mx, py)
+    let goY = my != 0 and not blocked(px, py + my)
+    facing = faceOf(mx, my)
+    if (not diag and (goX or goY)) or (diag and not blocked(px + mx, py + my) and (goX or goY))
+      px = px + mx
+      py = py + my
+      stride = 1 - stride
+    else
+      if diag and goX
+        px = px + mx
+        stride = 1 - stride
+      else
+        if diag and goY
+          py = py + my
+          stride = 1 - stride
+
+  // While a direction is held, a step every 160 ms. Each glide lasts 190 ms, a
+  // little longer, so a timer that fires late never stops the motion.
+  task walk when (hx != 0 or hy != 0) and talkTo == "" and onField and not swirl
+    every(160, walkOn)
+  action walkOn
+    move(hx, hy)
+
+  // Talk to whoever stands on the tile the player faces.
+  action talk
+    let fx = px + (facing == "left" ? -1 : (facing == "right" ? 1 : 0))
+    let fy = py + (facing == "up" ? -1 : (facing == "down" ? 1 : 0))
+    let near = npcs().filter(n => stands(n, fx, fy)).map(n => n.id).join("")
+    if near != ""
+      hx = 0
+      hy = 0
+      talkTo = near
+      line = 0
+      typed = 0
+
+  // The next line, or the end of the talk: a member of the Order then fights.
+  action advance
+    let who = talkTo
+    let fighter = npcs().filter(n => n.id == who and n.kind == "cultist").length > 0
+    if typing
+      typed = total
+    else
+      if line + 1 < lines.length
+        line = line + 1
+        typed = 0
+      else
+        talkTo = ""
+        line = 0
+        if fighter and not beaten.includes(who)
+          startBattle(who)
+
+  // ── The battle ──
+
+  // The battle is set up at once. The field turns grey, a dark disc spins out
+  // from the player, and once the screen is dark the battle mounts under it (so
+  // its start-up cost is hidden); then the dark fades away.
+  action startBattle(id: string)
+    let fs = npcs().filter(n => n.id == id).map(n => n.foes).flat()
+    fights = fights + 1
+    hx = 0
+    hy = 0
+    foeId = id
+    foeHp = fs.map(f => f.hp)
+    foeHits = fs.map(f => 0)
+    partyHp = party().map(h => h.maxHp)
+    shownHp = party().map(h => h.maxHp)
+    ppNow = party().map(h => h.pp)
+    heroHits = [0, 0, 0]
+    shake = 0
+    orders = [0, 0, 0]
+    queue = []
+    round = 0
+    outcome = ""
+    auto = false
+    phase = "play"
+    swirl = true
+    hitDelay = 0
+    rollAfter = 0
+    fireN = 0
+    healN = 0
+    say(fs.length > 1 ? `• ${foeAt(fs, 0).name} and ${fs.length - 1} more block the way!` : `• You engage the ${foeAt(fs, 0).name}!`, "")
+
+  task swirling when swirl
+    after(1000, enter)
+  action enter
+    swirl = false
+    swirlOut = true
+    nav = push(nav, path("battle", foeId))
+  task unswirl when swirlOut
+    after(450, swirlDone)
+  action swirlDone
+    swirlOut = false
+
+  // Shown HP rolls toward the real HP, like an odometer.
+  task meters when inBattle and shownHp.join(",") != partyHp.join(",")
+    every(45, rollMeters)
+  action rollMeters
+    if performanceNow() >= rollAfter
+      shownHp = roll(shownHp, partyHp)
+
+  // A hero's turn: Attack picks a target when more than one foe stands.
+  // The cursor-confirm sound, for a command, a spell or a target the player picks.
+  action confirmSound
+    playSound("assets/confirm.wav", group="ui")
+
+  action attack
+    confirmSound()
+    if living(foeHp).length > 1
+      phase = "target"
+      cursor = livingFrom(foeHp, 0)
+    else
+      choose(livingFrom(foeHp, 0))
+
+  // The target for the hero choosing; then the next hero, or the round.
+  action choose(t: number)
+    let nx = orFirst(living(partyHp).filter(i => i > actor))
+    orders = orders.map((o, k) => k == actor ? t : o)
+    cursor = 0
+    if nx >= 0
+      actor = nx
+      phase = "menu"
+    else
+      round = round + 1
+      queue = roundQueue(partyHp, foeHp)
+      phase = "play"
+      say("• The party springs into action!", "")
+
+  // Magic: Fire and Heal, when the hero has the PP for them.
+  action magic
+    if phase == "menu" and heroAt(actor).pp > 0
+      confirmSound()
+      phase = "magic"
+      cursor = 0
+  action fire
+    if phase == "magic" and hpAt(ppNow, actor) >= fireCost()
+      confirmSound()
+      choose(100)
+  action heal
+    if phase == "magic" and hpAt(ppNow, actor) >= healCost()
+      confirmSound()
+      choose(200)
+
+  // Auto Fight: each hero attacks the weakest foe, until it is turned off.
+  action autoOn
+    confirmSound()
+    auto = true
+  action autoOff
+    auto = false
+  task autoPick when auto and inBattle and phase == "menu" key=`${round}-${actor}`
+    after(350, autoChoose)
+  action autoChoose
+    if auto and phase == "menu"
+      choose(weakest(foeHp))
+
+  action run
+    confirmSound()
+    outcome = "fled"
+    phase = "play"
+    say("• The party ran away!", "")
+
+  action pick0
+    if phase == "target"
+      confirmSound()
+      choose(0)
+  action pick1
+    if phase == "target"
+      confirmSound()
+      choose(1)
+  action pick2
+    if phase == "target"
+      confirmSound()
+      choose(2)
+  action pick3
+    if phase == "target"
+      confirmSound()
+      choose(3)
+
+  // A message moves on by itself once it is typed, or at once on a key or click.
+  task battleClock when inBattle and phase == "play" and not typing and outcome != "won" key=`${msg1}|${msg2}`
+    every(1300, next)
+  // The win stays up for the victory music's first bars, or until a key.
+  task winClock when inBattle and outcome == "won" and not typing
+    after(4000, next)
+
+  // The next message: the outcome, the next turn, or back to the menu.
+  action next
+    let q = queue.filter(ev => canAct(ev, partyHp, foeHp))
+    if typing
+      typed = total
+    else
+      if outcome != ""
+        leave()
+      else
+        if living(foeHp).length == 0
+          outcome = "won"
+          say("• YOU WON!", "• The Order's grip on them loosens.")
+        else
+          if living(partyHp).length == 0
+            outcome = "lost"
+            say("• The party lost the will to fight...", "• You wake up at the village gate.")
+          else
+            if q.length == 0
+              phase = "menu"
+              actor = livingFrom(partyHp, 0)
+              cursor = 0
+            else
+              queue = q.slice(1)
+              turn(orFirst(q))
+
+  // One attack. Heroes are 0–2 and hit the foe they chose (or the next one
+  // standing); foes are 10 and up and pick a hero by their roll.
+  action turn(ev: number)
+    let order = ev < 10 ? hpAt(orders, ev) : -1
+    if ev >= 10
+      foeAttack(ev - 10)
+    else
+      if order == 100
+        castFire(ev)
+      else
+        if order == 200
+          castHeal(ev)
+        else
+          heroAttack(ev, order)
+
+  // Fire: the flare starts at once; every foe standing takes the same damage
+  // when the damage line starts.
+  action castFire(i: number)
+    let d = fireDmg(heroRoll(fights * 131, round, i, 9))
+    let downs = living(foeHp).filter(k => hpAt(foeHp, k) <= d).length
+    let l1 = `• ${heroAt(i).name} tries Fire!`
+    let wait = lineMs(l1) + 120
+    foeHp = hurtAll(foeHp, d)
+    foeHits = bumpAll(foeHits)
+    ppNow = hurt(ppNow, i, fireCost())
+    fireN = fireN + 1
+    fxOn = true
+    hitDelay = wait
+    playSound("assets/fire.wav")
+    if downs > 0
+      playSound("assets/enemy-die.wav", at=performanceNow() + wait + 500)
+    say(l1, downs > 0 ? `• ${d} HP of damage to every foe! ${downs} calm down.` : `• ${d} HP of damage to every foe!`)
+
+  // Heal: the hero with the least HP for their size recovers.
+  action castHeal(i: number)
+    let t = neediest(partyHp)
+    let amt = min(healAmt(), heroAt(t).maxHp - hpAt(partyHp, t))
+    let l1 = `• ${heroAt(i).name} tries Heal!`
+    let wait = lineMs(l1) + 120
+    partyHp = mend(partyHp, t, healAmt())
+    ppNow = hurt(ppNow, i, healCost())
+    healN = healN + 1
+    healT = t
+    fxOn = true
+    hitDelay = wait
+    rollAfter = performanceNow() + wait
+    playSound("assets/heal.wav", at=performanceNow() + wait)
+    say(l1, `• ${heroAt(t).name} recovered ${amt} HP!`)
+
+  task fxClock when fxOn key=`${fireN}-${healN}`
+    after(1600, fxOff)
+  action fxOff
+    fxOn = false
+
+  action heroAttack(i: number, want: number)
+    let t = hpAt(foeHp, want) > 0 ? want : livingFrom(foeHp, 0)
+    let r = heroRoll(fights * 131, round, i, t)
+    let d = heroDmg(i, r)
+    let down = d > 0 and hpAt(foeHp, t) <= d
+    let l1 = r >= 92 ? `• ${heroAt(i).name} attacks! SMAAAASH!!` : `• ${heroAt(i).name} attacks!`
+    let wait = lineMs(l1) + 120
+    foeHp = hurt(foeHp, t, d)
+    hitDelay = wait
+    if d > 0
+      foeHits = bump(foeHits, t)
+      playSound("assets/player-attack.wav", at=performanceNow() + wait)
+    if down
+      playSound("assets/enemy-die.wav", at=performanceNow() + wait + 450)
+    say(l1, d == 0 ? "• Just missed!" : (down ? `• ${d} HP of damage to ${foeLabel(foes, t)}! They calm down.`
+      : `• ${d} HP of damage to ${foeLabel(foes, t)}!`))
+
+  action foeAttack(e: number)
+    let f = foeAt(foes, e)
+    let r = foeRoll(fights * 131, round, e)
+    let t = livingFrom(partyHp, r % 3)
+    let d = foeDmg(f, r)
+    let ko = hpAt(partyHp, t) <= d
+    let l1 = foeHymn(f, r) ? `• ${foeLabel(foes, e)} leads a cheerful chant!` : `• ${foeLabel(foes, e)} ${verb(f, r)}!`
+    let wait = lineMs(l1) + 120
+    hitDelay = wait
+    rollAfter = performanceNow() + wait
+    if foeMiss(r)
+      say(l1, `• ${heroAt(t).name} dodged quickly!`)
+    else
+      shake = shake + 1
+      playSound("assets/enemy-attack.wav", at=performanceNow() + wait)
+      if foeHymn(f, r)
+        partyHp = hurtAll(partyHp, d)
+        heroHits = bumpAll(heroHits)
+        say(l1, `• The whole party took ${d} HP of damage!`)
+      else
+        partyHp = hurt(partyHp, t, d)
+        heroHits = bump(heroHits, t)
+        say(l1, ko ? `• ${heroAt(t).name} took ${d} HP of damage and can't go on!` : `• ${heroAt(t).name} took ${d} HP of damage!`)
+
+  action leave
+    if outcome == "won"
+      beaten = beaten.concat([foeId])
+    if outcome == "lost"
+      px = 22
+      py = 31
+      facing = "up"
+    phase = ""
+    outcome = ""
+    auto = false
+    nav = back(nav)
+
+  action battleKey(k: string)
+    if cancelKey(k) and auto
+      auto = false
+    else
+      if phase == "play"
+        if confirmKey(k)
+          next()
+      else
+        if phase == "menu"
+          let n = menuFor(actor).length
+          if k == "ArrowDown" or k == "s"
+            cursor = (cursor + 1) % n
+          else
+            if k == "ArrowUp" or k == "w"
+              cursor = (cursor + n - 1) % n
+            else
+              if confirmKey(k) and sel == "Attack"
+                attack()
+              else
+                if confirmKey(k) and sel == "Magic"
+                  magic()
+                else
+                  if confirmKey(k) and sel == "Auto Fight"
+                    autoOn()
+                  else
+                    if confirmKey(k) and sel == "Run"
+                      run()
+        else
+          if phase == "magic"
+            if k == "ArrowDown" or k == "s" or k == "ArrowUp" or k == "w"
+              cursor = 1 - cursor
+            else
+              if confirmKey(k) and cursor == 0
+                fire()
+              else
+                if confirmKey(k) and cursor == 1
+                  heal()
+                else
+                  if cancelKey(k)
+                    phase = "menu"
+                    cursor = 1
+          else
+            if phase == "target"
+              if k == "ArrowRight" or k == "d"
+                cursor = nextLiving(foeHp, cursor)
+              else
+                if k == "ArrowLeft" or k == "a"
+                  cursor = prevLiving(foeHp, cursor)
+                else
+                  if confirmKey(k)
+                    confirmSound()
+                    choose(cursor)
+                  else
+                    if cancelKey(k)
+                      phase = "menu"
+                      cursor = 0
+
+  // ── Keys ──
+
+  // The game's keys are taken (preventDefault), so macOS plays no alert sound.
+  action onKey(k: string, e: KeyboardEvent)
+    let d = dirOf(k)
+    let nx = d == "left" ? -1 : (d == "right" ? 1 : hx)
+    let ny = d == "up" ? -1 : (d == "down" ? 1 : hy)
+    if d != "" or confirmKey(k) or cancelKey(k)
+      preventDefault()
+    if k == "`"
+      traceKey()
+    if not swirl
+      if inBattle
+        battleKey(k)
+      else
+        if talkTo != ""
+          if confirmKey(k)
+            advance()
+        else
+          if d != ""
+            if nx != hx or ny != hy
+              hx = nx
+              hy = ny
+              move(nx, ny)
+          else
+            if confirmKey(k)
+              talk()
+
+  // ` (backtick) starts a frame trace, and again stops it: the trace goes to the
+  // clipboard and to a file in the app's temporary folder.
+  state tracing = false
+  action traceKey
+    let start = not tracing
+    tracing = start
+    if start
+      startTrace_EXPERIMENTAL()
+    else
+      stopTrace_EXPERIMENTAL(6000)
+
+  action onKeyUp(k: string)
+    let d = dirOf(k)
+    if (d == "left" and hx == -1) or (d == "right" and hx == 1)
+      hx = 0
+    if (d == "up" and hy == -1) or (d == "down" and hy == 1)
+      hy = 0
+
+  action back
+    if inBattle
+      run()
+  action follow(url: string)
+    nav = go(nav, url)
+  action toggleMusic
+    musicPaused = not musicPaused
+  action musicPlaying
+    musicPaused = false
+  action musicPause
+    musicPaused = true
+
+  view
+    main testId="root" navigationKey=`${top(nav).id}` navigationBack="back" navigate=follow
+      key=onKey keyup=onKeyUp width="100%" height="100%" color-scheme="dark" background-color="Canvas"
+      for e in stack(nav) key=e.id
+        if e.name == "home"
+          column navigationKey=`${e.id}` position="absolute" inset=0 overflow="hidden"
+            background-color="Canvas" testId="field-screen"
+            if onField and not swirl
+              audio "assets/field.mp3" autoplay=true loop=true testId="field-music"
+            // The world, moved by the camera. The player glides over the scenery.
+            column position="absolute" left=0 top=0 width=(cols() * tile()) height=(rows() * tile())
+              translate=`${camX}px ${camY}px` transition="translate 190ms linear" testId="world"
+              filter=(swirl ? "grayscale(1)" : "none")
+              Scenery(talkTo=talkTo, turn=(talkTo != "" ? opposite(facing) : ""), beaten=beaten)
+              column color-scheme="light" position="absolute" left=(14.25 * tile()) top=(26.65 * tile())
+                width=(4.5 * tile()) height=(1.35 * tile()) align-items="center" justify-content="center" gap=1
+                color="CanvasText" testId="sign-text"
+                text "CHEERY CHEERY" font-size=19 font-weight=900 letter-spacing=2
+                text "VILLAGE" font-size=19 font-weight=900 letter-spacing=6
+              column position="absolute" left=0 top=0 width=tile() height=tile()
+                translate=`${px * tile()}px ${py * tile()}px` transition="translate 190ms linear" testId="player"
+                svg viewBox="0 0 1 1" width=tile() height=tile()
+                  Person(facing=facing, shirt="#3d6fd6", hair="#3a2a1a", cap="#d23b3b", stride=stride)
+            if talkTo != ""
+              column position="absolute" top=24 left=24 right=24 align-items="center"
+                column width="100%" max-width=640 box-sizing="border-box" min-height=96
+                  padding=4 background-color="Canvas" color="CanvasText"
+                  border="3px solid CanvasText" border-radius=14 press=advance testId="dialog"
+                  animation="dim 140ms ease-out both"
+                  column padding="12px 18px" gap=6 border="2px solid -exact-secondary-label" border-radius=9
+                    text speaker font-size=13 font-weight=700
+                      color="-exact-secondary-label" testId="speaker"
+                    text shown.slice(0, typed) font-size=22 font-weight=700
+                      line-height=1.35 testId="line"
+            else
+              if not swirl
+                column position="absolute" bottom=16 left=0 right=0 align-items="center"
+                  text "Arrow keys to walk · Space to talk" font-size=12 color="-exact-secondary-label" testId="hint"
+            // The battle entrance: over the grey field, a dark disc grows from the
+            // player with a pale arc spinning round it, then the screen goes dark.
+            if swirl
+              column position="absolute" inset=0 overflow="hidden" testId="swirl"
+                column position="absolute" left=(camX + (px + 0.5) * tile() - discR) top=(camY + (py + 0.5) * tile() - discR)
+                  width=(discR * 2) height=(discR * 2) animation="grow 900ms ease-in both"
+                  svg viewBox="-100 -100 200 200" width=(discR * 2) height=(discR * 2) position="absolute" left=0 top=0
+                    circle cx=0 cy=0 r=100 fill="#2a2c3e" opacity=0.88
+                  column position="absolute" inset=0 animation="spin 1000ms linear both"
+                    svg viewBox="-100 -100 200 200" width=(discR * 2) height=(discR * 2)
+                      path d="M 0 -70 A 70 70 0 0 1 70 0" fill="none" stroke="#7a7d96" stroke-width=10 stroke-linecap="round"
+                      path d="M 0 45 A 45 45 0 0 1 -45 0" fill="none" stroke="#5c5f78" stroke-width=8 stroke-linecap="round"
+                column position="absolute" inset=0 background-color="Canvas" animation="darken 1000ms linear both"
+        if e.name == "battle"
+          column navigationKey=`${e.id}` position="absolute" inset=0 testId="battle-screen"
+            Battle(foes=foes, foeHp=foeHp, foeHits=foeHits, shownHp=shownHp, pp=ppNow, sel=sel, heroHits=heroHits,
+              shake=shake, hitDelay=hitDelay, fireN=(fxOn ? fireN : 0), healN=(fxOn ? healN : 0), healT=healT, phase=phase, actor=actor, cursor=cursor, auto=auto,
+              line1=msg1.slice(0, typed), line2=msg2.slice(0, max(0, typed - msg1.length)),
+              seed=`${e.params.npc}-${fights}`, musicPaused=musicPaused, won=(outcome == "won"),
+              attack=attack, magic=magic, fire=fire, heal=heal, autoOn=autoOn, autoOff=autoOff, run=run, next=next,
+              pick0=pick0, pick1=pick1, pick2=pick2, pick3=pick3,
+              toggleMusic=toggleMusic, musicPlaying=musicPlaying, musicPause=musicPause)
+      // The dark the entrance ends on, lifting off the battle once it has mounted.
+      if swirlOut
+        column position="absolute" inset=0 background-color="Canvas" animation="undim 450ms ease-out both"
+          testId="swirl-out"
