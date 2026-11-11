@@ -3,7 +3,7 @@
 // it walks the field, starts fights, runs the battle, and tells the surface
 // what is on screen as small text specs (see gpu/src/lib.rs).
 use Npc, fieldMap, tileAt, walkable, thicket, npcs, npcAt, blocked, dx, dy, camAxis, nextRng from "./field.contract"
-use Foe, foeOf, group, foeTx, foeTy, labelRow, juggleTicks, panelName, panelBar, potionHeal, startPotions, parOf, nameOf, maxHp, atkOf, speedOf, full, stances, stanceName, roleOf, abilityOf, needsTarget, isStrike, power, chainGain, hitFor, chainUp, maxChain, drain, staggerTicks, rolePlan, segments, segment, announce, slotText, lowest, stars, starLine, clockOf, nth, word, put, pad3, padTo, gauge from "./battle.contract"
+use Foe, foeOf, group, foeTx, foeTy, labelRow, juggleTicks, panelName, panelBar, potionHeal, startPotions, startRevives, fallen, raiseHp, segBlock, shiftTicks, bannerX, parOf, nameOf, maxHp, atkOf, speedOf, full, stances, stanceName, roleOf, abilityOf, needsTarget, isStrike, power, chainGain, hitFor, chainUp, maxChain, drain, staggerTicks, rolePlan, segments, segment, announce, slotText, lowest, stars, starLine, clockOf, nth, word, put, pad3, padTo, gauge from "./battle.contract"
 
 fn keyDir(k: string): string = (k == "ArrowUp" or k == "w" ? "up" : (k == "ArrowDown" or k == "s" ? "down"
   : (k == "ArrowLeft" or k == "a" ? "left" : (k == "ArrowRight" or k == "d" ? "right" : ""))))
@@ -11,8 +11,9 @@ fn confirmKey(k: string): bool = k == " " or k == "Enter" or k == "z"
 fn cancelKey(k: string): bool = k == "Escape" or k == "x"
 fn startX(): number = 11
 fn startY(): number = 7
-fn partyX(i: number): number = (i == 1 ? 208 : 200)
-fn partyY(i: number): number = 48 + i * 28
+// The party stands in a slanted line, right; each is 24×32.
+fn partyX(i: number): number = (i == 1 ? 200 : 192)
+fn partyY(i: number): number = 36 + i * 32
 
 component ExactOdyssey
   // ── The field ──
@@ -90,7 +91,11 @@ component ExactOdyssey
   state rank = 0
   // The party leader's potions, kept between fights.
   state potions = 3
+  state revives = 1
+  state itemCursor = 0
   state found = false
+  // The stance-shift banner, counting down while it crosses the screen.
+  state shiftT = 0
 
   // ── What is on screen ──
   derive px = tx * 16 + dx(dir) * off
@@ -122,12 +127,13 @@ component ExactOdyssey
   derive leapT = min(1, leap / 5)
   derive leapX = round(partyX(actor) + (foeTx(aimNow, foes.length) * 8 + 66 - partyX(actor)) * leapT)
   derive leapY = round(partyY(actor) + (foeTy(aimNow) * 8 + 24 - partyY(actor)) * leapT - sin(leapT * 3.14159) * 14)
-  derive partySprites = [0, 1, 2].map(i => `${nth(hp, i) <= 0 ? "ko" : (acting and actor == i ? (leaping ? `strike${i}` : `cast${i}`) : `idle${i}`)}:${acting and actor == i ? (leaping ? leapX : partyX(i) - 8) : partyX(i)}:${acting and actor == i and leaping ? leapY : partyY(i)}:${i}`)
+  // Won, the living strike their victory poses.
+  derive partySprites = [0, 1, 2].map(i => `${nth(hp, i) <= 0 ? "ko" : (phase == "won" ? `win${i}` : (acting and actor == i ? (leaping ? `strike${i}` : `cast${i}`) : `idle${i}`))}:${acting and actor == i ? (leaping ? leapX : partyX(i) - 8) : partyX(i)}:${acting and actor == i and leaping ? leapY : partyY(i)}:${i}`)
   derive pointing = fighting and not committed
   // The chooser, bottom left: commands, or a target, stance or item list in
   // their place. It goes away while Thunda's commands wait or play out.
   derive chooserShown = fighting and not rookActing and not (committed and ui == "menu")
-  derive handRow = (ui == "target" ? target + 1 : (ui == "stance" ? stanceCursor : (ui == "item" ? 0 : cursor)))
+  derive handRow = (ui == "target" ? target + 1 : (ui == "stance" ? stanceCursor : (ui == "item" ? itemCursor * 2 : cursor)))
   derive handSprite = chooserShown ? [`hand:2:${(21 + handRow * 2) * 8}:`] : []
   derive dmgSprite = dmgT > 0 ? [`#${dmgText}:${dmgX}:${dmgY - (dmgT > 12 ? (16 - dmgT) * 2 : 8)}:3`] : []
   // OAM order is draw priority: damage numbers and the cursor in front.
@@ -140,14 +146,14 @@ component ExactOdyssey
   derive foeLines = [0, 1].filter(i => i < foes.length).map(i => (nth(foeHp, i) <= 0 ? ""
     : (nth(brk, i) > 0 ? `{${word(foes, i)}}` : word(foes, i))))
   derive hpBars = ([0, 1].filter(i => i < foes.length and nth(foeHp, i) > 0).map(i =>
-    `@${foeTx(i, foes.length)},${labelRow()}|${gauge(nth(foeHp, i) / foeOf(word(foes, i)).hp * 64, 8)}`))
+    `@${foeTx(i, foes.length)},${labelRow()},0|${gauge(nth(foeHp, i) / foeOf(word(foes, i)).hp * 64, 8)}`))
   derive panel = (foes.length > 0 and nth(foeHp, aimAt) > 0
     ? [`0,0,12,4|${panelName(word(foes, aimAt), nth(chain, aimAt), nth(brk, aimAt))}|${panelBar(nth(chain, aimAt), nth(brk, aimAt), foeOf(word(foes, aimAt)).breakAt)}`] : [])
   // The chooser: the commands, or, while picking a target, the enemies.
   derive menuLines = (ui == "target"
     ? [" {Target}"].concat([0, 1].filter(i => i < foes.length).map(i => (nth(foeHp, i) > 0 ? ` ${word(foes, i)}` : "")))
     : (ui == "stance" ? [` ${stanceName(0)}`, ` ${stanceName(1)}`, ` ${stanceName(2)}`, ` ${stanceName(3)}`]
-    : (ui == "item" ? [" Potion", `   x${potions}`]
+    : (ui == "item" ? [" Potion", `    x${potions}`, " Revive", `    x${revives}`]
     : [" Auto", ` ${abilityOf(roleOf(stance, 0), 0)}`, ` ${abilityOf(roleOf(stance, 0), 1)}`, " Item"])))
   // Thunda's ATB, above the commands: her slots, each an ability over its own
   // segment filling. Committed slots turn yellow; while she acts, each
@@ -160,7 +166,9 @@ component ExactOdyssey
   // A slot shows only once it holds an ability.
   // Thunda's ATB bar, always above the chooser: two segments of 8 tiles.
   // Once something is slotted, its name sits over its segment.
-  derive atbLine = `${gauge(seg1 / 24 * 64, 8)}  ${gauge(seg2 / 24 * 64, 8)}`
+  // Each segment is a block: it fills, turns solid once charged, and is gone
+  // entirely once its command has played.
+  derive atbLine = `${segBlock(seg1 / 24 * 64, rookActing and seg1 == 0)}  ${segBlock(seg2 / 24 * 64, rookActing and seg2 == 0)}`
   derive slotNames = `${slotText(word(shown, 0), locked)}    ${slotText(word(shown, 1), locked)}${shown.length == 1 and not locked ? "  >Go" : ""}`
   // The title is the stance; its arrow says Left changes it.
   // Each member on a line: name, role in yellow, HP.
@@ -176,7 +184,8 @@ component ExactOdyssey
     .concat(hpBars)
     .concat(fighting ? panel : [])
     .concat(topMsg != "" ? [`12,1,20,3|${topMsg}`] : [])
-    .concat(phase == "won" ? [`7,6,18,10,2|${rankLines.join("|")}`] : []).join("^"))
+    .concat(shiftT > 0 ? [`${bannerX(shiftT)},8,16,5,2|${shiftT % 4 < 2 ? "{Stance Shift!}" : "Stance Shift!"}| > ${stanceName(stance)}`] : [])
+    .concat(phase == "won" ? [`2,6,18,10,2|${rankLines.join("|")}`] : []).join("^"))
 
   // ── Walking ──
 
@@ -282,6 +291,7 @@ component ExactOdyssey
   action wipeOut
     hp = [maxHp(0), maxHp(1), maxHp(2)]
     potions = startPotions()
+    revives = startRevives()
     tx = startX()
     ty = startY()
     dir = "down"
@@ -302,6 +312,7 @@ component ExactOdyssey
     let h0 = foeHp
     fx = ks.filter(i => i < foes.length).map(i => (nth(f0, i) == 1 ? (nth(h0, i) > 0 ? 0 : 2) : (nth(f0, i) >= 2 ? min(6, nth(f0, i) + 1) : 0)))
     dmgT = max(0, dmgT - 1)
+    shiftT = max(0, shiftT - 1)
     if fighting
       let b0 = brk
       let c0 = chain
@@ -357,11 +368,12 @@ component ExactOdyssey
   action choose
     let role = roleOf(stance, 0)
     if cursor == 0
-      plan = rolePlan(role, anyHurt, provoke == 0)
+      plan = rolePlan(role, anyHurt, provoke == 0, fallen(hp) >= 0)
       target = aimAt
       ui = "target"
     else
       if cursor == 3
+        itemCursor = 0
         ui = "item"
       else
         let name = abilityOf(role, cursor - 1)
@@ -398,16 +410,22 @@ component ExactOdyssey
     else
       plan = plan.slice(0, max(0, plan.length - 1))
 
-  action usePotion
-    if potions > 0
+  // An item fills one segment. A Revive needs a fallen ally.
+  action useItem(slot: number)
+    if slot == 0 and potions > 0
       plan = ["Potion"]
       commit(aimAt)
+    else
+      if slot == 1 and revives > 0 and fallen(hp) >= 0
+        plan = ["Revive"]
+        commit(aimAt)
 
   // The stance menu, to the left of the commands: free, any time.
   action openStances
     stanceCursor = stance
     ui = "stance"
   action pickStance
+    shiftT = stanceCursor != stance ? shiftTicks() : shiftT
     stance = stanceCursor
     if not committed
       plan = []
@@ -416,7 +434,7 @@ component ExactOdyssey
   // An ally fills both segments by its role, at Thunda's target, and acts.
   action autoAct(i: number, gauges: number[])
     lastAuto = nameOf(i)
-    run(i, rolePlan(roleOf(stance, i), anyHurt, provoke == i), [aimAt, aimAt], gauges)
+    run(i, rolePlan(roleOf(stance, i), anyHurt, provoke == i, fallen(hp) >= 0), [aimAt, aimAt], gauges)
 
   action retarget
     let other = target == 0 ? 1 : 0
@@ -501,20 +519,32 @@ component ExactOdyssey
         dmgY = partyY(who) - 6
         dmgT = 16
       else
-        if c == "Potion" or c == "Heal"
-          let amount = c == "Potion" ? potionHeal() : 18
-          let h1 = hp
-          hp = [0, 1, 2].map(i => (nth(h1, i) > 0 ? min(maxHp(i), nth(h1, i) + amount) : 0))
-          potions = c == "Potion" ? potions - 1 : potions
-          dmgText = `${amount}`
-          dmgX = partyX(1)
-          dmgY = partyY(1) - 6
-          dmgT = 16
+        if c == "Raise" or c == "Revive"
+          let who = fallen(hp)
+          if who >= 0
+            let amount = raiseHp(who, c == "Revive")
+            hp = put(hp, who, amount)
+            atb = put(atb, who, 0)
+            revives = c == "Revive" ? revives - 1 : revives
+            dmgText = `${amount}`
+            dmgX = partyX(who)
+            dmgY = partyY(who) - 6
+            dmgT = 16
         else
-          if c == "Taunt"
-            provoke = actor
+          if c == "Potion" or c == "Heal"
+            let amount = c == "Potion" ? potionHeal() : 18
+            let h1 = hp
+            hp = [0, 1, 2].map(i => (nth(h1, i) > 0 ? min(maxHp(i), nth(h1, i) + amount) : 0))
+            potions = c == "Potion" ? potions - 1 : potions
+            dmgText = `${amount}`
+            dmgX = partyX(1)
+            dmgY = partyY(1) - 6
+            dmgT = 16
           else
-            steel = actor
+            if c == "Taunt"
+              provoke = actor
+            else
+              steel = actor
 
   // An enemy's plain attack: no message, as in the old games.
   action foeTurn(i: number, gauges: number[])
@@ -623,8 +653,11 @@ component ExactOdyssey
             if d == "right" or cancelKey(k)
               ui = "menu"
     if ui == "item"
+      let slot = itemCursor
+      if d == "up" or d == "down"
+        itemCursor = 1 - slot
       if confirmKey(k)
-        usePotion()
+        useItem(slot)
       else
         if d == "right" or cancelKey(k)
           ui = "menu"

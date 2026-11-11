@@ -12,8 +12,9 @@
 //! 5. windows: `x,y,w,h[,spacing]|line|line` joined by `^`, in tiles; a
 //!    spacing of 2 puts a blank row between lines. In lines, `~` and a digit
 //!    0–8 is a gauge tile filled that many pixels (ATB and stagger gauges),
-//!    and text inside `{` `}` is yellow. An entry `@x,y|~n~n…` is a gauge
-//!    with no window, on the backdrop: the HP bars under enemies.
+//!    `~9` a solid block (a charged ATB segment),
+//!    and text inside `{` `}` is yellow. An entry `@x,y[,palette]|~n~n…` is a
+//!    gauge with no window, on the backdrop: the HP bars under enemies.
 //! 6. enemies: `name:tx:ty:fx` joined by `;`. fx 0 is normal, 1 a hit flash,
 //!    2–5 a defeat dissolving top-down, a tile row a step, 7 juggled: upside
 //!    down (its tiles flipped, rows reversed), 16 px up.
@@ -90,16 +91,20 @@ fn parse_windows(spec: &str) -> Vec<Option<Cell>> {
     let ui = &art.ui;
     let b = &ui.border;
     let mut cells = vec![None; COLS * ROWS];
-    let mut put = |x: i32, y: i32, tile: u16| {
+    let mut put_in = |x: i32, y: i32, tile: u16, palette: u8| {
         if x >= 0 && y >= 0 && (x as usize) < COLS && (y as usize) < ROWS {
-            cells[y as usize * COLS + x as usize] = Some(Cell { tile, palette: WINDOW_PALETTE, flip: 0 });
+            cells[y as usize * COLS + x as usize] = Some(Cell { tile, palette, flip: 0 });
         }
     };
     for win in spec.split('^').filter(|s| !s.is_empty()) {
         if let Some(label) = win.strip_prefix('@') {
             let mut parts = label.splitn(2, '|');
             let at: Vec<i32> = parts.next().unwrap_or("").split(',').filter_map(|v| v.trim().parse().ok()).collect();
-            let [x, y] = at[..] else { continue };
+            let (x, y, pal) = match at[..] {
+                [x, y] => (x, y, WINDOW_PALETTE),
+                [x, y, p] => (x, y, p as u8),
+                _ => continue,
+            };
             let mut chars = parts.next().unwrap_or("").chars();
             let mut col = 0;
             while let Some(ch) = chars.next() {
@@ -108,7 +113,7 @@ fn parse_windows(spec: &str) -> Vec<Option<Cell>> {
                 } else {
                     0
                 };
-                put(x + col, y, tile);
+                put_in(x + col, y, tile, pal);
                 col += 1;
             }
             continue;
@@ -133,7 +138,7 @@ fn parse_windows(spec: &str) -> Vec<Option<Cell>> {
                     (i, _) if i == w - 1 => b.right,
                     _ => b.fill,
                 };
-                put(x + i, y + j, tile);
+                put_in(x + i, y + j, tile, WINDOW_PALETTE);
             }
         }
         for (row, line) in parts.enumerate() {
@@ -154,14 +159,14 @@ fn parse_windows(spec: &str) -> Vec<Option<Cell>> {
                     break;
                 }
                 let tile = if ch == '~' {
-                    let n = chars.next().and_then(|d| d.to_digit(10)).unwrap_or(0).min(8);
+                    let n = chars.next().and_then(|d| d.to_digit(10)).unwrap_or(0).min(9);
                     ui.bars[n as usize]
                 } else if gold && ui.yellow.contains_key(&ch) {
                     ui.yellow[&ch]
                 } else {
                     *ui.glyphs.get(&ch).or_else(|| ui.glyphs.get(&ch.to_ascii_uppercase())).unwrap_or(&b.fill)
                 };
-                put(tx, ty, tile);
+                put_in(tx, ty, tile, WINDOW_PALETTE);
                 col += 1;
             }
         }

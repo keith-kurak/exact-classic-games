@@ -277,3 +277,59 @@ test "Auto in Balance staggers the hounds and wins, with a rank"
   expect state juggles == 4
   expect state hp.2 == 90
   expect state scene == "field"
+
+test "a Revive needs a fallen ally; a stance shift flashes its banner"
+  type "root" key "ArrowRight" for 5300
+  clock +1000
+  type "root" key "ArrowUp"
+  type "root" key " "
+  type "root" key "ArrowDown"
+  expect state itemCursor == 1
+  type "root" key " "
+  expect state committed == false
+  expect state revives == 1
+  type "root" key "Escape"
+  type "root" key "ArrowLeft"
+  type "root" key "ArrowDown"
+  type "root" key " "
+  expect state shiftT == 26
+  clock +1400
+  expect state shiftT == 0
+
+test "a Revive brings a fallen ally back at half HP"
+  type "root" key "ArrowRight" for 5300
+  clock +1000
+  type "root" key "ArrowLeft"
+  type "root" key "ArrowDown"
+  type "root" key " "
+  clock +13000
+  expect state hp.2 == 0
+  type "root" key "ArrowUp"
+  type "root" key " "
+  type "root" key "ArrowDown"
+  type "root" key " "
+  expect state plan.0 == "Revive"
+  clock +1500
+  expect state hp.2 == 45
+  expect state revives == 0
+
+test "Mend casts Raise by itself when an ally has fallen"
+  type "root" key "ArrowRight" for 5300
+  clock +1000
+  type "root" key "ArrowLeft"
+  type "root" key "ArrowDown"
+  type "root" key " "
+  clock +13000
+  expect state hp.2 == 0
+  type "root" key "ArrowLeft"
+  type "root" key "ArrowDown"
+  type "root" key "ArrowDown"
+  type "root" key " "
+  type "root" key "ArrowUp"
+  type "root" key " "
+  type "root" key " "
+  expect state plan.0 == "Potion"
+  clock +4500
+  expect state queue.0 == "Raise"
+  clock +600
+  expect state hp.2 == 22

@@ -113,15 +113,17 @@ name appears over a segment. Choose a second, then a target (the chooser becomes
 to commit both; **Auto** fills both by her role and goes straight to the target list. Committed,
 the commands stay on the bar until it fills and she acts; press Space or Enter first and she acts
 at once with the segments she has, dropping the rest. **Right** commits a single queued ability.
-Each command leaves the bar as it finishes. Escape takes back a slot. **Item** commits a Potion,
-which heals the whole party. Tooth
+Each segment is a block: it fills, turns solid once charged, and is gone from the bar as its
+command finishes. Escape takes back a slot. **Item** commits a Potion, which heals the whole
+party, or a Revive, which brings a fallen ally back at half HP. Tooth
 and Chocolat fill theirs by role (shown in yellow) and act. Press **Left** for the stance list, in the chooser,
-free at any time: **Assault** (all Blast), **Rush** (Strike, Strike, Blast), **Balance** and
-**Bulwark**. Only Strike attacks; Blast's Fire and Ice build an enemy's chain fast; Guard can
-Taunt and Steel. The chain drains over time, slower just after a Strike hit. The stagger panel
+free at any time (a "Stance Shift!" banner sweeps across the screen): **Assault** (all Blast), **Rush** (Strike, Strike, Blast), **Balance** and
+**Bulwark**. Only Strike attacks; Blast throws Fire and Ice, which build an enemy's chain fast; Mend
+cures and heals, and casts Raise by itself when an ally has fallen; Guard can Taunt and Steel. The chain drains over time, slower just after a Strike hit. The stagger panel
 at the top left follows the enemy you last targeted. Each attacker leaps in beside its target, weapon out. Staggered, an enemy takes far more damage,
-and Strike hits launch it: upside down in the air, it can't act. Each enemy's HP shows as a bar
-beneath it. A win shows your time and a 1–5 star rank (five stars finds a Potion), and the party
+and Strike hits launch it: upside down in the air, it can't act. Each enemy's HP shows as a green bar
+beneath it. A win shows your time and a 1–5 star rank (five stars finds a Potion) while the party
+strikes victory poses, and the party
 is healed in full after every fight.
 
 The picture comes from [`engines/nes-ppu`](engines/nes-ppu). To write the game's pattern tables

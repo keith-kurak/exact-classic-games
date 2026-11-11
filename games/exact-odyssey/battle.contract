@@ -5,7 +5,8 @@
 // (switch everyone's roles, free). Tooth and Chocolat fill theirs by role and act.
 //
 // Roles: Strike attacks (the only role that can); Blast casts Fire and Ice,
-// which build an enemy's chain fast; Mend casts Cure and Heal; Guard taunts
+// which build an enemy's chain fast; Mend casts Cure and Heal, and Raise to
+// bring a fallen ally back; Guard taunts
 // and steels itself. A chain drains quickly, unless a Strike hit has just
 // steadied it. Fill the stagger bar and the enemy is staggered: it takes
 // far more damage until the bar drains.
@@ -50,7 +51,8 @@ fn roleOf(s: number, i: number): string = (s == 0 ? "Blast"
   : (s == 2 ? (i == 0 ? "Strike" : (i == 1 ? "Mend" : "Blast"))
   : (i == 0 ? "Guard" : "Mend"))))
 
-// Each role's two abilities.
+// Each role's two abilities on the menu. Mend also knows Raise, which it
+// casts by itself when an ally has fallen.
 fn abilityOf(role: string, k: number): string = (role == "Strike" ? (k == 0 ? "Attack" : "Slash")
   : (role == "Blast" ? (k == 0 ? "Fire" : "Ice")
   : (role == "Mend" ? (k == 0 ? "Cure" : "Heal") : (k == 0 ? "Taunt" : "Steel"))))
@@ -86,12 +88,17 @@ fn lowest(hp: number[]): number = (ratio(hp, 0) <= ratio(hp, 1) and ratio(hp, 0)
 fn segments(): number = 2
 fn segment(): number = 12
 // What fills both segments when chosen by role (allies always; Thunda's Auto).
-// Strike attacks then slashes; Blast casts Fire then Ice; Mend cures twice
-// when someone is badly hurt, else heals everyone; Guard taunts, then
-// steels itself (only steels, if it is already taunting).
-fn rolePlan(role: string, hurt: bool, provoking: bool): string[] =
+// Strike attacks then slashes; Blast casts Fire then Ice; Mend raises a
+// fallen ally then cures, cures twice when someone is badly hurt, else heals
+// everyone; Guard taunts, then steels itself (only steels, if it is already
+// taunting).
+fn rolePlan(role: string, hurt: bool, provoking: bool, down: bool): string[] =
   (role == "Strike" ? ["Attack", "Slash"] : (role == "Blast" ? ["Fire", "Ice"]
-    : (role == "Mend" ? (hurt ? ["Cure", "Cure"] : ["Heal", "Heal"]) : (provoking ? ["Steel", "Steel"] : ["Taunt", "Steel"]))))
+    : (role == "Mend" ? (down ? ["Raise", "Cure"] : (hurt ? ["Cure", "Cure"] : ["Heal", "Heal"])) : (provoking ? ["Steel", "Steel"] : ["Taunt", "Steel"]))))
+// The ally Raise or a Revive brings back: the first one fallen (Thunda
+// falling ends the fight), else -1. They come back with a share of their HP.
+fn fallen(hp: number[]): number = (nth(hp, 1) <= 0 ? 1 : (nth(hp, 2) <= 0 ? 2 : -1))
+fn raiseHp(i: number, item: bool): number = floor(maxHp(i) * (item ? 0.5 : 0.25))
 // A slot in Thunda's ATB: an ability name, six wide; yellow once committed.
 fn slotText(name: string, committed: bool): string = (committed ? `{${padTo(name, 6)}}` : padTo(name, 6))
 // The top window names abilities; a plain attack shows nothing.
@@ -100,6 +107,8 @@ fn announce(name: string): string = (name == "Attack" or name == "attack" ? "" :
 // Potions: the party leader's item. Each heals everyone still standing.
 fn potionHeal(): number = 50
 fn startPotions(): number = 3
+// Revives: the leader's other item. Each brings a fallen ally back at half HP.
+fn startRevives(): number = 1
 
 // The rank for a win: five stars at or under par, one fewer each quarter over.
 fn stars(ticks: number, par: number): number = max(1, min(5, 5 - floor(max(0, ticks - par) * 4 / par)))
@@ -112,6 +121,13 @@ fn word(xs: string[], k: number): string = match xs.at(k) { case some(v) => v, c
 fn put(xs: number[], k: number, v: number): number[] = [0, 1, 2].filter(i => i < xs.length).map(i => (i == k ? v : nth(xs, i)))
 fn pad3(n: number): string = (n < 10 ? `  ${n}` : (n < 100 ? ` ${n}` : `${n}`))
 fn padTo(s: string, n: number): string = `${s}${"            ".slice(0, max(0, n - s.length))}`
+// One ATB segment, 8 tiles: a solid block once charged (`~9`), a gauge while
+// filling, and nothing at all once spent in a turn.
+fn segBlock(v: number, spent: bool): string = (spent ? "        " : (v >= 64 ? "~9~9~9~9~9~9~9~9" : gauge(v, 8)))
+// The stance-shift banner: it sweeps in from the right, holds, flashing, and
+// sweeps out to the left. `t` counts down from shiftTicks.
+fn shiftTicks(): number = 26
+fn bannerX(t: number): number = (t > 20 ? 6 + (t - 20) * 5 : (t > 6 ? 6 : 6 - (6 - t) * 5))
 // A gauge as bar tiles: `~0`–`~8` a tile, that many pixels filled.
 fn barTile(v: number): string = `~${max(0, min(8, floor(v)))}`
 fn gauge(v: number, tiles: number): string = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].filter(i => i < tiles).map(i => barTile(v - i * 8)).join("")
