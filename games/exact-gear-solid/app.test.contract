@@ -61,12 +61,90 @@ test "sliding past the end of a container leans round its corner"
   expect state peek == false
   expect state pk == 0
 
-test "a guard at a waypoint looks left, then right, then turns"
+test "a guard at a waypoint looks left, holds, sweeps right, holds, then turns"
   clock +14600
   expect state g0.fx == 1
-  clock +600
+  clock +900
   expect state g0.fy == -1
-  clock +500
+  clock +1300
   expect state g0.fy == 1
-  clock +500
+  clock +1300
   expect state g0.fx == -1
+
+test "Q opens the items, which pause the game, and Escape closes them"
+  type "root" key "q"
+  expect tree has "items"
+  expect text "item-name" == "‹No item›"
+  type "root" key "ArrowRight"
+  expect text "item-name" == "‹Cigarettes›"
+  type "root" key "ArrowLeft"
+  type "root" key "ArrowLeft"
+  expect text "item-name" == "‹Cardboard box›"
+  clock +1000
+  expect text "clock" == "0:00"
+  type "root" key "Escape"
+  expect tree missing "items"
+  expect state item == 0
+
+test "lighting up brings a call from the medical officer, then you smoke"
+  type "root" key "q"
+  type "root" key "ArrowRight"
+  type "root" key "q"
+  expect state item == 1
+  expect tree has "equipped"
+  expect tree has "ringing"
+  clock +1300
+  expect tree has "call"
+  expect text "freq" == "142.37"
+  expect text "speaker" == "DR. VALE"
+  clock +3000
+  expect text "call-line" == "Is that smoke I'm reading on your vitals? In the middle of an infiltration?"
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  expect tree missing "call"
+  expect state item == 1
+  type "root" key "q"
+  type "root" key "ArrowLeft"
+  type "root" key "q"
+  expect state item == 0
+  type "root" key "q"
+  type "root" key "ArrowRight"
+  type "root" key "q"
+  expect state item == 1
+  clock +1500
+  expect tree missing "call"
+  expect tree missing "ringing"
+
+test "keeping still in the box, a passing guard does not see you"
+  type "root" key "ArrowUp" down
+  clock +4200
+  type "root" key "ArrowUp" up
+  type "root" key "q"
+  type "root" key "ArrowLeft"
+  type "root" key "q"
+  expect state item == 2
+  expect text "hint" == "In the box · keep still and nobody looks twice"
+  clock +40000
+  expect state phase == "play"
+  expect state spot == 0
+
+test "leaning round a corner, a guard far down the cross aisle does not see you"
+  type "root" key "ArrowUp" down
+  clock +1000
+  type "root" key "ArrowUp" up
+  type "root" key "ArrowRight" down
+  clock +1200
+  type "root" key "ArrowRight" up
+  type "root" key "ArrowUp" down
+  clock +2000
+  expect state peek == true
+  clock +12000
+  expect state phase == "play"

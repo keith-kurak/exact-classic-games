@@ -1,0 +1,84 @@
+// Equipment and the radio. Q opens the item menu; the game pauses while it is
+// open. Cigarettes: the first time you light up, your medical officer, Dr.
+// Vale, calls to scold you, and afterward you smoke. The cardboard box: you
+// hide inside it, and a guard notices only a box that moves while it watches.
+
+shape Item
+  id: number
+  label: string
+  name: string
+  text: string
+
+fn items(): Item[] = [
+  Item(id=0, label="NO ITEM", name="No item", text="Hands free."),
+  Item(id=1, label="CIGS", name="Cigarettes", text="A crumpled pack. Steadies the nerves. Your medical officer will not approve."),
+  Item(id=2, label="C.BOX", name="Cardboard box", text="Get inside and keep still. Nobody looks twice at a box, unless it walks.")
+]
+fn itemAt(i: number): Item = match items().at(i) { case some(it) => it, case none => Item(id=0, label="NO ITEM", name="No item", text="") }
+
+shape Line
+  who: string
+  text: string
+
+fn freq(): string = "142.37"
+fn callLines(): Line[] = [
+  Line(who="VALE", text="Is that smoke I'm reading on your vitals? In the middle of an infiltration?"),
+  Line(who="VALE", text="Every drag narrows your blood vessels and dulls your reflexes. And one cough in there could give you away."),
+  Line(who="YOU", text="Relax, Doc. It helps me think."),
+  Line(who="VALE", text="Then think about this: I'm your medical officer, and I'm telling you to put it out."),
+  Line(who="YOU", text="...Noted.")
+]
+fn lineAt(i: number): Line = match callLines().at(i) { case some(l) => l, case none => Line(who="", text="") }
+
+// An item's picture, 40 × 30.
+component ItemIcon
+  props
+    id: number
+  view
+    svg viewBox="0 0 40 30" width=40 height=30
+      if id == 1
+        rect x=14 y=3 width=3 height=9 fill="#efe6d2"
+        rect x=19 y=1 width=3 height=11 fill="#efe6d2"
+        rect x=19 y=1 width=3 height=3 fill="#c98a4a"
+        rect x=11 y=9 width=18 height=19 rx=1 fill="#d8d2c4"
+        rect x=11 y=15 width=18 height=7 fill="#b2342b"
+      if id == 2
+        polygon points="6,10 20,4 34,10 20,16" fill="#c9a26b"
+        polygon points="6,10 20,16 20,28 6,22" fill="#a07b48"
+        polygon points="20,16 34,10 34,22 20,28" fill="#8a6a3c"
+        line x1=13 y1=7 x2=27 y2=13 stroke="#e8d3a6" stroke-width=2
+      if id == 0
+        ellipse cx=20 cy=15 rx=9 ry=9 fill="none" stroke="#5f7d6b" stroke-width=2
+        line x1=14 y1=21 x2=26 y2=9 stroke="#5f7d6b" stroke-width=2
+
+// A radio portrait, monochrome green, 100 × 130: the medical officer, or you.
+component Portrait
+  props
+    who: string
+    lit: bool
+  view
+    svg viewBox="0 0 100 130" width=150 height=195 opacity=(lit ? 1 : 0.5)
+      rect x=0 y=0 width=100 height=130 fill="#06200f"
+      if who == "VALE"
+        ellipse cx=50 cy=136 rx=46 ry=34 fill="#2f7a50"
+        polygon points="38,86 62,86 58,104 42,104" fill="#6cc293"
+        ellipse cx=50 cy=56 rx=27 ry=30 fill="#1d5236"
+        ellipse cx=50 cy=62 rx=19 ry=24 fill="#8fdcb0"
+        polygon points="28,52 50,34 72,52 70,40 50,28 30,40" fill="#1d5236"
+        rect x=36 y=56 width=11 height=7 rx=1.5 fill="none" stroke="#123a24" stroke-width=1.6
+        rect x=53 y=56 width=11 height=7 rx=1.5 fill="none" stroke="#123a24" stroke-width=1.6
+        line x1=47 y1=59 x2=53 y2=59 stroke="#123a24" stroke-width=1.4
+        line x1=44 y1=76 x2=56 y2=75 stroke="#2c6b48" stroke-width=1.6
+        line x1=34 y1=110 x2=50 y2=126 stroke="#9ff0c4" stroke-width=1.4
+        line x1=66 y1=110 x2=50 y2=126 stroke="#9ff0c4" stroke-width=1.4
+      if who == "YOU"
+        ellipse cx=50 cy=138 rx=48 ry=36 fill="#1f5236"
+        ellipse cx=50 cy=60 rx=30 ry=34 fill="#163d28"
+        ellipse cx=50 cy=68 rx=18 ry=22 fill="#6cb98f"
+        rect x=29 y=54 width=42 height=11 rx=4 fill="#b6ffd8"
+        rect x=31 y=56 width=38 height=3 fill="#e8fff2" opacity=0.7
+        line x1=44 y1=80 x2=57 y2=80 stroke="#1f5236" stroke-width=1.8
+        polygon points="20,70 30,50 30,96 22,100" fill="#163d28"
+        polygon points="80,70 70,50 70,96 78,100" fill="#163d28"
+      for y in [6, 16, 26, 36, 46, 56, 66, 76, 86, 96, 106, 116, 126] key=`s${y}`
+        rect x=0 y=y width=100 height=1.2 fill="#000000" opacity=0.25

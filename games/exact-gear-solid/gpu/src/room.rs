@@ -1,5 +1,5 @@
 //! The room surface: 29 numbers in (the view, the camera and where it looks,
-//! the alert, the player, and four soldiers, each a position and a facing),
+//! the alert, the player, and four soldiers, each a position and a facing, and the item),
 //! one full-screen fragment shader out. It draws again when an input changes.
 
 use crate::shaders::room::{entry, module, Uniforms, GROUP_0, U};
@@ -21,9 +21,9 @@ struct Gpu {
     bind_groups: Vec<wgpu::BindGroup>,
 }
 
-pub const INPUTS: usize = 29;
+pub const INPUTS: usize = 30;
 
-const NAMES: [&str; INPUTS] = ["mode", "cam_x", "cam_y", "cam_z", "alert", "look_x", "look_y", "look_z", "moving", "px", "pz", "pfx", "pfz", "s0x", "s0z", "s0fx", "s0fz", "s1x", "s1z", "s1fx", "s1fz", "s2x", "s2z", "s2fx", "s2fz", "s3x", "s3z", "s3fx", "s3fz"];
+const NAMES: [&str; INPUTS] = ["mode", "cam_x", "cam_y", "cam_z", "alert", "look_x", "look_y", "look_z", "moving", "px", "pz", "pfx", "pfz", "s0x", "s0z", "s0fx", "s0fz", "s1x", "s1z", "s1fx", "s1fz", "s2x", "s2z", "s2fx", "s2fz", "s3x", "s3z", "s3fx", "s3fz", "item"];
 
 impl Surface for RoomSurface {
     fn bind(&mut self, inputs: &[Value], _: Option<f64>) -> Result<(), SurfaceError> {
@@ -52,7 +52,7 @@ impl Surface for RoomSurface {
         }
         let gpu = self.gpu.as_mut().unwrap();
         let (w, h) = frame.pixels();
-        let [mode, cam_x, cam_y, cam_z, alert, look_x, look_y, look_z, moving, px, pz, pfx, pfz, s0x, s0z, s0fx, s0fz, s1x, s1z, s1fx, s1fz, s2x, s2z, s2fx, s2fz, s3x, s3z, s3fx, s3fz] = self.inputs;
+        let [mode, cam_x, cam_y, cam_z, alert, look_x, look_y, look_z, moving, px, pz, pfx, pfz, s0x, s0z, s0fx, s0fz, s1x, s1z, s1fx, s1fz, s2x, s2z, s2fx, s2fz, s3x, s3z, s3fx, s3fz, item] = self.inputs;
         let uniforms = Uniforms {
             time: frame.now_ms as f32,
             width: w as f32,
@@ -86,6 +86,7 @@ impl Surface for RoomSurface {
             s3z,
             s3fx,
             s3fz,
+            item,
         };
         let slot = gpu.uniforms.write(queue, &uniforms.bytes());
         {
@@ -109,7 +110,8 @@ impl Surface for RoomSurface {
             pass.set_bind_group(0, &gpu.bind_groups[slot], &[]);
             pass.draw(0..3, 0..1);
         }
-        false
+        // Smoke moves on its own: while the player smokes, draw every frame.
+        item == 1.0
     }
 }
 

@@ -37,6 +37,8 @@ struct Uniforms {
     s3z: f32,
     s3fx: f32,
     s3fz: f32,
+    // 0 nothing, 1 cigarettes (smoking), 2 inside the cardboard box.
+    item: f32,
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -128,6 +130,25 @@ fn figure(p: vec3<f32>, pos: vec2<f32>, f: vec2<f32>, s: f32) -> f32 {
     return d;
 }
 
+// The player in the box: 0.8 m × 0.66 m × 0.74 m, turned to face f.
+fn cardboard(p: vec3<f32>) -> f32 {
+    let f = vec2<f32>(u.pfx, u.pfz);
+    let q = vec2<f32>(p.x - u.px, p.z - u.pz);
+    let l = vec3<f32>(dot(q, vec2<f32>(f.y, -f.x)), p.y - 0.37, dot(q, f));
+    return sdBox(l, vec3<f32>(0.4, 0.36, 0.32)) - 0.012;
+}
+
+// The cigarette, from the lips forward, and its lit tip.
+fn mouth() -> vec3<f32> {
+    return vec3<f32>(u.px + u.pfx * 0.13, 1.555, u.pz + u.pfz * 0.13);
+}
+fn cigTip() -> vec3<f32> {
+    return mouth() + vec3<f32>(u.pfx * 0.1, -0.02, u.pfz * 0.1);
+}
+fn cigarette(p: vec3<f32>) -> f32 {
+    return capsule(p, mouth(), cigTip(), 0.016);
+}
+
 fn swing(seed: f32, on: f32) -> f32 {
     return sin(u.time * 0.009 + seed) * on;
 }
@@ -153,8 +174,17 @@ fn scene(p: vec3<f32>) -> vec2<f32> {
         let c = WALL_H - p.y;
         if (c < d) { d = c; id = 4.0; }
     }
-    let pl = figure(p, vec2<f32>(u.px, u.pz), vec2<f32>(u.pfx, u.pfz), swing(0.0, u.moving));
-    if (pl < d) { d = pl; id = 5.0; }
+    if (u.item == 2.0) {
+        let bx = cardboard(p);
+        if (bx < d) { d = bx; id = 10.0; }
+    } else {
+        let pl = figure(p, vec2<f32>(u.px, u.pz), vec2<f32>(u.pfx, u.pfz), swing(0.0, u.moving));
+        if (pl < d) { d = pl; id = 5.0; }
+        if (u.item == 1.0) {
+            let cg = cigarette(p);
+            if (cg < d) { d = cg; id = 11.0; }
+        }
+    }
     for (var i = 0; i < 4; i = i + 1) {
         let s = soldierPos(i);
         let f = figure(p, s.xy, s.zw, swing(f32(i) * 1.7, 1.0));
@@ -263,11 +293,30 @@ fn surface(p: vec3<f32>, n: vec3<f32>, id: f32) -> vec3<f32> {
     if (id == 5.0) {
         return figureColour(p, vec2<f32>(u.px, u.pz), vec2<f32>(u.pfx, u.pfz), true);
     }
+    if (id == 10.0) {
+        // Cardboard: tape along the top, a stencilled band round the sides.
+        let f = vec2<f32>(u.pfx, u.pfz);
+        let q = vec2<f32>(p.x - u.px, p.z - u.pz);
+        let side = dot(q, vec2<f32>(f.y, -f.x));
+        var c = vec3<f32>(0.66, 0.51, 0.31) * (0.9 + 0.15 * noise(p.xz * 9.0 + p.y * 5.0));
+        if (n.y > 0.5) {
+            if (abs(side) < 0.07) { c = vec3<f32>(0.80, 0.70, 0.50); }
+            return c;
+        }
+        if (abs(p.y - 0.42) < 0.07 && abs(fract((side + dot(q, f)) * 2.5) - 0.5) < 0.3) { c = vec3<f32>(0.28, 0.2, 0.12); }
+        if (p.y > 0.7) { c = c * 0.8; }
+        return c;
+    }
+    if (id == 11.0) {
+        // The lit end glows (brighter than 1: drawn unlit).
+        if (length(p - cigTip()) < 0.03) { return vec3<f32>(2.2, 0.75, 0.2); }
+        return vec3<f32>(0.92, 0.9, 0.84);
+    }
     let s = soldierPos(i32(id - 6.0));
     return figureColour(p, s.xy, s.zw, false);
 }
 
-fn render(ro: vec3<f32>, rd: vec3<f32>) -> vec3<f32> {
+fn render(ro: vec3<f32>, rd: vec3<f32>) -> vec4<f32> {
     var t = 0.0;
     var id = 0.0;
     for (var i = 0; i < 160; i = i + 1) {
@@ -276,12 +325,12 @@ fn render(ro: vec3<f32>, rd: vec3<f32>) -> vec3<f32> {
         t = t + s.x;
         if (t > 70.0) { break; }
     }
-    if (id == 0.0) { return vec3<f32>(0.0); }
+    if (id == 0.0) { return vec4<f32>(0.0, 0.0, 0.0, 1e5); }
     let p = ro + rd * t;
     let n = normalAt(p);
     var c = surface(p, n, id);
     // Emissive: the strip lights and the exit lamp are brighter than 1.
-    if (max(c.r, max(c.g, c.b)) > 1.0) { return c * 0.6; }
+    if (max(c.r, max(c.g, c.b)) > 1.0) { return vec4<f32>(c * 0.6, t); }
     let sh = shadow(p + n * 0.01);
     let diff = max(dot(n, LIGHT), 0.0);
     // Ambient occlusion from the nearby geometry.
@@ -291,7 +340,27 @@ fn render(ro: vec3<f32>, rd: vec3<f32>) -> vec3<f32> {
     lit = lit + vec3<f32>(0.10, 0.22, 0.24) * exp(-p.z * 0.35) * (0.5 + 0.5 * max(n.z, 0.0));
     // Darkness with distance, as in a dim building.
     lit = lit * exp(-max(t - 8.0, 0.0) * 0.05);
-    return lit;
+    return vec4<f32>(lit, t);
+}
+
+// Smoke from the cigarette: six puffs that rise, drift, grow and thin out,
+// each a soft ball laid over whatever is behind it (not over what is in front).
+fn smoke(ro: vec3<f32>, rd: vec3<f32>, hit: f32, col: vec3<f32>) -> vec3<f32> {
+    let tip = cigTip();
+    var c = col;
+    for (var i = 0; i < 6; i = i + 1) {
+        let fi = f32(i);
+        let ph = fract(u.time * 0.00032 + fi / 6.0);
+        let drift = vec3<f32>(sin(fi * 2.3 + u.time * 0.0011) * 0.2, 1.1, cos(fi * 1.7 + u.time * 0.0009) * 0.2);
+        let centre = tip + drift * ph;
+        let r = 0.07 + 0.32 * ph;
+        let tc = dot(centre - ro, rd);
+        if (tc < 0.0 || tc > hit) { continue; }
+        let d = length(ro + rd * tc - centre);
+        let a = 0.6 * (1.0 - ph) * smoothstep(0.0, 0.12, ph) * exp(-2.5 * d * d / (r * r));
+        c = mix(c, vec3<f32>(0.80, 0.84, 0.84), a);
+    }
+    return c;
 }
 
 fn bayer(p: vec2<f32>) -> f32 {
@@ -315,7 +384,9 @@ fn fs(f: Fragment) -> @location(0) vec4<f32> {
     let uv = (vec2<f32>(px.x, res.y - px.y) - res * 0.5) / res.y;
     let focal = mix(1.35, 1.05, u.mode);
     let rd = normalize(fwd * focal + right * uv.x + up * uv.y);
-    var col = render(ro, rd);
+    let hit = render(ro, rd);
+    var col = hit.xyz;
+    if (u.item == 1.0) { col = smoke(ro, rd, hit.w, col); }
     // Spotted: the room flushes red.
     col = mix(col, vec3<f32>(col.r * 0.6 + 0.35, col.g * 0.3, col.b * 0.3), u.alert * 0.6);
     let q = (f.position.xy / res) - 0.5;

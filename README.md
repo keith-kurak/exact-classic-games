@@ -54,7 +54,7 @@ To build without launching, run `bun exact.mjs mac` in the game's folder. The ap
 bun run test              # every game
 bun run test:exactbound   # 8 tests
 bun run test:links        # 5 tests
-bun run test:gear         # 4 tests
+bun run test:gear         # 10 tests
 ```
 
 The tests are each game's `app.test.contract`. They build the macOS app and drive it.
@@ -82,11 +82,16 @@ menu (Fire and Heal). **Auto Fight** plays the battle for you; Escape or X takes
 | Push into a wall | After a quarter second, press your back to it; the camera drops beside you |
 | Along the wall | Slide; you stop at its corner, so you can look round it |
 | Away from the wall | Step off it |
-| Space | Try again, or play again |
+| Q | Items (the game pauses): ← → to choose, Q to equip, Escape to close |
+| Space | Go on in a radio call; try again, or play again |
+
+Items: **CIGS** (light up, and your medical officer calls to scold you) and **C.BOX** (hide
+inside; a guard notices only a box that moves while it watches).
 
 Reach the exit at the top right of the radar. A guard sees 6 m ahead, 30° either side, unless
 a container is in the way. A question mark means a guard has half-seen you; stay in its cone
-for about 0.7 s and you are spotted.
+for about 0.7 s and you are spotted. Leaning round a corner, the wall hides you until a guard is
+near its edge. At each waypoint a guard stops and slowly looks both ways.
 
 ### Links Exact86
 
@@ -106,7 +111,7 @@ gets touchier.
 ```
 games/
   exactbound/       app.contract, world.contract, battle.contract, gpu/ (aurora shader), assets/ (audio, not in git)
-  exact-gear-solid/ app.contract, room.contract, gpu/ (room shader)
+  exact-gear-solid/ app.contract, room.contract, items.contract, gpu/ (room shader)
   links-exact86/    app.contract, course.contract, golfer.contract, gpu/ (course shader)
 ```
 

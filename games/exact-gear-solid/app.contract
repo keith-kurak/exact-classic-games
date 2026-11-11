@@ -3,13 +3,16 @@
 // rows of containers. The camera looks down from above; push against a wall to
 // press your back to it, and the camera drops beside you to look along it. The
 // radar shows every guard and its view cone. If a guard clearly sees you
-// (about 0.7 s in its cone), you are caught.
+// (about 0.7 s in its cone), you are caught. Q opens the items: cigarettes
+// (and a radio call about them) and a cardboard box to hide in (items.contract).
 use Spot, Guard, roomW, roomD, radius, sq, mag, sgn, nth, solid, atExit, guard, advI, advT, advW, sees, cone, blockSpots from "./room.contract"
+use Item, ItemIcon, Portrait, items, itemAt, Line, callLines, lineAt, freq from "./items.contract"
 
 fn dirX(k: string): number = (k == "ArrowLeft" or k == "a" ? -1 : (k == "ArrowRight" or k == "d" ? 1 : 0))
 fn dirY(k: string): number = (k == "ArrowUp" or k == "w" ? -1 : (k == "ArrowDown" or k == "s" ? 1 : 0))
 fn isMove(k: string): bool = dirX(k) != 0 or dirY(k) != 0
 fn isGo(k: string): bool = k == " " or k == "Enter"
+fn isItems(k: string): bool = k == "q" or k == "Q"
 fn clock(ticks: number): string = `${floor(ticks * 33 / 60000)}:${floor(ticks * 33 / 1000) % 60 < 10 ? "0" : ""}${floor(ticks * 33 / 1000) % 60}`
 fn step(): number = 0.085
 fn spotLimit(): number = 21
@@ -17,6 +20,10 @@ fn spotLimit(): number = 21
 fn approach(v: number, target: number, d: number): number = (v < target ? min(target, v + d) : max(target, v - d))
 fn ease(t: number): number = t * t * (3 - 2 * t)
 fn mix(a: number, b: number, t: number): number = a + (b - a) * t
+
+keyframes blink
+  from opacity=1
+  to opacity=0
 
 component ExactGearSolid
   state px = 1.5
@@ -50,6 +57,15 @@ component ExactGearSolid
   state phase = "play"
   state over = false
   state ticks = 0
+  // Items: the menu, its cursor, and what is equipped (0 none, 1 cigarettes, 2 box).
+  state menu = false
+  state cursor = 0
+  state item = 0
+  // The radio: ringing, then the call's line (-1: no call), typed in.
+  state smoked = false
+  state ring = false
+  state callAt = -1
+  state typed = 0
 
   derive g0 = guard(0, nth(si, 0), nth(st, 0), nth(sw, 0))
   derive g1 = guard(1, nth(si, 1), nth(st, 1), nth(sw, 1))
@@ -61,9 +77,10 @@ component ExactGearSolid
   // between them: ct from O to the wall, pk from W to K.
   derive e1 = ease(ct)
   derive e2 = ease(pk)
-  derive wX = mix(px + nx * 0.95 - lx * 2.1, px + lx * 0.9 + nx * 2.0, e2)
+  // The wall camera never leaves the room (near a corner it would back into a wall).
+  derive wX = max(0.5, min(roomW() - 0.5, mix(px + nx * 0.95 - lx * 2.1, px + lx * 0.9 + nx * 2.0, e2)))
   derive wY = mix(1.5, 1.55, e2)
-  derive wZ = mix(py + ny * 0.95 - ly * 2.1, py + ly * 0.9 + ny * 2.0, e2)
+  derive wZ = max(0.5, min(roomD() - 0.5, mix(py + ny * 0.95 - ly * 2.1, py + ly * 0.9 + ny * 2.0, e2)))
   derive wlX = mix(px + lx * 5 + nx * 0.7, px + lx * 1.4 - nx * 5, e2)
   derive wlY = mix(1.1, 1.0, e2)
   derive wlZ = mix(py + ly * 5 + ny * 0.7, py + ly * 1.4 - ny * 5, e2)
@@ -76,11 +93,15 @@ component ExactGearSolid
   // Leaning out: the figure shifts toward the corner.
   derive drawX = px + lx * 0.22 * e2
   derive drawY = py + ly * 0.22 * e2
+  derive inCall = callAt >= 0
+  derive line = lineAt(callAt)
+  derive inBox = item == 2
   derive alert = phase == "caught" ? 1 : spot / spotLimit() * 0.5
 
   // ── One frame: the guards walk, the player moves, the guards look ──
 
-  task frame when phase == "play"
+  // The game pauses while the item menu or a call is open.
+  task frame when phase == "play" and not menu and not inCall
     every(33, tick)
 
   action tick
@@ -91,6 +112,10 @@ component ExactGearSolid
     let w0 = sw
     let ox = px
     let oy = py
+    let wasPressed = pressed
+    let wasPeek = peek
+    let olx = lx
+    let oly = ly
     si = ks.map(k => advI(k, nth(i0, k), nth(t0, k), nth(w0, k)))
     st = ks.map(k => advT(k, nth(i0, k), nth(t0, k), nth(w0, k)))
     sw = ks.map(k => advW(k, nth(i0, k), nth(t0, k), nth(w0, k)))
@@ -101,8 +126,15 @@ component ExactGearSolid
       slide()
     else
       walk()
-    let who = ks.filter(k => (k == 0 and sees(g0, ox, oy)) or (k == 1 and sees(g1, ox, oy))
-      or (k == 2 and sees(g2, ox, oy)) or (k == 3 and sees(g3, ox, oy)))
+    // In the box, a guard notices you only if you move while it watches.
+    let still = inBox and hx == 0 and hy == 0
+    // Leaning round a corner, only your head is past it: guards look at a
+    // point just behind the corner, so the wall hides you until a guard is
+    // near its edge.
+    let vx = wasPressed and wasPeek ? ox - olx * 0.45 : ox
+    let vy = wasPressed and wasPeek ? oy - oly * 0.45 : oy
+    let who = still ? [] : ks.filter(k => (k == 0 and sees(g0, vx, vy)) or (k == 1 and sees(g1, vx, vy))
+      or (k == 2 and sees(g2, vx, vy)) or (k == 3 and sees(g3, vx, vy)))
     let next = who.length > 0 ? spot + 1 : max(0, spot - 1)
     spot = next
     if next >= spotLimit()
@@ -112,7 +144,8 @@ component ExactGearSolid
       phase = "clear"
 
   action walk
-    let diag = hx != 0 and hy != 0 ? 0.707 : 1
+    // The box is slow going.
+    let diag = (hx != 0 and hy != 0 ? 0.707 : 1) * (inBox ? 0.55 : 1)
     let tx = px + hx * step() * diag
     let okx = not solid(tx, py, radius())
     let nxp = okx ? tx : px
@@ -123,13 +156,13 @@ component ExactGearSolid
     py = nyp
     moving = hx != 0 or hy != 0
     if hx != 0 or hy != 0
-      fx = hx * diag
-      fy = hy * diag
+      fx = hx * (hx != 0 and hy != 0 ? 0.707 : 1)
+      fy = hy * (hx != 0 and hy != 0 ? 0.707 : 1)
     // Pushing straight into a wall for a quarter second presses your back to it.
     let into = (hx != 0 and hy == 0 and not okx) or (hy != 0 and hx == 0 and not oky)
     let p = into ? push + 1 : 0
     push = p
-    if p >= 8
+    if p >= 8 and not inBox
       pressed = true
       nx = 0 - hx
       ny = 0 - hy
@@ -168,6 +201,45 @@ component ExactGearSolid
         moving = false
         peek = false
 
+  // ── Items and the radio ──
+
+  action openMenu
+    menu = true
+    cursor = item
+    hx = 0
+    hy = 0
+  action equip(i: number)
+    item = i
+    menu = false
+    if i == 2
+      pressed = false
+      peek = false
+    if i == 1 and not smoked
+      smoked = true
+      ring = true
+
+  task ringing when ring
+    after(1200, answer)
+  action answer
+    ring = false
+    hx = 0
+    hy = 0
+    callAt = 0
+    typed = 0
+
+  task typewriter when inCall and typed < line.text.length
+    every(30, typeOn)
+  action typeOn
+    typed = min(line.text.length, typed + 3)
+
+  action advance
+    if typed < line.text.length
+      typed = line.text.length
+    else
+      let next = callAt + 1
+      typed = 0
+      callAt = next < callLines().length ? next : -1
+
   task caughtPause when phase == "caught"
     after(900, showOver)
   action showOver
@@ -193,18 +265,39 @@ component ExactGearSolid
     seenBy = -1
     over = false
     ticks = 0
+    menu = false
+    item = 0
+    smoked = false
+    ring = false
+    callAt = -1
+    typed = 0
     phase = "play"
 
   // ── Keys ──
 
   action onKey(k: string, e: KeyboardEvent)
-    if isMove(k) or isGo(k)
+    if isMove(k) or isGo(k) or isItems(k) or k == "Escape"
       preventDefault()
     if phase == "play"
-      if dirX(k) != 0
-        hx = dirX(k)
-      if dirY(k) != 0
-        hy = dirY(k)
+      if inCall
+        if isGo(k)
+          advance()
+      else
+        if menu
+          if dirX(k) != 0
+            cursor = (cursor + dirX(k) + 3) % 3
+          else
+            if isItems(k) or isGo(k)
+              equip(cursor)
+            if k == "Escape"
+              menu = false
+        else
+          if isItems(k)
+            openMenu()
+          if dirX(k) != 0
+            hx = dirX(k)
+          if dirY(k) != 0
+            hy = dirY(k)
     else
       if isGo(k) and (over or phase == "clear")
         restart()
@@ -220,7 +313,7 @@ component ExactGearSolid
       background-color="#000000" position="relative" overflow="hidden"
       canvas surface=room(e1, camX, camY, camZ, alert, lookX, lookY, lookZ, (moving ? 1 : 0),
         drawX, drawY, fx, fy, g0.x, g0.y, g0.fx, g0.fy, g1.x, g1.y, g1.fx, g1.fy,
-        g2.x, g2.y, g2.fx, g2.fy, g3.x, g3.y, g3.fx, g3.fy)
+        g2.x, g2.y, g2.fx, g2.fy, g3.x, g3.y, g3.fx, g3.fy, item)
         position="absolute" left=0 top=0 width="100%" height="100%" testId="room"
       // The radar: the room from above, the guards' view cones, and you.
       column position="absolute" top=16 right=16 padding=4 background-color="#020a06e6"
@@ -239,8 +332,53 @@ component ExactGearSolid
         border-left="3px solid #3fdc7a"
         text "STORAGE ROOM B" font-size=13 font-weight=900 letter-spacing=3 color="#3fdc7a"
         text clock(ticks) font-size=20 font-weight=800 font-variant-numeric="tabular-nums" color="#e8f5ec" testId="clock"
-        text (pressed and peek ? "Round the corner · let go to lean back" : (pressed ? "Against the wall · slide along it, step away to leave" : "Reach the exit, top right · press into a wall to hug it"))
+        text (inBox ? "In the box · keep still and nobody looks twice" : (pressed and peek ? "Round the corner · let go to lean back" : (pressed ? "Against the wall · slide along it, step away to leave" : "Reach the exit, top right · press into a wall to hug it · Q items")))
           font-size=12 color="#a9c4b2" testId="hint"
+      // What is equipped, bottom right.
+      if item != 0
+        column position="absolute" right=16 bottom=16 align-items="center" gap=2 padding="6px 10px"
+          background-color="#000000b0" border="1px solid #3fdc7a80" testId="equipped"
+          ItemIcon(id=item)
+          text itemAt(item).label font-size=11 font-weight=900 letter-spacing=2 color="#e8f5ec"
+      // The radio is ringing.
+      if ring
+        text "CALL" position="absolute" top=16 left=0 right=0 text-align="center" font-size=22 font-weight=900
+          letter-spacing=6 color="#3fdc7a" animation="blink 400ms steps(2) infinite" testId="ringing"
+      // The item menu: a strip of slots and the chosen item's description.
+      if menu
+        column position="absolute" left=16 bottom=104 gap=8 testId="items"
+          column width=360 padding="10px 14px" gap=4 background-color="#000000d0" border="1px solid #3fdc7a80"
+            text `‹${itemAt(cursor).name}›` font-size=16 font-weight=800 color="#e8f5ec" testId="item-name"
+            text itemAt(cursor).text font-size=13 color="#a9c4b2" line-height=1.35
+          row gap=6
+            for it in items() key=`i${it.id}`
+              column width=76 height=58 align-items="center" justify-content="center" gap=2
+                background-color=(it.id == cursor ? "#1b4fd8" : "#000000c8")
+                border=(it.id == cursor ? "2px solid #8fb0ff" : "2px solid #2a3a30")
+                ItemIcon(id=it.id)
+                text it.label font-size=10 font-weight=900 letter-spacing=1 color="#e8f5ec"
+          text "← → choose · Q equip · Esc close" font-size=11 color="#a9c4b2"
+      // A radio call: two portraits, the frequency, and the words typed in.
+      if inCall
+        column position="absolute" inset=0 background-color="#000000" align-items="center" justify-content="center"
+          gap=28 padding=24 testId="call"
+          row gap=28 align-items="center"
+            column border="3px solid #3fdc7a" padding=2
+              Portrait(who="VALE", lit=(line.who == "VALE"))
+            column align-items="center" gap=10
+              text "TX" font-size=13 font-weight=900 letter-spacing=6 color="#06200f" background-color="#3fdc7a" padding="2px 14px"
+              column border="2px solid #3fdc7a" padding="8px 18px" align-items="center" gap=4
+                svg viewBox="0 0 100 20" width=150 height=30
+                  for b in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] key=`b${b}`
+                    rect x=(b * 10) y=(18 - b * 1.8) width=7 height=(b * 1.8 + 2) fill=(b < 7 ? "#3fdc7a" : "#1b4d31")
+                text freq() font-size=40 font-weight=800 font-variant-numeric="tabular-nums" color="#b6ffd8" testId="freq"
+              text "◀  MEDICAL  ▶" font-size=11 font-weight=800 letter-spacing=3 color="#3fdc7a"
+            column border="3px solid #3fdc7a" padding=2
+              Portrait(who="YOU", lit=(line.who == "YOU"))
+          column width="100%" max-width=640 gap=6 min-height=96
+            text (line.who == "VALE" ? "DR. VALE" : "YOU") font-size=12 font-weight=900 letter-spacing=3 color="#3fdc7a" testId="speaker"
+            text line.text.slice(0, typed) font-size=20 font-weight=600 line-height=1.4 color="#e8f5ec" testId="call-line"
+          text "Space to go on" font-size=11 color="#5f7d6b"
       if spot > 0 and phase == "play"
         text "?" position="absolute" top="30%" left=0 right=0 text-align="center" font-size=72 font-weight=900
           color="#ffd23f" testId="suspicious"
