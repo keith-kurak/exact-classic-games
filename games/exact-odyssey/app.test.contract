@@ -28,7 +28,7 @@ test "trees and water block the way"
   expect state ty == 18
   expect state moving == false
 
-test "walking into the thicket starts a fight; Rook casts, and Left opens the stances"
+test "Rook fills two segments: Auto plans both and waits for a confirm"
   type "root" key "ArrowRight" for 5300
   clock +1000
   expect state scene == "battle"
@@ -41,20 +41,45 @@ test "walking into the thicket starts a fight; Rook casts, and Left opens the st
   type "root" key "ArrowDown"
   type "root" key " "
   expect state stance == 1
-  expect state phase == "menu"
   type "root" key "ArrowLeft"
   type "root" key "ArrowUp"
   type "root" key " "
   expect state stance == 0
   type "root" key " "
-  expect state phase == "target"
+  expect state phase == "confirm"
+  expect state plan.0 == "Fire"
+  expect state plan.1 == "Ice"
   type "root" key " "
   expect state phase == "act"
-  expect state cmd == "Fire"
-  clock +450
+  expect state queue.1 == "Ice"
+  expect state msg == "Fire"
+  clock +350
   expect state step == 1
-  clock +700
-  expect state step == 0
+  clock +450
+  expect state qi == 1
+  expect state msg == "Ice"
+
+test "choosing abilities one at a time fills the segments, and Escape takes one back"
+  type "root" key "ArrowRight" for 5300
+  clock +1000
+  clock +3000
+  expect state phase == "menu"
+  type "root" key "ArrowDown"
+  type "root" key " "
+  expect state phase == "target"
+  type "root" key " "
+  expect state phase == "menu"
+  expect state plan.0 == "Fire"
+  type "root" key "Escape"
+  expect state plan.length == 0
+  type "root" key " "
+  type "root" key " "
+  type "root" key "ArrowDown"
+  type "root" key " "
+  type "root" key " "
+  expect state phase == "act"
+  expect state queue.0 == "Fire"
+  expect state queue.1 == "Ice"
 
 test "Ivy and Kai act on their own"
   type "root" key "ArrowRight" for 5300
@@ -145,14 +170,13 @@ test "a won fight shows its time and a rank"
   expect state rank == 5
   expect state scene == "field"
 
-test "Rook's Item menu: a Potion heals the party and uses his turn"
+test "Rook's Item menu: a Potion heals the party and takes both segments"
   type "root" key "ArrowRight" for 5300
   clock +1000
   clock +3000
   expect state phase == "menu"
   expect state potions == 3
-  type "root" key "ArrowDown"
-  type "root" key "ArrowDown"
+  type "root" key "ArrowUp"
   type "root" key " "
   expect state phase == "item"
   type "root" key "Escape"
@@ -160,6 +184,36 @@ test "Rook's Item menu: a Potion heals the party and uses his turn"
   type "root" key " "
   type "root" key " "
   expect state phase == "act"
-  expect state cmd == "Potion"
-  clock +450
+  expect state queue.0 == "Potion"
+  expect state queue.length == 1
+  clock +350
   expect state potions == 2
+
+test "with Auto every turn, Assault staggers an enemy"
+  type "root" key "ArrowRight" for 5300
+  clock +1000
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  expect state staggers == 2
