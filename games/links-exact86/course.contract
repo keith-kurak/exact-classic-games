@@ -1,0 +1,95 @@
+// Hole 1: a dogleg-right par 4 of 349 yards, laid out after Pebble Beach's first.
+// Units are yards: x east, y north, the tee at the origin. The first leg runs
+// north-east to the corner at (170, 130); the second runs east to the green.
+// Condos line the left of the first leg (out of bounds); trees fill the inside
+// of the dogleg. These rules must match `lie` in gpu/shaders/course.wgsl.
+
+shape Club
+  name: string
+  short: string
+  carry: number
+  roll: number
+  loft: number
+
+fn clubs(): Club[] = [
+  Club(name="Driver", short="1W", carry=250, roll=0.12, loft=0.09),
+  Club(name="3 Wood", short="3W", carry=225, roll=0.10, loft=0.10),
+  Club(name="3 Iron", short="3I", carry=190, roll=0.07, loft=0.12),
+  Club(name="5 Iron", short="5I", carry=170, roll=0.06, loft=0.13),
+  Club(name="7 Iron", short="7I", carry=150, roll=0.05, loft=0.15),
+  Club(name="9 Iron", short="9I", carry=128, roll=0.04, loft=0.17),
+  Club(name="Pitching Wedge", short="PW", carry=108, roll=0.03, loft=0.19),
+  Club(name="Sand Wedge", short="SW", carry=80, roll=0.02, loft=0.23),
+  Club(name="Putter", short="PT", carry=30, roll=0, loft=0)
+]
+fn putter(): number = 8
+fn clubAt(i: number): Club = match clubs().at(i) { case some(c) => c, case none => Club(name="Putter", short="PT", carry=30, roll=0, loft=0) }
+
+fn par(): number = 4
+fn holeYards(): number = 349
+fn pinX(): number = 301
+fn pinY(): number = 133
+
+fn sq(v: number): number = v * v
+fn mag(v: number): number = max(v, -v)
+// A square root: Newton's method, from a guess that suits 0–400 yards.
+fn nr(x: number, g: number): number = (g + x / g) / 2
+fn root(x: number): number = x <= 0 ? 0 : nr(x, nr(x, nr(x, nr(x, nr(x, nr(x, nr(x, nr(x, nr(x, 20 + x / 400)))))))))
+fn dist(ax: number, ay: number, bx: number, by: number): number = root(sq(bx - ax) + sq(by - ay))
+
+// The squared distance from (px, py) to the segment a–b.
+fn segT(px: number, py: number, ax: number, ay: number, bx: number, by: number): number =
+  (max(0, min(1, ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / max(0.0001, sq(bx - ax) + sq(by - ay)))))
+fn seg2(px: number, py: number, ax: number, ay: number, bx: number, by: number): number =
+  (sq(px - ax - (bx - ax) * segT(px, py, ax, ay, bx, by)) + sq(py - ay - (by - ay) * segT(px, py, ax, ay, bx, by)))
+fn ell(px: number, py: number, cx: number, cy: number, rx: number, ry: number): number =
+  (sq((px - cx) / rx) + sq((py - cy) / ry))
+
+fn bunker(x: number, y: number): number = min(min(min(ell(x, y, 186, 152, 8, 5), ell(x, y, 226, 151, 7, 4.5)),
+  min(ell(x, y, 296, 147, 13, 4), ell(x, y, 289, 117, 6, 5))), ell(x, y, 303, 116, 6, 5))
+
+// Along the first leg, and to its left.
+fn along(x: number, y: number): number = 0.794 * x + 0.607 * y
+fn side(x: number, y: number): number = -0.607 * x + 0.794 * y
+fn legA(x: number, y: number): number = seg2(x, y, 0, 0, 170, 130)
+fn legB(x: number, y: number): number = seg2(x, y, 170, 130, 298, 132)
+
+fn lieAt(x: number, y: number): string =
+  (ell(x, y, 298, 132, 15, 11) < 1 ? "Green"
+    : (bunker(x, y) < 1 ? "Sand"
+    : (x < -15 or y < -12 or x > 340 or y > 185 ? "Out of bounds"
+    : legLie(x, y, legA(x, y), legB(x, y)))))
+fn legLie(x: number, y: number, a2: number, b2: number): string =
+  (a2 < b2
+    ? (side(x, y) > 38 ? "Out of bounds" : (side(x, y) < -32 ? "Trees" : innerLie(x, y, a2, b2)))
+    : (y - 131 > 40 or y - 131 < -26 or x > 328 ? "Trees" : innerLie(x, y, a2, b2)))
+fn innerLie(x: number, y: number, a2: number, b2: number): string =
+  (along(x, y) > -6 and along(x, y) < 10 and mag(side(x, y)) < 7 ? "Tee"
+    : (min(a2, b2) < sq(20 + 3 * sin(x * 0.07) + 2 * sin(y * 0.11)) and along(x, y) > 60 ? "Fairway" : "Rough"))
+
+// How much of a club's distance a lie gives, and how far a ball rolls on it.
+fn lieMul(lie: string, short: string): number =
+  (lie == "Sand" ? (short == "SW" ? 0.9 : 0.55) : (lie == "Rough" ? 0.82 : (lie == "Trees" ? 0.5 : 1)))
+fn rollMul(lie: string): number =
+  (lie == "Fairway" or lie == "Tee" or lie == "Out of bounds" ? 1 : (lie == "Green" ? 0.6 : (lie == "Rough" ? 0.3 : 0)))
+// The putter's full stroke grows with the putt.
+fn putterRange(d: number): number = d < 8 ? 10 : (d < 20 ? 25 : 45)
+
+// The club that reaches d from this lie with the least to spare; the driver
+// when none does, the putter on the green.
+fn autoClub(lie: string, d: number): number =
+  (lie == "Green" ? putter()
+    : max(0, [0, 1, 2, 3, 4, 5, 6, 7].filter(i => clubAt(i).carry * lieMul(lie, clubAt(i).short) >= d).length - 1))
+
+// Where to aim by default: the corner of the dogleg from the first leg, else the pin.
+fn firstLeg(x: number, y: number): bool = x < 150 and y < 112
+fn aimTx(x: number, y: number): number = firstLeg(x, y) ? 170 : pinX()
+fn aimTy(x: number, y: number): number = firstLeg(x, y) ? 130 : pinY()
+
+fn scoreName(strokes: number): string =
+  (strokes == 1 ? "Hole in one!"
+    : (strokes - par() <= -2 ? "Eagle!"
+    : (strokes - par() == -1 ? "Birdie!"
+    : (strokes - par() == 0 ? "Par"
+    : (strokes - par() == 1 ? "Bogey"
+    : (strokes - par() == 2 ? "Double bogey" : `+${strokes - par()}`))))))

@@ -1,0 +1,52 @@
+// The golfer, seen down the line: the camera looks at the target from behind
+// the ball, so a right-handed golfer is in profile, facing right, toward the
+// ball, with the target into the screen. Hips back, knees flexed, spine tilted
+// over the ball, arms hanging to the grip. The figure is about 100 units tall;
+// the ball is at (150, 100), drawn by the course shader, not here.
+
+shape Pt
+  x: number
+  y: number
+
+fn hip(pose: string): Pt = (pose == "follow" ? Pt(x=110, y=54) : (pose == "back" ? Pt(x=104, y=55) : Pt(x=102, y=56)))
+fn knee(pose: string): Pt = (pose == "follow" ? Pt(x=114, y=76) : Pt(x=116, y=76))
+fn ankle(pose: string): Pt = (pose == "follow" ? Pt(x=104, y=93) : Pt(x=110, y=95))
+fn shoulder(pose: string): Pt = (pose == "follow" ? Pt(x=114, y=27) : (pose == "back" ? Pt(x=118, y=29) : Pt(x=124, y=32)))
+fn head(pose: string): Pt = (pose == "follow" ? Pt(x=118, y=16) : (pose == "back" ? Pt(x=130, y=21) : Pt(x=135, y=24)))
+fn hands(pose: string): Pt = (pose == "back" ? Pt(x=128, y=8)
+  : (pose == "follow" ? Pt(x=104, y=10) : (pose == "putt" ? Pt(x=136, y=64) : Pt(x=137, y=62))))
+fn clubEnd(pose: string): Pt = (pose == "back" ? Pt(x=96, y=2)
+  : (pose == "follow" ? Pt(x=134, y=24) : (pose == "putt" ? Pt(x=145, y=99) : Pt(x=148, y=99))))
+// The torso as a band along the spine, hip to shoulder, 15 units deep.
+fn torso(pose: string): string = (`${hip(pose).x - 7},${hip(pose).y - 2} ${hip(pose).x + 7},${hip(pose).y + 3} `
+  + `${shoulder(pose).x + 7},${shoulder(pose).y + 6} ${shoulder(pose).x - 5},${shoulder(pose).y - 3}`)
+
+component Golfer
+  props
+    pose: string
+  view
+    svg viewBox="0 0 300 100" width="100%" height="100%" overflow="visible"
+      ellipse cx=118 cy=98 rx=24 ry=3.5 fill="#000000" opacity=0.28
+      // The far (left) leg, a little behind and in shade.
+      line x1=(hip(pose).x + 3) y1=hip(pose).y x2=(pose == "follow" ? 120 : 120) y2=75 stroke="#6c7079" stroke-width=9 stroke-linecap="round"
+      line x1=120 y1=75 x2=(pose == "follow" ? 120 : 116) y2=95 stroke="#6c7079" stroke-width=8 stroke-linecap="round"
+      ellipse cx=(pose == "follow" ? 124 : 121) cy=97 rx=7 ry=2.4 fill="#d9d9d9"
+      // The near (right) leg: on its toe after impact.
+      line x1=hip(pose).x y1=hip(pose).y x2=knee(pose).x y2=knee(pose).y stroke="#8d929b" stroke-width=10 stroke-linecap="round"
+      line x1=knee(pose).x y1=knee(pose).y x2=ankle(pose).x y2=ankle(pose).y stroke="#8d929b" stroke-width=9 stroke-linecap="round"
+      ellipse cx=(ankle(pose).x + 5) cy=(ankle(pose).y + 2) rx=7.5 ry=2.6 fill="#f4f4f4"
+      // Torso and belt.
+      polygon points=torso(pose) fill="#c23a2c"
+      line x1=(hip(pose).x - 7) y1=(hip(pose).y - 2) x2=(hip(pose).x + 7) y2=(hip(pose).y + 3) stroke="#262626" stroke-width=3
+      // Head in profile, looking at the ball, under a visor.
+      ellipse cx=head(pose).x cy=head(pose).y rx=6.5 ry=7.5 fill="#8a5a3a"
+      ellipse cx=(head(pose).x - 2) cy=(head(pose).y - 2) rx=5.5 ry=6 fill="#3b2a1c"
+      line x1=(head(pose).x - 6) y1=(head(pose).y - 5) x2=(head(pose).x + (pose == "follow" ? 3 : 10)) y2=(head(pose).y - (pose == "follow" ? 7 : 2))
+        stroke="#f2f2f2" stroke-width=3 stroke-linecap="round"
+      // Arms from the shoulder to the grip, the near arm over the far one.
+      line x1=(shoulder(pose).x + 3) y1=(shoulder(pose).y + 2) x2=hands(pose).x y2=hands(pose).y stroke="#a52f23" stroke-width=6 stroke-linecap="round"
+      line x1=shoulder(pose).x y1=shoulder(pose).y x2=hands(pose).x y2=hands(pose).y stroke="#c8402f" stroke-width=6.5 stroke-linecap="round"
+      // The club: shaft, then head.
+      line x1=hands(pose).x y1=hands(pose).y x2=clubEnd(pose).x y2=clubEnd(pose).y stroke="#1e1e1e" stroke-width=1.8 stroke-linecap="round"
+      ellipse cx=clubEnd(pose).x cy=clubEnd(pose).y rx=3.4 ry=1.6 fill="#3a3a3a"
+      ellipse cx=hands(pose).x cy=hands(pose).y rx=3.3 ry=3.3 fill="#f4f4f4"

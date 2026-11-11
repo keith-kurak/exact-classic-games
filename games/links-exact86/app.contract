@@ -1,0 +1,343 @@
+// Links Exact86: one hole of golf in the style of the early-90s PC golf games.
+// The course is drawn by the `course` GPU surface (gpu/) from a fixed camera
+// behind the ball. Pick a club, aim, and swing with three presses of Space:
+// one to start the backswing, one to set the power, and one at the snap line
+// to set the accuracy. After the ball comes to rest, the view cuts to it.
+use Club, clubs, clubAt, putter, par, holeYards, pinX, pinY, sq, mag, root, dist, seg2, lieAt, lieMul, rollMul, putterRange, autoClub, aimTx, aimTy, scoreName from "./course.contract"
+use Golfer from "./golfer.contract"
+
+routes nav
+  home "/"
+
+// The swing meter runs from -0.22 (past the snap line) to 1.1 (an overswing).
+fn meterX(v: number): number = 20 + (v + 0.22) / 1.32 * 300
+fn isAimKey(k: string): bool = k == "ArrowLeft" or k == "ArrowRight" or k == "ArrowUp" or k == "ArrowDown"
+fn swingKey(k: string): bool = k == " " or k == "Enter"
+fn gameKey(k: string): bool = isAimKey(k) or swingKey(k) or k == "t" or k == "g"
+fn shotWord(a: number): string = mag(a) < 0.12 ? "Straight" : (a < 0 ? (a < -0.5 ? "Hook" : "Draw") : (a > 0.5 ? "Slice" : "Fade"))
+fn pct(v: number): string = `${round(v * 100)}%`
+fn yds(n: number): string = `${n} ${n == 1 ? "yd" : "yds"}`
+
+component LinksExact86
+  // The ball and the camera, in yards. The camera stays at the shot's start
+  // while the ball flies, then cuts to where it stopped.
+  state ballX = 0
+  state ballY = 0
+  state camX = 0
+  state camY = 0
+  // The aim, as a unit vector: at first, the corner of the dogleg.
+  state aimX = 0.794
+  state aimY = 0.607
+  state ci = 1
+  state strokes = 0
+  // aim → back → down → flight → result (→ aim) or holed.
+  state phase = "aim"
+  state m = 0
+  state power = 0
+  state acc = 0
+  state top = false
+  state msg = ""
+  state game = 0
+  // The shot in flight: start, landing, finish, height, and frames.
+  state ft = 0
+  state nAir = 0
+  state nRoll = 0
+  state sX = 0
+  state sY = 0
+  state lX = 0
+  state lY = 0
+  state fX = 0
+  state fY = 0
+  state apex = 0
+  state willHole = false
+  state shots = 0
+
+  derive lie = lieAt(ballX, ballY)
+  derive onGreen = lie == "Green"
+  derive toPin = dist(ballX, ballY, pinX(), pinY())
+  derive club = clubAt(ci)
+  derive isPutt = ci == putter()
+  derive range = isPutt ? putterRange(toPin) : club.carry * lieMul(lie, club.short)
+  derive aiming = phase == "aim" or phase == "back" or phase == "down"
+  derive ring = aiming and not isPutt ? range : 0
+  // The wind changes each game: 0–10 mph, in a direction from the game number.
+  derive windMph = (game * 7 + 4) % 11
+  derive windA = game * 2.39 + 0.8
+  derive wx = windMph * cos(windA)
+  derive wy = windMph * sin(windA)
+  // The wind as the camera sees it: ahead and to the right.
+  derive windAhead = wx * aimX + wy * aimY
+  derive windRight = wx * aimY - wy * aimX
+
+  // Where the ball is drawn: in flight, along its arc, then rolling.
+  derive inFlight = phase == "flight"
+  derive s = nAir > 0 ? min(1, ft / nAir) : 1
+  derive r = nRoll > 0 ? max(0, min(1, (ft - nAir) / nRoll)) : 1
+  derive ease = 1 - (1 - r) * (1 - r)
+  derive inAir = inFlight and ft <= nAir and nAir > 0
+  // Drag: the ball leaves fast and arrives at a third of that speed. Its height
+  // peaks about 60% of the way out and falls more steeply than it rose.
+  derive xs = s * (1.5 - 0.5 * s)
+  derive us = xs * (0.6 + 0.4 * xs)
+  derive showX = inFlight ? (inAir ? sX + (lX - sX) * xs : lX + (fX - lX) * ease) : ballX
+  derive showY = inFlight ? (inAir ? sY + (lY - sY) * xs : lY + (fY - lY) * ease) : ballY
+  derive showZ = inAir ? apex * 4 * us * (1 - us) : 0
+  derive pose = phase == "back" or phase == "down" ? "back" : (phase == "aim" ? (isPutt ? "putt" : "address") : (shots > 0 and sX == camX and sY == camY ? "follow" : "address"))
+  derive toPinText = onGreen ? `${round(toPin * 3)} ft` : yds(round(toPin))
+
+  // ── Aim and club ──
+
+  action turn(dir: number)
+    let c = cos(0.02)
+    let sn = sin(0.02) * dir
+    let ox = aimX
+    let oy = aimY
+    aimX = ox * c - oy * sn
+    aimY = ox * sn + oy * c
+
+  action clubBy(n: number)
+    ci = max(0, min(putter(), ci + n))
+
+  // ── The swing: three presses ──
+
+  action press
+    if phase == "aim"
+      top = false
+      m = 0
+      phase = "back"
+    else
+      if phase == "back"
+        power = m
+        phase = "down"
+      else
+        if phase == "down"
+          strike(max(-1, min(1, 0 - m / 0.2)))
+
+  task swingClock when phase == "back" or phase == "down"
+    every(20, swingTick)
+  action swingTick
+    if phase == "back"
+      let up = m + 0.014
+      if up >= 1.1
+        m = 1.1
+        power = 1.1
+        phase = "down"
+      else
+        m = up
+    else
+      let down = m - 0.02
+      if down <= -0.22
+        m = -0.22
+        strike(1)
+      else
+        m = down
+
+  // The shot, from the power and the accuracy (-1 hook … 0 straight … 1 slice).
+  // An overswing (power over 100%) makes the accuracy touchier.
+  action strike(a0: number)
+    let a = a0 * (1 + max(0, power - 1) * 10)
+    let ang = a * (isPutt ? 0.05 : 0.13)
+    let dx = aimX * cos(ang) + aimY * sin(ang)
+    let dy = aimY * cos(ang) - aimX * sin(ang)
+    let carry = isPutt ? putterRange(toPin) * power : club.carry * power * lieMul(lie, club.short)
+    let drift = isPutt ? 0 : carry / 100 * 0.5
+    let lx = isPutt ? ballX : ballX + dx * carry + wx * drift
+    let ly = isPutt ? ballY : ballY + dy * carry + wy * drift
+    let rl = isPutt ? carry : carry * club.roll * rollMul(lieAt(lx, ly))
+    let fx = lx + dx * rl
+    let fy = ly + dy * rl
+    // In the hole: rolling over the cup slowly enough, or landing in it.
+    let over = seg2(pinX(), pinY(), lx, ly, fx, fy) < (isPutt ? 0.16 : 0.09)
+    let slow = sq(fx - pinX()) + sq(fy - pinY()) < (isPutt ? 9 : 25)
+    let dunk = sq(lx - pinX()) + sq(ly - pinY()) < 0.25
+    let holed = (over and slow) or dunk
+    acc = a
+    sX = ballX
+    sY = ballY
+    lX = lx
+    lY = ly
+    fX = holed ? pinX() : fx
+    fY = holed ? pinY() : fy
+    willHole = holed
+    apex = carry * club.loft
+    nAir = isPutt ? 0 : round(30 + carry / 5)
+    nRoll = isPutt ? round(10 + carry * 1.5) : round(6 + rl * 1.2)
+    ft = 0
+    strokes = strokes + 1
+    shots = shots + 1
+    msg = isPutt ? "" : `${shotWord(a)} · ${pct(power)}`
+    phase = "flight"
+
+  task flightClock when phase == "flight"
+    every(30, flightTick)
+  action flightTick
+    let next = ft + 1
+    ft = next
+    if next >= nAir + nRoll
+      land()
+
+  action land
+    let fl = lieAt(fX, fY)
+    if willHole
+      ballX = pinX()
+      ballY = pinY()
+      msg = scoreName(strokes)
+      phase = "holed"
+    else
+      if fl == "Out of bounds"
+        strokes = strokes + 1
+        msg = "Out of bounds · stroke and distance"
+        phase = "result"
+      else
+        ballX = fX
+        ballY = fY
+        msg = fl == "Green" and isPutt ? `${round(dist(fX, fY, pinX(), pinY()) * 3)} ft to go` : `${fl} · ${yds(round(dist(sX, sY, fX, fY)))}`
+        phase = "result"
+
+  task resultClock when phase == "result" key=`${shots}`
+    after(1800, nextShot)
+
+  // The cut to the next view: the camera to the ball, aimed at the corner or
+  // the pin, with the club that reaches.
+  action nextShot
+    let tx = aimTx(ballX, ballY)
+    let ty = aimTy(ballX, ballY)
+    let d = max(0.01, dist(ballX, ballY, tx, ty))
+    let l = lieAt(ballX, ballY)
+    camX = ballX
+    camY = ballY
+    aimX = (tx - ballX) / d
+    aimY = (ty - ballY) / d
+    ci = autoClub(l, d)
+    m = 0
+    msg = ""
+    phase = "aim"
+
+  // A putt of two yards or less can be given: one more stroke, and holed.
+  action gimme
+    if onGreen and toPin <= 2 and phase == "aim"
+      let n = strokes + 1
+      strokes = n
+      ballX = pinX()
+      ballY = pinY()
+      msg = scoreName(n)
+      phase = "holed"
+
+  action newGame
+    ballX = 0
+    ballY = 0
+    camX = 0
+    camY = 0
+    aimX = 0.794
+    aimY = 0.607
+    ci = 1
+    strokes = 0
+    shots = 0
+    m = 0
+    msg = ""
+    top = false
+    game = game + 1
+    phase = "aim"
+
+  // ── Keys ──
+
+  action onKey(k: string, e: KeyboardEvent)
+    if gameKey(k)
+      preventDefault()
+    if phase == "holed"
+      if swingKey(k)
+        newGame()
+    else
+      if phase == "result"
+        if swingKey(k)
+          nextShot()
+      else
+        if swingKey(k)
+          press()
+        else
+          if phase == "aim"
+            if k == "ArrowLeft"
+              turn(1)
+            if k == "ArrowRight"
+              turn(-1)
+            if k == "ArrowUp"
+              clubBy(-1)
+            if k == "ArrowDown"
+              clubBy(1)
+            if k == "t"
+              top = not top
+            if k == "g"
+              gimme()
+
+  action toggleTop
+    top = not top
+
+  view
+    main testId="root" key=onKey width="100%" height="100%" color-scheme="dark"
+      background-color="#10160f" display="flex" flex-direction="column"
+      // The course, with the golfer and the messages over it.
+      column flex=1 min-height=0 position="relative" overflow="hidden"
+        canvas surface=course((top ? 1 : 0), camX, camY, aimX, aimY, showX, showY, showZ, ring)
+          position="absolute" left=0 top=0 width="100%" height="100%" testId="course"
+        if not top
+          column position="absolute" left=0 right=0 bottom="20%" height="36%" testId="golfer"
+            Golfer(pose=pose)
+        if msg != "" and phase != "holed"
+          row position="absolute" top=16 left=0 right=0 justify-content="center"
+            text msg font-size=20 font-weight=800 color="#ffffff" background-color="#000000a0"
+              padding="6px 16px" border-radius=6 testId="msg"
+        if top
+          text "Top view · T to return" position="absolute" top=16 left=16 font-size=14 font-weight=700
+            color="#ffffff" background-color="#000000a0" padding="4px 10px" border-radius=4
+        if phase == "holed"
+          column position="absolute" inset=0 align-items="center" justify-content="center" testId="holed"
+            column background-color="#14301a" border="3px solid #e8c547" border-radius=10
+              padding="22px 40px" align-items="center" gap=8
+              text msg font-size=36 font-weight=900 color="#e8c547" testId="score-name"
+              text `${strokes} ${strokes == 1 ? "stroke" : "strokes"} on a par ${par()}` font-size=18 font-weight=700 color="#ffffff" testId="score"
+              text "Space to play again" font-size=14 color="#c9d6c6"
+      // The panel.
+      row height=148 flex-shrink=0 padding="10px 16px" gap=18 align-items="stretch"
+        background-color="#1d2a1c" border-top="3px solid #e8c547" color="#eef3ea"
+        column width=230 gap=3 justify-content="center"
+          text "LINKS EXACT86" font-size=16 font-weight=900 letter-spacing=2 color="#e8c547"
+          text `Hole 1 · Par ${par()} · ${yds(holeYards())}` font-size=14 font-weight=700
+          text `Shot ${phase == "flight" or phase == "result" or phase == "holed" ? strokes : strokes + 1}` font-size=14 font-weight=700 testId="shot"
+          text `To pin: ${toPinText}` font-size=14 font-weight=700 testId="to-pin"
+          text `Lie: ${lie}` font-size=14 font-weight=700 testId="lie"
+        column flex=1 align-items="center" justify-content="center" gap=6
+          svg viewBox="0 0 340 64" width=340 height=64 testId="meter"
+            rect x=14 y=18 width=312 height=24 rx=4 fill="#0d140c" stroke="#e8c547" stroke-width=2
+            if phase == "back"
+              rect x=meterX(0) y=22 width=max(0, meterX(m) - meterX(0)) height=16 fill="#3fae4a"
+            if phase == "down" or phase == "flight" or phase == "result"
+              rect x=meterX(0) y=22 width=max(0, meterX(power) - meterX(0)) height=16 fill="#e8c547" opacity=0.75
+            // The snap line, 100%, and the overswing zone.
+            rect x=(meterX(0) - 1.5) y=12 width=3 height=36 fill="#ffffff"
+            rect x=(meterX(1) - 1) y=14 width=2 height=32 fill="#e05a47"
+            rect x=meterX(1) y=22 width=(meterX(1.1) - meterX(1)) height=16 fill="#e05a47" opacity=0.25
+            text "0" x=(meterX(0) - 4) y=60 font-size=11 fill="#c9d6c6"
+            text "50" x=(meterX(0.5) - 7) y=60 font-size=11 fill="#c9d6c6"
+            text "100" x=(meterX(1) - 10) y=60 font-size=11 fill="#c9d6c6"
+            if phase == "back" or phase == "down"
+              polygon points=`${meterX(m) - 7},4 ${meterX(m) + 7},4 ${meterX(m)},16` fill="#ffffff"
+          text (phase == "aim" ? "Space: backswing" : (phase == "back" ? "Space: set power" : (phase == "down" ? "Space at the white line" : " ")))
+            font-size=13 font-weight=700 color="#c9d6c6" testId="swing-hint"
+          text "← → aim   ↑ ↓ club   T top view   G gimme" font-size=12 color="#8fa08b"
+        column width=200 gap=4 justify-content="center"
+          row gap=8 align-items="center"
+            text club.short font-size=26 font-weight=900 color="#e8c547" testId="club"
+            column
+              text club.name font-size=14 font-weight=700
+              text (isPutt ? `Full stroke ${yds(putterRange(toPin))}` : `About ${yds(round(range))}`) font-size=12 color="#c9d6c6"
+          row gap=10 align-items="center"
+            svg viewBox="0 0 60 60" width=52 height=52 testId="wind"
+              ellipse cx=30 cy=30 rx=27 ry=27 fill="#0d140c" stroke="#e8c547" stroke-width=2
+              line x1=(30 - windRight * 2.2) y1=(30 + windAhead * 2.2) x2=(30 + windRight * 2.2) y2=(30 - windAhead * 2.2)
+                stroke="#ffffff" stroke-width=3 stroke-linecap="round"
+              ellipse cx=(30 + windRight * 2.2) cy=(30 - windAhead * 2.2) rx=4 ry=4 fill="#e05a47"
+            column
+              text "WIND" font-size=11 font-weight=800 color="#8fa08b"
+              text `${windMph} mph` font-size=14 font-weight=700 testId="wind-mph"
+          button press=toggleTop testId="top-toggle" font-size=12
+            text (top ? "Back to the shot" : "Top view")
