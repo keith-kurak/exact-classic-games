@@ -57,7 +57,7 @@ bun run test              # every game
 bun run test:exactbound   # 8 tests
 bun run test:links        # 5 tests
 bun run test:gear         # 10 tests
-bun run test:odyssey      # 9 tests
+bun run test:odyssey      # 10 tests
 bun run test:engine       # the NES picture processor's own tests
 ```
 
@@ -107,7 +107,7 @@ near its edge. At each waypoint a guard stops and slowly looks both ways.
 
 Battles run in real time: gauges fill and enemies attack while your menu is open; only one
 action plays at a time, the next right after. Each member's ATB gauge has two segments, one
-ability each. You command Rook, the leader; his two slots sit above the commands, each an ability
+ability each. You command Rook, the leader; his slots appear above the commands as you fill them, each an ability
 over its filling segment. Choose an ability to fill slot one; choose a second, then its target,
 to commit both (they turn yellow), and Rook acts when his gauge is full. **Auto** fills both
 slots by his role; Space commits them. Escape takes back a slot. **Item** commits a Potion, which

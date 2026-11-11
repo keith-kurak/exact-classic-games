@@ -35,7 +35,7 @@ test "the battle runs in real time: allies act while Rook's menu is open"
   expect state phase == "fight"
   expect state ui == "menu"
   clock +3000
-  expect state lastAuto == "Ivy"
+  expect state lastAuto == "Kai"
   expect state ui == "menu"
   expect state committed == false
 
@@ -92,7 +92,7 @@ test "a Potion takes Rook's turn and heals the party"
   clock +4000
   expect state potions == 2
 
-test "Auto every turn, Assault staggers enemies and wins"
+test "Auto alone in Assault, all Blast, is wiped out"
   type "root" key "ArrowRight" for 5300
   clock +1000
   type "root" key " "
@@ -143,7 +143,107 @@ test "Auto every turn, Assault staggers enemies and wins"
   type "root" key " "
   type "root" key " "
   clock +2500
-  clock +3000
+  expect state wins == 0
+  expect state tx == 11
+
+test "Auto in Balance staggers the hounds and wins, with a rank"
+  type "root" key "ArrowRight" for 5300
+  clock +1000
+  type "root" key "ArrowLeft"
+  type "root" key "ArrowDown"
+  type "root" key "ArrowDown"
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
   expect state wins == 1
-  expect state rank == 5
+  expect state rank == 4
+  expect state staggers == 2
   expect state scene == "field"

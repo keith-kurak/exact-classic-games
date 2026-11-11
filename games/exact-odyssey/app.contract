@@ -3,7 +3,7 @@
 // it walks the field, starts fights, runs the battle, and tells the surface
 // what is on screen as small text specs (see gpu/src/lib.rs).
 use Npc, fieldMap, tileAt, walkable, thicket, npcs, npcAt, blocked, dx, dy, camAxis, nextRng from "./field.contract"
-use Foe, foeOf, group, foeTx, foeTy, labelRow, staggerText, potionHeal, startPotions, parOf, nameOf, maxHp, atkOf, speedOf, full, stances, stanceName, roleOf, abilityOf, needsTarget, isStrike, power, chainGain, hitFor, drain, staggerTicks, rolePlan, segments, announce, slotText, lowest, stars, starLine, clockOf, nth, word, put, pad3, padTo, gauge from "./battle.contract"
+use Foe, foeOf, group, foeTx, foeTy, labelRow, staggerText, potionHeal, startPotions, parOf, nameOf, maxHp, atkOf, speedOf, full, stances, stanceName, roleOf, abilityOf, needsTarget, isStrike, power, chainGain, hitFor, chainUp, maxChain, drain, staggerTicks, rolePlan, segments, announce, slotText, lowest, stars, starLine, clockOf, nth, word, put, pad3, padTo, gauge from "./battle.contract"
 
 fn keyDir(k: string): string = (k == "ArrowUp" or k == "w" ? "up" : (k == "ArrowDown" or k == "s" ? "down"
   : (k == "ArrowLeft" or k == "a" ? "left" : (k == "ArrowRight" or k == "d" ? "right" : ""))))
@@ -126,7 +126,8 @@ component ExactOdyssey
   // segment filling. Committed slots turn yellow.
   derive seg1 = min(24, nth(atb, 0) * 2)
   derive seg2 = max(0, (nth(atb, 0) - 12) * 2)
-  derive slotLine = `${slotText(word(plan, 0), committed)}${gauge(seg1, 3)} ${slotText(word(plan, 1), committed)}${gauge(seg2, 3)}`
+  // A slot shows only once it holds an ability.
+  derive slotLine = `${slotText(word(plan, 0), committed)}${gauge(seg1, 3)}${plan.length > 1 ? ` ${slotText(word(plan, 1), committed)}${gauge(seg2, 3)}` : ""}`
   // The title is the stance; its arrow says Left changes it.
   derive statusLines = ([`<${stanceName(stance)}`].concat([0, 1, 2].map(i => [
     `${padTo(nameOf(i), 4)} ${pad3(nth(hp, i))}${gauge(nth(atb, i), 3)}`, `  {${roleOf(stance, i)}}`]).flat()))
@@ -136,7 +137,7 @@ component ExactOdyssey
   derive topMsg = ui == "stance" and fighting ? `${roleOf(stanceCursor, 0)} ${roleOf(stanceCursor, 1)} ${roleOf(stanceCursor, 2)}` : msg
   derive battleWindows = ([`0,20,10,10,2|${foeLines.join("|")}`, `10,20,9,10,2|${menuLines.join("|")}`,
     `19,20,13,10|${statusLines.join("|")}`]
-    .concat(fighting ? [`10,17,21,3|${slotLine}`] : [])
+    .concat(fighting and plan.length > 0 ? [`10,17,21,3|${slotLine}`] : [])
     .concat(staggerLabels)
     .concat(fighting and ui == "stance" ? [`0,20,10,10,2|${stanceLines.join("|")}`] : [])
     .concat(fighting and ui == "item" ? [`0,20,10,10,2| Potion|   x${potions}`] : [])
@@ -410,10 +411,10 @@ component ExactOdyssey
       let ch = nth(chain, t)
       let broken = nth(brk, t) > 0
       let d = hitFor(power(c, atkOf(actor)), ch, broken, r)
-      let up = ch + chainGain(c)
+      let up = chainUp(ch, chainGain(c), broken)
       let breaks = not broken and up >= foe.breakAt
       foeHp = put(foeHp, t, max(0, nth(foeHp, t) - d))
-      chain = put(chain, t, min(999, breaks ? up + 50 : up))
+      chain = put(chain, t, min(maxChain(), breaks ? up + 50 : up))
       brk = breaks ? put(brk, t, staggerTicks()) : brk
       hold = isStrike(c) ? put(hold, t, 40) : hold
       fx = put(fx, t, 1)

@@ -19,8 +19,8 @@ shape Foe
   // The time to beat for a five-star rank, in battle ticks (50 ms).
   par: number
 
-fn drone(): Foe = Foe(name="Drone", hp=140, atk=12, breakAt=180, speed=0.36, par=500)
-fn hound(): Foe = Foe(name="Hound", hp=100, atk=16, breakAt=150, speed=0.46, par=380)
+fn drone(): Foe = Foe(name="Drone", hp=600, atk=24, breakAt=180, speed=0.4, par=300)
+fn hound(): Foe = Foe(name="Hound", hp=420, atk=30, breakAt=150, speed=0.5, par=225)
 fn foeOf(name: string): Foe = (name == "Drone" ? drone() : hound())
 // Enemy groups, and where each enemy stands, in tiles (even, for attributes).
 fn group(k: number): string[] = (k == 0 ? ["Drone"] : (k == 1 ? ["Hound", "Hound"] : ["Drone", "Hound"]))
@@ -39,7 +39,7 @@ fn names(): string[] = ["Rook", "Ivy", "Kai"]
 fn nameOf(i: number): string = match names().at(i) { case some(n) => n, case none => "" }
 fn maxHp(i: number): number = (i == 0 ? 120 : (i == 1 ? 100 : 90))
 fn atkOf(i: number): number = (i == 0 ? 14 : (i == 1 ? 10 : 12))
-fn speedOf(i: number): number = (i == 0 ? 0.5 : (i == 1 ? 0.42 : 0.46))
+fn speedOf(i: number): number = (i == 0 ? 0.34 : (i == 1 ? 0.3 : 0.32))
 fn full(): number = 24
 
 // Stances: the role each member plays in each.
@@ -59,10 +59,14 @@ fn isStrike(cmd: string): bool = cmd == "Attack" or cmd == "Slash"
 // Damage before the chain, and how much it adds to the chain.
 fn power(cmd: string, atk: number): number = (cmd == "Slash" ? atk * 2 : (cmd == "Attack" ? atk * 1.4 : (cmd == "Fire" ? atk * 1.2 : atk * 0.9)))
 fn chainGain(cmd: string): number = (cmd == "Fire" ? 24 : (cmd == "Ice" ? 18 : (cmd == "Slash" ? 6 : 4)))
+// The chain is the multiplier: 100% is plain damage, 300% three times it.
 fn hitFor(base: number, chain: number, broken: bool, r: number): number =
-  round(base * chain / 100 * (broken ? 1.5 : 1) * (0.9 + (r % 21) / 100))
+  round(base * chain / 100 * (0.9 + (r % 21) / 100))
+// The chain climbs at half speed while staggered, and tops out at 400%.
+fn chainUp(chain: number, gain: number, broken: bool): number = min(maxChain(), chain + (broken ? gain / 2 : gain))
+fn maxChain(): number = 400
 // How fast a chain drains a tick: slowly while a Strike hit steadies it.
-fn drain(held: bool): number = (held ? 0.1 : 0.45)
+fn drain(held: bool): number = (held ? 0.08 : 0.3)
 fn staggerTicks(): number = 120
 
 // The living member with the smallest share of their HP left.
@@ -79,7 +83,7 @@ fn rolePlan(role: string, hurt: bool, provoking: bool): string[] =
   (role == "Strike" ? ["Attack", "Slash"] : (role == "Blast" ? ["Fire", "Ice"]
     : (role == "Mend" ? (hurt ? ["Cure", "Cure"] : ["Heal", "Heal"]) : (provoking ? ["Steel", "Steel"] : ["Provoke", "Steel"]))))
 // A slot in Rook's ATB: an ability name, six wide; yellow once committed.
-fn slotText(name: string, committed: bool): string = (committed and name != "" ? `{${padTo(name, 6)}}` : padTo(name == "" ? "  -" : name, 6))
+fn slotText(name: string, committed: bool): string = (committed ? `{${padTo(name, 6)}}` : padTo(name, 6))
 // The top window names abilities; a plain attack shows nothing.
 fn announce(name: string): string = (name == "Attack" or name == "attack" ? "" : name)
 
