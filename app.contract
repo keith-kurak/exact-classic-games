@@ -14,6 +14,8 @@ sound "assets/enemy-attack.wav"
 sound "assets/enemy-die.wav"
 sound "assets/fire.wav"
 sound "assets/heal.wav"
+sound "assets/text-blip.wav"
+sound "assets/confirm.wav"
 
 shape Viewport
   width: number
@@ -93,11 +95,15 @@ component Exactbound
 
   // ── Text ──
 
-  // Messages type in, four characters every 40 ms.
+  // Messages type in, four characters every 40 ms, with a text blip.
   task typewriter when typed < total
     every(40, typeOn)
   action typeOn
-    typed = typed + 4
+    let shownNow = typed + 4
+    typed = shownNow
+    // A blip every other tick, while text is still coming in.
+    if shownNow % 8 == 0 and shownNow < total
+      playSound("assets/text-blip.wav", group="blip")
   action say(a: string, b: string)
     msg1 = a
     msg2 = b
@@ -197,7 +203,12 @@ component Exactbound
     shownHp = roll(shownHp, partyHp)
 
   // A hero's turn: Attack picks a target when more than one foe stands.
+  // The cursor-confirm sound, for a command, a spell or a target the player picks.
+  action confirmSound
+    playSound("assets/confirm.wav", group="ui")
+
   action attack
+    confirmSound()
     if living(foeHp).length > 1
       phase = "target"
       cursor = livingFrom(foeHp, 0)
@@ -221,17 +232,21 @@ component Exactbound
   // Magic: Fire and Heal, when the hero has the PP for them.
   action magic
     if phase == "menu" and heroAt(actor).pp > 0
+      confirmSound()
       phase = "magic"
       cursor = 0
   action fire
     if phase == "magic" and hpAt(ppNow, actor) >= fireCost()
+      confirmSound()
       choose(100)
   action heal
     if phase == "magic" and hpAt(ppNow, actor) >= healCost()
+      confirmSound()
       choose(200)
 
   // Auto Fight: each hero attacks the weakest foe, until it is turned off.
   action autoOn
+    confirmSound()
     auto = true
   action autoOff
     auto = false
@@ -242,21 +257,26 @@ component Exactbound
       choose(weakest(foeHp))
 
   action run
+    confirmSound()
     outcome = "fled"
     phase = "play"
     say("• The party ran away!", "")
 
   action pick0
     if phase == "target"
+      confirmSound()
       choose(0)
   action pick1
     if phase == "target"
+      confirmSound()
       choose(1)
   action pick2
     if phase == "target"
+      confirmSound()
       choose(2)
   action pick3
     if phase == "target"
+      confirmSound()
       choose(3)
 
   // A message moves on by itself once it is typed, or at once on a key or click.
@@ -426,6 +446,7 @@ component Exactbound
                   cursor = prevLiving(foeHp, cursor)
                 else
                   if confirmKey(k)
+                    confirmSound()
                     choose(cursor)
                   else
                     if cancelKey(k)
