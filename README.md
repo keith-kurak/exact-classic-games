@@ -69,7 +69,7 @@ The tests are each game's `app.test.contract`. They build the macOS app and driv
 | Left / Right | Choose a target |
 
 Every villager in a blue T-shirt starts a battle after they talk. Juniper has a Magic
-menu (Fire and Heal). **Auto Fight** plays the battle for you; any key takes the controls back.
+menu (Fire and Heal). **Auto Fight** plays the battle for you; Escape or X takes the controls back.
 
 ### Links Exact86
 
