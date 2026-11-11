@@ -110,14 +110,19 @@ component ExactOdyssey
   derive inBattle = scene == "battle"
   derive fighting = phase == "fight"
   derive acting = play == "act"
-  // The one acting leaps in an arc to beside its target for targeted
-  // abilities (casting in place otherwise), and back when done.
+  // Strike moves leap in an arc to beside the target; spells are thrown from
+  // where the caster stands: a fire or ice ball flies to the target.
   derive aimNow = nth(foeHp, nth(qAims, qi)) > 0 ? nth(qAims, qi) : (nth(qAims, qi) == 0 ? 1 : 0)
-  derive leaping = acting and needsTarget(word(queue, qi))
+  derive leaping = acting and isStrike(word(queue, qi))
+  derive spell = acting and (word(queue, qi) == "Fire" or word(queue, qi) == "Ice")
+  derive throwT = min(1, leap / 4)
+  derive ballX = round(partyX(actor) - 18 + (foeTx(aimNow, foes.length) * 8 + 24 - (partyX(actor) - 18)) * throwT)
+  derive ballY = round(partyY(actor) + 4 + (foeTy(aimNow) * 8 + 22 - (partyY(actor) + 4)) * throwT - sin(throwT * 3.14159) * 10)
+  derive ballSprite = spell and step == 0 ? [`${word(queue, qi) == "Fire" ? "fireball" : "iceball"}:${ballX}:${ballY}:`] : []
   derive leapT = min(1, leap / 5)
   derive leapX = round(partyX(actor) + (foeTx(aimNow, foes.length) * 8 + 66 - partyX(actor)) * leapT)
   derive leapY = round(partyY(actor) + (foeTy(aimNow) * 8 + 24 - partyY(actor)) * leapT - sin(leapT * 3.14159) * 14)
-  derive partySprites = [0, 1, 2].map(i => `${nth(hp, i) <= 0 ? "ko" : (acting and actor == i ? `strike${i}` : `idle${i}`)}:${acting and actor == i ? (leaping ? leapX : partyX(i) - 16) : partyX(i)}:${acting and actor == i and leaping ? leapY : partyY(i)}:${i}`)
+  derive partySprites = [0, 1, 2].map(i => `${nth(hp, i) <= 0 ? "ko" : (acting and actor == i ? (leaping ? `strike${i}` : `cast${i}`) : `idle${i}`)}:${acting and actor == i ? (leaping ? leapX : partyX(i) - 8) : partyX(i)}:${acting and actor == i and leaping ? leapY : partyY(i)}:${i}`)
   derive pointing = fighting and not committed
   // The chooser, bottom left: commands, or a target, stance or item list in
   // their place. It goes away while Thunda's commands wait or play out.
@@ -126,7 +131,7 @@ component ExactOdyssey
   derive handSprite = chooserShown ? [`hand:2:${(21 + handRow * 2) * 8}:`] : []
   derive dmgSprite = dmgT > 0 ? [`#${dmgText}:${dmgX}:${dmgY - (dmgT > 12 ? (16 - dmgT) * 2 : 8)}:3`] : []
   // OAM order is draw priority: damage numbers and the cursor in front.
-  derive battleSprites = dmgSprite.concat(handSprite).concat(partySprites)
+  derive battleSprites = dmgSprite.concat(handSprite).concat(ballSprite).concat(partySprites)
   derive enemySpec = ([0, 1].filter(i => i < foes.length and nth(fx, i) < 6)
     .map(i => `${word(foes, i) == "Drone" ? "drone" : "hound"}:${foeTx(i, foes.length)}:${foeTy(i)}:${nth(fx, i) > 0 ? nth(fx, i) : (nth(juggle, i) > 0 ? 7 : 0)}`).join(";"))
   // The enemy window lists names (yellow while staggered). Under each enemy,
@@ -451,6 +456,7 @@ component ExactOdyssey
       if play == "act" and n < queue.length and left > 0
         qi = n
         step = 0
+        leap = 0
         msg = announce(word(queue, n))
       else
         settle()
