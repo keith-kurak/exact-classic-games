@@ -367,14 +367,15 @@ pub fn render(scene: &Scene) -> Frame {
     Frame { pixels }
 }
 
-/// Text in a window: 8×8 glyph tiles. Built from a 5×7 font drawn in colour
-/// `ink` on colour `paper`, so text sits in the window's palette.
-pub fn glyph_tile(rows: &[&str; 7], ink: u8, paper: u8) -> Tile {
+/// Text in a window: one 8×8 glyph tile from up to 8 rows of up to 8
+/// characters (`#` ink, anything else paper), drawn in colour `ink` on colour
+/// `paper`, so text sits in the window's palette. Row 7 is for descenders.
+pub fn glyph_tile(rows: &[&str], ink: u8, paper: u8) -> Tile {
     let mut t = Tile([[paper; 8]; 8]);
-    for (y, row) in rows.iter().enumerate() {
-        for (x, ch) in row.chars().enumerate() {
-            if ch != '.' && ch != ' ' {
-                t.0[y][x + 1] = ink;
+    for (y, row) in rows.iter().take(8).enumerate() {
+        for (x, ch) in row.chars().take(8).enumerate() {
+            if ch == '#' {
+                t.0[y][x] = ink;
             }
         }
     }

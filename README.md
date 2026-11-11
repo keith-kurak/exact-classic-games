@@ -57,7 +57,7 @@ bun run test              # every game
 bun run test:exactbound   # 8 tests
 bun run test:links        # 5 tests
 bun run test:gear         # 10 tests
-bun run test:odyssey      # 4 tests
+bun run test:odyssey      # 7 tests
 bun run test:engine       # the NES picture processor's own tests
 ```
 
@@ -105,10 +105,14 @@ near its edge. At each waypoint a guard stops and slowly looks both ways.
 | Space, Enter or Z | Talk; choose in battle |
 | Escape or X | Back, when choosing a target |
 
-In battle, each member's ATB gauge has three segments. When it fills, choose **FIGHT**, the
-role's skill (**SLASH**, **FIRE**, **CURE** or **PROVOKE**), **STANCE** (switch every member's
-role, free), or **FLEE**. Hits build an enemy's chain (the bar under its name); fill it and the
-enemy is **BROKEN**, taking far more damage for a while.
+In battle, each member's ATB gauge has three segments. You command Rook, the leader; Ivy and
+Kai act on their own by their roles (shown in yellow). When Rook's gauge fills, choose his
+role's two abilities, **Item** (a Potion heals the whole party), or **Flee**. Press **Left** for
+the stance menu: **Assault** (all Blast), **Rush** (Strike, Strike, Blast), **Balance** and
+**Bulwark** change everyone's role, free. Only Strike attacks; Blast's Fire and Ice build an
+enemy's chain fast, and it drains unless a Strike hit steadies it. Fill the stagger bar under an
+enemy and it is staggered, taking far more damage. A win shows your time and a 1–5 star rank;
+five stars finds a Potion.
 
 The picture comes from [`engines/nes-ppu`](engines/nes-ppu). To write the game's pattern tables
 as PNG sprite sheets and two sample frames to `games/exact-odyssey/assets/sheets/`:

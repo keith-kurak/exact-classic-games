@@ -6,9 +6,14 @@
 //! 1. scene: "field" or "battle"
 //! 2. scroll x, 3. scroll y: the field camera, in pixels
 //! 4. sprites: `name:x:y[:flags]` joined by `;`. Flags: `h` mirrors it, a
-//!    digit 0–3 overrides its palette. A name of `#123` draws those digits.
-//! 5. windows: `x,y,w,h|line|line` joined by `^`, in tiles. In lines,
-//!    letters a–i are bar tiles filled 0–8 pixels (ATB and break gauges).
+//!    digit 0–3 overrides its palette. A name of `#123` draws those digits. A
+//!    name ending `*` steps in place: `*` becomes its frame, 0 or 1, from the
+//!    frame counter.
+//! 5. windows: `x,y,w,h[,spacing]|line|line` joined by `^`, in tiles; a
+//!    spacing of 2 puts a blank row between lines. In lines, `~` and a digit
+//!    0–8 is a gauge tile filled that many pixels (ATB and stagger gauges),
+//!    and text inside `{` `}` is yellow. An entry `@x,y|text` is a label with
+//!    no window, on the backdrop (digits, `%`, gauges): stagger bars.
 //! 6. enemies: `name:tx:ty:fx` joined by `;`. fx 0 is normal, 1 a hit flash,
 //!    2–5 a defeat dissolving top-down, a tile row a step.
 //! 7. fade: 0 (full colour) to 4 (black), the NES palette fade.
@@ -44,17 +49,23 @@ struct Spec {
     battle: bool,
     scroll_x: i32,
     scroll_y: i32,
-    sprites: Vec<Sprite>,
+    sprites: String,
     overlay: Vec<Option<Cell>>,
     stage: Vec<Option<Cell>>,
     fade: u8,
 }
 
-fn parse_sprites(spec: &str, out: &mut Vec<Sprite>) {
+/// Frames a step lasts when walking in place.
+const STEP_FRAMES: u64 = 12;
+
+fn parse_sprites(spec: &str, frame: u64, out: &mut Vec<Sprite>) {
     let art = art();
+    let step = if (frame / STEP_FRAMES) % 2 == 0 { "0" } else { "1" };
     for item in spec.split(';').filter(|s| !s.is_empty()) {
         let mut f = item.split(':');
-        let name = f.next().unwrap_or("");
+        let raw = f.next().unwrap_or("");
+        let owned = raw.replace('*', step);
+        let name = owned.as_str();
         let x: i32 = f.next().and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0).round() as i32;
         let y: i32 = f.next().and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0).round() as i32;
         let flags = f.next().unwrap_or("");
@@ -63,7 +74,7 @@ fn parse_sprites(spec: &str, out: &mut Vec<Sprite>) {
         if let Some(num) = name.strip_prefix('#') {
             for (i, ch) in num.chars().enumerate() {
                 if let Some(&tile) = art.digits.get(&ch) {
-                    out.push(Sprite { x: x + i as i32 * 7, y, tile, attr: pal.unwrap_or(3) });
+                    out.push(Sprite { x: x + i as i32 * 8, y, tile, attr: pal.unwrap_or(3) });
                 }
             }
         } else if let Some(m) = art.sprites.get(name) {
@@ -75,7 +86,8 @@ fn parse_sprites(spec: &str, out: &mut Vec<Sprite>) {
 
 fn parse_windows(spec: &str) -> Vec<Option<Cell>> {
     let art = art();
-    let b = &art.border;
+    let ui = &art.ui;
+    let b = &ui.border;
     let mut cells = vec![None; COLS * ROWS];
     let mut put = |x: i32, y: i32, tile: u8| {
         if x >= 0 && y >= 0 && (x as usize) < COLS && (y as usize) < ROWS {
@@ -83,9 +95,34 @@ fn parse_windows(spec: &str) -> Vec<Option<Cell>> {
         }
     };
     for win in spec.split('^').filter(|s| !s.is_empty()) {
+        if let Some(label) = win.strip_prefix('@') {
+            let mut parts = label.splitn(2, '|');
+            let at: Vec<i32> = parts.next().unwrap_or("").split(',').filter_map(|v| v.trim().parse().ok()).collect();
+            let [x, y] = at[..] else { continue };
+            let mut chars = parts.next().unwrap_or("").chars();
+            let (mut col, mut gold) = (0, false);
+            while let Some(ch) = chars.next() {
+                if ch == '{' || ch == '}' {
+                    gold = ch == '{';
+                    continue;
+                }
+                let tile = if ch == '~' {
+                    ui.clear_bars[chars.next().and_then(|d| d.to_digit(10)).unwrap_or(0).min(8) as usize]
+                } else {
+                    *(if gold { &ui.clear_yellow } else { &ui.clear }).get(&ch).unwrap_or(&0)
+                };
+                put(x + col, y, tile);
+                col += 1;
+            }
+            continue;
+        }
         let mut parts = win.split('|');
         let rect: Vec<i32> = parts.next().unwrap_or("").split(',').filter_map(|v| v.trim().parse().ok()).collect();
-        let [x, y, w, h] = rect[..] else { continue };
+        let (x, y, w, h, gap) = match rect[..] {
+            [x, y, w, h] => (x, y, w, h, 1),
+            [x, y, w, h, g] => (x, y, w, h, g.max(1)),
+            _ => continue,
+        };
         for j in 0..h {
             for i in 0..w {
                 let tile = match (i, j) {
@@ -103,20 +140,32 @@ fn parse_windows(spec: &str) -> Vec<Option<Cell>> {
             }
         }
         for (row, line) in parts.enumerate() {
-            let ty = y + 1 + row as i32;
+            let ty = y + 1 + row as i32 * gap;
             if ty >= y + h - 1 {
                 break;
             }
-            for (col, ch) in line.chars().enumerate() {
-                let tx = x + 1 + col as i32;
+            let mut chars = line.chars().peekable();
+            let mut col = 0;
+            let mut gold = false;
+            while let Some(ch) = chars.next() {
+                if ch == '{' || ch == '}' {
+                    gold = ch == '{';
+                    continue;
+                }
+                let tx = x + 1 + col;
                 if tx >= x + w - 1 {
                     break;
                 }
-                let tile = match ch {
-                    'a'..='i' => art.bars[(ch as u8 - b'a') as usize],
-                    other => *art.glyphs.get(&other.to_ascii_uppercase()).unwrap_or(&b.fill),
+                let tile = if ch == '~' {
+                    let n = chars.next().and_then(|d| d.to_digit(10)).unwrap_or(0).min(8);
+                    ui.bars[n as usize]
+                } else if gold && ui.yellow.contains_key(&ch) {
+                    ui.yellow[&ch]
+                } else {
+                    *ui.glyphs.get(&ch).or_else(|| ui.glyphs.get(&ch.to_ascii_uppercase())).unwrap_or(&b.fill)
                 };
                 put(tx, ty, tile);
+                col += 1;
             }
         }
     }
@@ -172,7 +221,11 @@ fn draw(spec: &Spec, frame: u64, rgba: &mut [u8]) {
             .filter(|_| my >= 0)
             .and_then(|r| r.chars().nth(mx as usize).filter(|_| mx >= 0))
             .unwrap_or('T');
-        art.metatiles[&ch].cell(tx.rem_euclid(2) as usize, ty.rem_euclid(2) as usize)
+        let m = match art.frames.get(&ch) {
+            Some(frames) => &frames[(frame / 10) as usize % frames.len()],
+            None => &art.metatiles[&ch],
+        };
+        m.cell(tx.rem_euclid(2) as usize, ty.rem_euclid(2) as usize)
     };
     let stage = |tx: i32, ty: i32| -> Cell {
         if tx < 0 || ty < 0 || tx as usize >= COLS || ty as usize >= ROWS {
@@ -186,15 +239,17 @@ fn draw(spec: &Spec, frame: u64, rgba: &mut [u8]) {
         }
         spec.overlay[y as usize * COLS + x as usize]
     };
+    let mut sprites = Vec::new();
+    parse_sprites(&spec.sprites, frame, &mut sprites);
     let out = render(&Scene {
-        bg_table: &art.bg,
+        bg_table: if spec.battle { &art.bg_battle } else { &art.bg },
         spr_table: &art.spr,
         palettes,
         background: if spec.battle { &stage } else { &field },
         overlay: &overlay,
         scroll_x: if spec.battle { 0 } else { spec.scroll_x },
         scroll_y: if spec.battle { 0 } else { spec.scroll_y },
-        sprites: &spec.sprites,
+        sprites: &sprites,
         frame,
     });
     out.to_rgba(rgba);
@@ -205,6 +260,7 @@ pub fn write_sheets(dir: &std::path::Path) -> std::io::Result<()> {
     let art = art();
     std::fs::create_dir_all(dir)?;
     std::fs::write(dir.join("bg-field.png"), nes_ppu::png::sheet(&art.bg, FIELD.bg[0], false))?;
+    std::fs::write(dir.join("bg-battle.png"), nes_ppu::png::sheet(&art.bg_battle, BATTLE.bg[3], false))?;
     for (i, pal) in art::SPRITES.iter().enumerate() {
         std::fs::write(dir.join(format!("sprites-{i}.png")), nes_ppu::png::sheet(&art.spr, *pal, true))?;
     }
@@ -244,13 +300,11 @@ impl Surface for PpuSurface {
             return Err(SurfaceError(format!("ppu: expected {INPUTS} inputs, got {}", inputs.len())));
         };
         let battle = text(scene, "scene")? == "battle";
-        let mut list = Vec::new();
-        parse_sprites(&text(sprites, "sprites")?, &mut list);
         self.spec = Spec {
             battle,
             scroll_x: number(sx, "scroll x")?.round() as i32,
             scroll_y: number(sy, "scroll y")?.round() as i32,
-            sprites: list,
+            sprites: text(sprites, "sprites")?,
             overlay: parse_windows(&text(windows, "windows")?),
             stage: if battle { parse_stage(&text(enemies, "enemies")?) } else { vec![None; COLS * ROWS] },
             fade: number(fade, "fade")?.clamp(0.0, 4.0) as u8,
@@ -393,14 +447,14 @@ mod tests {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../assets/sheets");
         write_sheets(&dir).unwrap();
         let mut rgba = vec![0u8; WIDTH * HEIGHT * 4];
-        let mut field = Spec { overlay: parse_windows("1,21,30,8|WELCOME TO REEDHOLM.|ATB abcdefghi"), stage: vec![None; COLS * ROWS], ..Default::default() };
+        let mut field = Spec { overlay: parse_windows("1,19,30,10,2|Welcome to Reedholm.|The quick brown fox jumps|over the lazy dog? 0123456789|ATB ~0~2~4~6~8"), stage: vec![None; COLS * ROWS], ..Default::default() };
         field.scroll_x = 16;
         field.scroll_y = 16;
-        parse_sprites("down0:120:96;villager:160:64", &mut field.sprites);
+        field.sprites = "down*:120:96;villager*:160:64".into();
         draw(&field, 0, &mut rgba);
         std::fs::write(dir.join("frame-field.png"), nes_ppu::png::encode(256, 240, &rgba)).unwrap();
-        let mut battle = Spec { battle: true, stage: parse_stage("drone:4:8:0;hound:4:14:0"), overlay: parse_windows("0,21,10,9|DRONE|HOUND^10,21,22,9|ROOK   120 iii|IVY    100 eaa|KAI     90 iia"), ..Default::default() };
-        parse_sprites("idle:200:72;idle:208:100:1;strike:192:128:2;hand:88:176", &mut battle.sprites);
+        let mut battle = Spec { battle: true, stage: parse_stage("drone:2:8:0;hound:12:8:0"), overlay: parse_windows("0,20,10,10|Drone|~8~3~0~0 131||{Hound}|~8~8~6~0 {205}^10,20,9,10,2|Fire|Ice|Flee|<Stance^19,20,13,10|Assault|Rook 120~8~8~8|  {Blast}|Ivy  100~4~0~0|  {Blast}|Kai   90~8~8~2|  {Blast}^@2,16|~8~8~3~0~0 131^@12,16|~8~8~8~6~0{205}"), ..Default::default() };
+        battle.sprites = "idle:200:56;idle:208:88:1;strike:184:120:2;hand:66:168".into();
         draw(&battle, 0, &mut rgba);
         std::fs::write(dir.join("frame-battle.png"), nes_ppu::png::encode(256, 240, &rgba)).unwrap();
     }

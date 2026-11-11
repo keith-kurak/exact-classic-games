@@ -1,9 +1,12 @@
-// Battle rules. Each party member's ATB gauge has three segments; when it is
-// full, the game waits and that member chooses: FIGHT, their role's SKILL,
-// STANCE (switch the party's roles, free), or FLEE. Hits raise an enemy's
-// chain; at its break point the enemy is BROKEN for a while and takes far
-// more damage. STRIKE keeps the chain from draining, BLAST builds it fast,
-// MEND heals, GUARD draws attacks and halves them.
+// Battle rules. Each member's ATB gauge has three segments. When Rook's is
+// full, the game waits for you: his role's two abilities, or Flee; Left opens
+// the stance menu (switch everyone's roles, free). Ivy and Kai act on their own.
+//
+// Roles: Strike attacks (the only role that can); Blast casts Fire and Ice,
+// which build an enemy's chain fast; Mend casts Cure and Heal; Guard provokes
+// and steels itself. A chain drains quickly, unless a Strike hit has just
+// steadied it. Fill the stagger bar and the enemy is staggered: it takes
+// far more damage until the bar drains.
 
 shape Foe
   name: string
@@ -11,16 +14,26 @@ shape Foe
   atk: number
   breakAt: number
   speed: number
+  // The time to beat for a five-star rank, in battle ticks (50 ms).
+  par: number
 
-fn drone(): Foe = Foe(name="DRONE", hp=140, atk=12, breakAt=180, speed=0.36)
-fn hound(): Foe = Foe(name="HOUND", hp=100, atk=16, breakAt=150, speed=0.46)
-fn foeOf(name: string): Foe = (name == "DRONE" ? drone() : hound())
+fn drone(): Foe = Foe(name="Drone", hp=140, atk=12, breakAt=180, speed=0.36, par=500)
+fn hound(): Foe = Foe(name="Hound", hp=100, atk=16, breakAt=150, speed=0.46, par=380)
+fn foeOf(name: string): Foe = (name == "Drone" ? drone() : hound())
 // Enemy groups, and where each enemy stands, in tiles (even, for attributes).
-fn group(k: number): string[] = (k == 0 ? ["DRONE"] : (k == 1 ? ["HOUND", "HOUND"] : ["DRONE", "HOUND"]))
-fn foeTx(i: number): number = (i == 0 ? 4 : 4)
-fn foeTy(i: number): number = (i == 0 ? 6 : 12)
+fn group(k: number): string[] = (k == 0 ? ["Drone"] : (k == 1 ? ["Hound", "Hound"] : ["Drone", "Hound"]))
+// Enemies are 64×64 (8×8 tiles); two stand side by side, one stands centred.
+fn foeTx(i: number, count: number): number = (count == 1 ? 6 : (i == 0 ? 2 : 12))
+fn foeTy(i: number): number = 8
+fn labelRow(): number = 16
+// The label under an enemy: its stagger bar (5 tiles) and chain. Staggered,
+// the bar shows the stagger draining and the chain turns yellow.
+fn staggerText(chain: number, brk: number, breakAt: number): string = (brk > 0
+  ? `${gauge(brk / staggerTicks() * 40, 5)} {${floor(chain)}%}`
+  : `${gauge((chain - 100) / (breakAt - 100) * 40, 5)} ${floor(chain)}%`)
+fn parOf(g: string[]): number = foeOf(word(g, 0)).par + (g.length > 1 ? foeOf(word(g, 1)).par : 0)
 
-fn names(): string[] = ["ROOK", "IVY", "KAI"]
+fn names(): string[] = ["Rook", "Ivy", "Kai"]
 fn nameOf(i: number): string = match names().at(i) { case some(n) => n, case none => "" }
 fn maxHp(i: number): number = (i == 0 ? 120 : (i == 1 ? 100 : 90))
 fn atkOf(i: number): number = (i == 0 ? 14 : (i == 1 ? 10 : 12))
@@ -28,24 +41,47 @@ fn speedOf(i: number): number = (i == 0 ? 0.5 : (i == 1 ? 0.42 : 0.46))
 fn full(): number = 24
 
 // Stances: the role each member plays in each.
-fn stanceName(s: number): string = (s == 0 ? "ASSAULT" : (s == 1 ? "BALANCE" : "BULWARK"))
-fn roleOf(s: number, i: number): string = (s == 0 ? (i == 0 ? "STRIKE" : "BLAST")
-  : (s == 1 ? (i == 0 ? "STRIKE" : (i == 1 ? "MEND" : "BLAST"))
-  : (i == 0 ? "GUARD" : "MEND")))
-fn skillOf(role: string): string = (role == "STRIKE" ? "SLASH" : (role == "BLAST" ? "FIRE" : (role == "MEND" ? "CURE" : "PROVOKE")))
-fn needsTarget(cmd: string): bool = cmd == "FIGHT" or cmd == "SLASH" or cmd == "FIRE"
+fn stances(): number = 4
+fn stanceName(s: number): string = (s == 0 ? "Assault" : (s == 1 ? "Rush" : (s == 2 ? "Balance" : "Bulwark")))
+fn roleOf(s: number, i: number): string = (s == 0 ? "Blast"
+  : (s == 1 ? (i == 2 ? "Blast" : "Strike")
+  : (s == 2 ? (i == 0 ? "Strike" : (i == 1 ? "Mend" : "Blast"))
+  : (i == 0 ? "Guard" : "Mend"))))
+
+// Each role's two abilities.
+fn abilityOf(role: string, k: number): string = (role == "Strike" ? (k == 0 ? "Attack" : "Slash")
+  : (role == "Blast" ? (k == 0 ? "Fire" : "Ice")
+  : (role == "Mend" ? (k == 0 ? "Cure" : "Heal") : (k == 0 ? "Provoke" : "Steel"))))
+fn needsTarget(cmd: string): bool = cmd == "Attack" or cmd == "Slash" or cmd == "Fire" or cmd == "Ice"
+fn isStrike(cmd: string): bool = cmd == "Attack" or cmd == "Slash"
 // Damage before the chain, and how much it adds to the chain.
-fn power(cmd: string, atk: number): number = (cmd == "SLASH" ? atk * 2 : (cmd == "FIRE" ? atk * 1.5 : atk * 1.2))
-fn chainGain(cmd: string): number = (cmd == "SLASH" ? 8 : (cmd == "FIRE" ? 25 : 5))
+fn power(cmd: string, atk: number): number = (cmd == "Slash" ? atk * 2 : (cmd == "Attack" ? atk * 1.4 : (cmd == "Fire" ? atk * 1.2 : atk * 0.9)))
+fn chainGain(cmd: string): number = (cmd == "Fire" ? 24 : (cmd == "Ice" ? 18 : (cmd == "Slash" ? 6 : 4)))
 fn hitFor(base: number, chain: number, broken: bool, r: number): number =
   round(base * chain / 100 * (broken ? 1.5 : 1) * (0.9 + (r % 21) / 100))
+// How fast a chain drains a tick: slowly while a Strike hit steadies it.
+fn drain(held: bool): number = (held ? 0.1 : 0.7)
+fn staggerTicks(): number = 120
 
 // The living member with the smallest share of their HP left.
 fn ratio(hp: number[], i: number): number = (nth(hp, i) <= 0 ? 99999 : nth(hp, i) * 1000 / maxHp(i))
 fn lowest(hp: number[]): number = (ratio(hp, 0) <= ratio(hp, 1) and ratio(hp, 0) <= ratio(hp, 2) ? 0 : (ratio(hp, 1) <= ratio(hp, 2) ? 1 : 2))
 
-fn commands(): string[] = ["FIGHT", "SKILL", "STANCE", "FLEE"]
-fn commandAt(i: number): string = match commands().at(i) { case some(c) => c, case none => "" }
+// What an ally does by role. Strike and Blast alternate their two abilities;
+// Mend cures the badly hurt, else heals everyone a little; Guard provokes,
+// then steels itself.
+fn allyCmd(role: string, hurt: bool, provoking: bool, turn: number): string =
+  (role == "Strike" or role == "Blast" ? abilityOf(role, turn % 2)
+    : (role == "Mend" ? (hurt ? "Cure" : "Heal") : (provoking ? "Steel" : "Provoke")))
+
+// Potions: the party leader's item. Each heals everyone still standing.
+fn potionHeal(): number = 50
+fn startPotions(): number = 3
+
+// The rank for a win: five stars at or under par, one fewer each quarter over.
+fn stars(ticks: number, par: number): number = max(1, min(5, 5 - floor(max(0, ticks - par) * 4 / par)))
+fn starLine(n: number): string = `{${"*****".slice(0, n)}}${"^^^^^".slice(0, 5 - n)}`
+fn clockOf(ticks: number): string = `${floor(ticks / 1200)}:${floor(ticks / 20) % 60 < 10 ? "0" : ""}${floor(ticks / 20) % 60}`
 
 // ── Small helpers ──
 fn nth(xs: number[], k: number): number = match xs.at(k) { case some(v) => v, case none => 0 }
@@ -53,6 +89,6 @@ fn word(xs: string[], k: number): string = match xs.at(k) { case some(v) => v, c
 fn put(xs: number[], k: number, v: number): number[] = [0, 1, 2].filter(i => i < xs.length).map(i => (i == k ? v : nth(xs, i)))
 fn pad3(n: number): string = (n < 10 ? `  ${n}` : (n < 100 ? ` ${n}` : `${n}`))
 fn padTo(s: string, n: number): string = `${s}${"            ".slice(0, max(0, n - s.length))}`
-// A gauge as bar tiles: a letter a–i a tile, 0–8 pixels filled.
-fn barTile(v: number): string = "abcdefghi".slice(max(0, min(8, floor(v))), max(0, min(8, floor(v))) + 1)
+// A gauge as bar tiles: `~0`–`~8` a tile, that many pixels filled.
+fn barTile(v: number): string = `~${max(0, min(8, floor(v)))}`
 fn gauge(v: number, tiles: number): string = [0, 1, 2, 3].filter(i => i < tiles).map(i => barTile(v - i * 8)).join("")

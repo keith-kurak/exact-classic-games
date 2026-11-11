@@ -39,8 +39,8 @@ fn walkable(ch: string): bool = ch == "." or ch == "," or ch == "=" or ch == "B"
 fn thicket(x: number, y: number): bool = tileAt(x, y) == ","
 
 fn npcs(): Npc[] = [
-  Npc(x=13, y=5, lines=["THE RIFT EAST OF HERE HAS", "OPENED AGAIN. MACHINES AND", "BEASTS POUR OUT OF IT.", "MIND THE THICKET, ROOK."]),
-  Npc(x=19, y=8, lines=["PAST THE BRIDGE IS THE", "THICKET. SWITCH YOUR STANCE", "WHEN A FIGHT TURNS. BREAK", "THEIR GUARD, THEN HIT HARD."])
+  Npc(x=13, y=5, lines=["The rift east of here has", "opened again. Machines and", "beasts pour out of it.", "Mind the thicket, Rook."]),
+  Npc(x=19, y=8, lines=["Past the bridge, thicket.", "When a fight turns, press", "left and change stance.", "Break them, then hit hard."])
 ]
 fn npcIs(i: number, x: number, y: number): bool = match npcs().at(i) { case some(n) => n.x == x and n.y == y, case none => false }
 fn npcAt(x: number, y: number): number = (npcIs(0, x, y) ? 0 : (npcIs(1, x, y) ? 1 : -1))

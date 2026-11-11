@@ -3,7 +3,7 @@
 // it walks the field, starts fights, runs the battle, and tells the surface
 // what is on screen as small text specs (see gpu/src/lib.rs).
 use Npc, fieldMap, tileAt, walkable, thicket, npcs, npcAt, blocked, dx, dy, camAxis, nextRng from "./field.contract"
-use Foe, foeOf, group, foeTx, foeTy, nameOf, maxHp, atkOf, speedOf, full, stanceName, roleOf, skillOf, needsTarget, power, chainGain, hitFor, commandAt, lowest, nth, word, put, pad3, padTo, gauge from "./battle.contract"
+use Foe, foeOf, group, foeTx, foeTy, labelRow, staggerText, potionHeal, startPotions, parOf, nameOf, maxHp, atkOf, speedOf, full, stances, stanceName, roleOf, abilityOf, needsTarget, isStrike, power, chainGain, hitFor, drain, staggerTicks, allyCmd, lowest, stars, starLine, clockOf, nth, word, put, pad3, padTo, gauge from "./battle.contract"
 
 fn keyDir(k: string): string = (k == "ArrowUp" or k == "w" ? "up" : (k == "ArrowDown" or k == "s" ? "down"
   : (k == "ArrowLeft" or k == "a" ? "left" : (k == "ArrowRight" or k == "d" ? "right" : ""))))
@@ -44,6 +44,10 @@ component ExactOdyssey
   state phase = ""
   state actor = 0
   state cursor = 0
+  state stanceCursor = 0
+  // The last enemy Rook aimed at: the allies follow his lead.
+  state focus = 0
+  state lastAuto = ""
   state cmd = ""
   state target = 0
   state step = 0
@@ -54,37 +58,69 @@ component ExactOdyssey
   state dmgT = 0
   state provoke = -1
   state wins = 0
+  // Ticks each enemy's chain stays steadied by a Strike hit.
+  state hold: number[] = []
+  // Each member's turn count, so allies alternate abilities.
+  state turns: number[] = [0, 0, 0]
+  state steel = -1
+  // The fight's length and par in ticks, and its rank in stars.
+  state bticks = 0
+  state par = 0
+  state rank = 0
+  // The party leader's potions, kept between fights.
+  state potions = 3
+  state found = false
 
   // ── What is on screen ──
   derive px = tx * 16 + dx(dir) * off
   derive py = ty * 16 + dy(dir) * off
   derive camX = camAxis(px, 120, 512, 256)
   derive camY = camAxis(py, 112, 320, 240)
-  derive frameNo = (steps + (off >= 8 ? 1 : 0)) % 2
-  derive heroName = `${dir == "right" ? "left" : dir}${frameNo}`
+  // Feet always move, walking or standing: the surface steps any name
+  // ending `*` in place from its frame counter.
+  derive heroName = `${dir == "right" ? "left" : dir}*`
   derive talking = talkTo >= 0
   derive talkLines = match npcs().at(talkTo) { case some(n) => n.lines, case none => [] }
   // While a window is open, sprites low on the screen would cover it.
   derive fieldSprites = ((not talking or py - camY < 136 ? [`${heroName}:${px - camX}:${py - camY}:${dir == "right" ? "h" : ""}`] : [])
-    .concat(npcs().filter(n => not talking or n.y * 16 - camY < 136).map(n => `villager:${n.x * 16 - camX}:${n.y * 16 - camY}:`)))
-  derive fieldWindows = talking ? `1,19,30,10|${talkLines.join("|")}` : ""
+    .concat(npcs().filter(n => not talking or n.y * 16 - camY < 136).map(n => `villager*:${n.x * 16 - camX}:${n.y * 16 - camY}:`)))
+  derive fieldWindows = talking ? `1,19,30,10,2|${talkLines.join("|")}` : ""
 
   derive acting = (phase == "act" and step == 0) or (phase == "act" and step == 1)
   derive partySprites = [0, 1, 2].map(i => `${nth(hp, i) <= 0 ? "ko" : (acting and actor == i ? "strike" : "idle")}:${partyX(i) - (acting and actor == i ? 16 : 0)}:${partyY(i)}:${i}`)
-  derive handSprite = (phase == "menu" ? [`hand:${10 * 8 - 6}:${(21 + cursor) * 8}:`]
-    : (phase == "target" ? [`hand:${foeTx(target) * 8 - 18}:${foeTy(target) * 8 + 12}:`] : []))
+  derive handSprite = (phase == "menu" ? [`hand:${10 * 8 - 6}:${(21 + cursor * 2) * 8}:`]
+    : (phase == "target" ? [`hand:${foeTx(target, foes.length) * 8 - 14}:${foeTy(target) * 8 + 24}:`]
+    : (phase == "stance" ? [`hand:2:${(21 + stanceCursor * 2) * 8}:`]
+    : (phase == "item" ? [`hand:2:${21 * 8}:`] : []))))
   derive dmgSprite = dmgT > 0 ? [`#${dmgText}:${dmgX}:${dmgY - (dmgT > 12 ? (16 - dmgT) * 2 : 8)}:3`] : []
-  derive battleSprites = partySprites.concat(handSprite).concat(dmgSprite)
+  // OAM order is draw priority: damage numbers and the cursor in front.
+  derive battleSprites = dmgSprite.concat(handSprite).concat(partySprites)
   derive enemySpec = ([0, 1].filter(i => i < foes.length and nth(fx, i) < 6)
-    .map(i => `${word(foes, i) == "DRONE" ? "drone" : "hound"}:${foeTx(i)}:${foeTy(i)}:${nth(fx, i)}`).join(";"))
-  derive foeLines = ([0, 1].filter(i => i < foes.length).map(i => (nth(foeHp, i) <= 0 ? ["", ""]
-    : [word(foes, i), (nth(brk, i) > 0 ? "BREAK!" : `${gauge((nth(chain, i) - 100) / (foeOf(word(foes, i)).breakAt - 100) * 32, 4)}`)])).flat())
-  derive menuLines = (phase == "menu" or phase == "target"
-    ? ["FIGHT", skillOf(roleOf(stance, actor)), "STANCE", "FLEE"] : [])
-  derive statusLines = ([stanceName(stance)].concat([0, 1, 2].map(i => [
-    `${padTo(nameOf(i), 4)} ${pad3(nth(hp, i))} ${gauge(nth(atb, i), 3)}`, ` ${roleOf(stance, i)}`]).flat()))
-  derive battleWindows = ([`0,20,10,10|${foeLines.join("|")}`, `10,20,8,10|${menuLines.join("|")}`,
-    `18,20,14,10|${statusLines.join("|")}`].concat(msg != "" ? [`6,1,20,3|${msg}`] : []).join("^"))
+    .map(i => `${word(foes, i) == "Drone" ? "drone" : "hound"}:${foeTx(i, foes.length)}:${foeTy(i)}:${nth(fx, i)}`).join(";"))
+  // The enemy window lists names (yellow while staggered). Under each enemy
+  // sprite, on the backdrop: its stagger bar and chain; staggered, the number
+  // turns yellow and the bar drains as the stagger wears off.
+  derive foeLines = [0, 1].filter(i => i < foes.length).map(i => (nth(foeHp, i) <= 0 ? ""
+    : (nth(brk, i) > 0 ? `{${word(foes, i)}}` : word(foes, i))))
+  derive staggerLabels = ([0, 1].filter(i => i < foes.length and nth(foeHp, i) > 0).map(i =>
+    `@${foeTx(i, foes.length)},${labelRow()}|${staggerText(nth(chain, i), nth(brk, i), foeOf(word(foes, i)).breakAt)}`))
+  derive choosing = phase == "menu" or phase == "target" or phase == "stance" or phase == "item"
+  derive menuLines = (choosing ? [abilityOf(roleOf(stance, 0), 0), abilityOf(roleOf(stance, 0), 1), "Item", "Flee"] : [])
+  // Names in white, each role in yellow beneath.
+  // The title is the stance; its arrow says Left changes it.
+  derive statusLines = ([`<${stanceName(stance)}`].concat([0, 1, 2].map(i => [
+    `${padTo(nameOf(i), 4)} ${pad3(nth(hp, i))}${gauge(nth(atb, i), 3)}`, `  {${roleOf(stance, i)}}`]).flat()))
+  derive stanceLines = [` ${stanceName(0)}`, ` ${stanceName(1)}`, ` ${stanceName(2)}`, ` ${stanceName(3)}`]
+  derive rankLines = ["{Victory!}", `Time  ${clockOf(bticks)}`, `Rank  ${starLine(rank)}`].concat(found ? ["Found a Potion."] : [])
+  // While choosing a stance, the top window spells out its roles.
+  derive topMsg = phase == "stance" ? `${roleOf(stanceCursor, 0)} ${roleOf(stanceCursor, 1)} ${roleOf(stanceCursor, 2)}` : msg
+  derive battleWindows = ([`0,20,10,10,2|${foeLines.join("|")}`, `10,20,9,10,2|${menuLines.join("|")}`,
+    `19,20,13,10|${statusLines.join("|")}`]
+    .concat(staggerLabels)
+    .concat(phase == "stance" ? [`0,20,10,10,2|${stanceLines.join("|")}`] : [])
+    .concat(phase == "item" ? [`0,20,10,10,2| Potion|   x${potions}`] : [])
+    .concat(topMsg != "" ? [`6,1,20,3|${topMsg}`] : [])
+    .concat(phase == "won" ? [`7,6,18,10,2|${rankLines.join("|")}`] : []).join("^"))
   derive inBattle = scene == "battle"
 
   // ── Walking ──
@@ -138,6 +174,13 @@ component ExactOdyssey
     brk = g.map(n => 0)
     foeAtb = g.map(n => r % 9)
     fx = g.map(n => 0)
+    hold = g.map(n => 0)
+    turns = [0, 0, 0]
+    steel = -1
+    bticks = 0
+    par = parOf(g)
+    rank = 0
+    found = false
     atb = [r % 8, r % 5, r % 7]
     phase = "intro"
     msg = ""
@@ -174,6 +217,7 @@ component ExactOdyssey
 
   action wipeOut
     hp = [maxHp(0), maxHp(1), maxHp(2)]
+    potions = startPotions()
     tx = startX()
     ty = startY()
     dir = "down"
@@ -194,8 +238,12 @@ component ExactOdyssey
     dmgT = max(0, dmgT - 1)
     let b0 = brk
     let c0 = chain
+    let hd0 = hold
     brk = ks.filter(i => i < foes.length).map(i => max(0, nth(b0, i) - 1))
-    chain = ks.filter(i => i < foes.length).map(i => (nth(b0, i) == 1 ? 100 : (nth(b0, i) > 0 ? nth(c0, i) : max(100, nth(c0, i) - 0.4))))
+    hold = ks.filter(i => i < foes.length).map(i => max(0, nth(hd0, i) - 1))
+    chain = ks.filter(i => i < foes.length).map(i => (nth(b0, i) == 1 ? 100 : (nth(b0, i) > 0 ? nth(c0, i) : max(100, nth(c0, i) - drain(nth(hd0, i) > 0)))))
+    if phase != "won" and phase != "lost"
+      bticks = bticks + 1
     if phase == "wait"
       fill()
 
@@ -208,44 +256,74 @@ component ExactOdyssey
     let foeReady = [0, 1].filter(i => i < foes.length and nth(newFoe, i) >= full() and nth(foeHp, i) > 0)
     atb = newAtb
     foeAtb = newFoe
-    if ready.length > 0
-      actor = nth(ready, 0)
+    if ready.includes(0)
+      actor = 0
       cursor = 0
       phase = "menu"
     else
-      if foeReady.length > 0
-        foeTurn(nth(foeReady, 0), newFoe)
+      if ready.length > 0
+        autoAct(nth(ready, 0))
+      else
+        if foeReady.length > 0
+          foeTurn(nth(foeReady, 0), newFoe)
 
-  // ── Choosing ──
+  // ── Choosing (Rook) ──
 
   action choose
-    let c = commandAt(cursor)
-    let name = c == "SKILL" ? skillOf(roleOf(stance, actor)) : c
-    if c == "STANCE"
-      let s = (stance + 1) % 3
-      stance = s
-      msg = `STANCE: ${stanceName(s)}`
+    let name = cursor == 3 ? "Flee" : (cursor == 2 ? "Item" : abilityOf(roleOf(stance, 0), cursor))
+    if name == "Item"
+      phase = "item"
     else
-      if c == "FLEE"
-        msg = "THE PARTY FLED."
-        leaveBattle()
+      fight(name)
+
+  action fight(name: string)
+    if name == "Flee"
+      msg = "The party fled."
+      leaveBattle()
+    else
+      cmd = name
+      if needsTarget(name)
+        target = nth(foeHp, focus) > 0 ? focus : (nth(foeHp, 0) > 0 ? 0 : 1)
+        phase = "target"
       else
-        cmd = name
-        if needsTarget(name)
-          target = nth(foeHp, 0) > 0 ? 0 : 1
-          phase = "target"
-        else
-          startAct(name)
+        startAct(name, 0, target)
+
+  // The item menu, to the left of the commands: a Potion uses Rook's turn.
+  action usePotion
+    if potions > 0
+      startAct("Potion", 0, target)
+
+  // The stance menu, to the left of the commands: free, then back to them.
+  action openStances
+    stanceCursor = stance
+    phase = "stance"
+  action pickStance
+    stance = stanceCursor
+    msg = `Stance: ${stanceName(stanceCursor)}`
+    phase = "menu"
+
+  // An ally acts on its own, by its role, at Rook's target.
+  action autoAct(i: number)
+    let hurt = [0, 1, 2].filter(j => nth(hp, j) > 0 and nth(hp, j) * 4 < maxHp(j) * 3).length > 0
+    let c = allyCmd(roleOf(stance, i), hurt, provoke == i, nth(turns, i))
+    turns = put(turns, i, nth(turns, i) + 1)
+    let aim = nth(foeHp, focus) > 0 ? focus : (nth(foeHp, 0) > 0 ? 0 : 1)
+    lastAuto = nameOf(i)
+    startAct(c, i, aim)
 
   action retarget
     let other = target == 0 ? 1 : 0
     if other < foes.length and nth(foeHp, other) > 0
       target = other
 
-  action startAct(name: string)
+  action startAct(name: string, who: number, aim: number)
+    if who == 0 and needsTarget(name)
+      focus = aim
+    actor = who
+    target = aim
     cmd = name
     step = 0
-    msg = `${nameOf(actor)} - ${name}`
+    msg = `${nameOf(who)} - ${name}`
     phase = "act"
 
   // ── Acting: a step forward, the hit, a step back ──
@@ -277,16 +355,17 @@ component ExactOdyssey
       let breaks = not broken and up >= foe.breakAt
       foeHp = put(foeHp, target, max(0, nth(foeHp, target) - d))
       chain = put(chain, target, min(999, breaks ? up + 50 : up))
-      brk = breaks ? put(brk, target, 120) : brk
+      brk = breaks ? put(brk, target, staggerTicks()) : brk
+      hold = isStrike(cmd) ? put(hold, target, 40) : hold
       fx = put(fx, target, 1)
       dmgText = `${d}`
-      dmgX = foeTx(target) * 8 + 8
+      dmgX = foeTx(target, foes.length) * 8 + 24
       dmgY = foeTy(target) * 8
       dmgT = 16
       if breaks
-        msg = `${foe.name} IS BROKEN!`
+        msg = `${foe.name} staggers!`
     else
-      if cmd == "CURE"
+      if cmd == "Cure"
         let who = lowest(hp)
         let amount = min(40, maxHp(who) - nth(hp, who))
         hp = put(hp, who, nth(hp, who) + amount)
@@ -295,23 +374,43 @@ component ExactOdyssey
         dmgY = partyY(who) - 6
         dmgT = 16
       else
-        provoke = actor
-        msg = `FOES TURN ON ${nameOf(actor)}`
+        if cmd == "Potion"
+          let h1 = hp
+          hp = [0, 1, 2].map(i => (nth(h1, i) > 0 ? min(maxHp(i), nth(h1, i) + potionHeal()) : 0))
+          potions = potions - 1
+          dmgText = `${potionHeal()}`
+          dmgX = partyX(1)
+          dmgY = partyY(1) - 6
+          dmgT = 16
+        if cmd == "Heal"
+          let h0 = hp
+          hp = [0, 1, 2].map(i => (nth(h0, i) > 0 ? min(maxHp(i), nth(h0, i) + 18) : 0))
+          dmgText = "18"
+          dmgX = partyX(1)
+          dmgY = partyY(1) - 6
+          dmgT = 16
+        else
+          if cmd == "Provoke"
+            provoke = actor
+            msg = `Foes turn on ${nameOf(actor)}`
+          else
+            steel = actor
+            msg = `${nameOf(actor)} stands firm`
 
   action foeTurn(i: number, gauges: number[])
     foeAtb = put(gauges, i, 0)
     actor = i
     step = 0
-    msg = `${word(foes, i)} ATTACKS`
+    msg = `${word(foes, i)} attacks`
     phase = "foeAct"
 
   action applyFoe
     let r = nextRng(rng)
     let alive = [0, 1, 2].filter(i => nth(hp, i) > 0)
-    let guard = [0, 1, 2].filter(i => nth(hp, i) > 0 and roleOf(stance, i) == "GUARD")
+    let guard = [0, 1, 2].filter(i => nth(hp, i) > 0 and roleOf(stance, i) == "Guard")
     let who = provoke >= 0 and nth(hp, provoke) > 0 ? provoke : (guard.length > 0 ? nth(guard, 0) : nth(alive, r % max(1, alive.length)))
     let base = foeOf(word(foes, actor)).atk + r % 6
-    let d = roleOf(stance, who) == "GUARD" ? floor(base / 2) : base
+    let d = steel == who and roleOf(stance, who) == "Guard" ? floor(base / 4) : (roleOf(stance, who) == "Guard" ? floor(base / 2) : base)
     rng = r
     hp = put(hp, who, max(0, nth(hp, who) - d))
     dmgText = `${d}`
@@ -325,11 +424,15 @@ component ExactOdyssey
     step = 0
     if foesLeft == 0
       wins = wins + 1
-      msg = "VICTORY!"
+      let r5 = stars(bticks, par)
+      rank = r5
+      found = r5 == 5
+      potions = r5 == 5 ? potions + 1 : potions
+      msg = ""
       phase = "won"
     else
-      if partyLeft == 0
-        msg = "THE PARTY FELL."
+      if partyLeft == 0 or nth(hp, 0) <= 0
+        msg = "Rook has fallen."
         phase = "lost"
       else
         msg = ""
@@ -363,16 +466,39 @@ component ExactOdyssey
         if d == "down"
           cursor = (cursor + 1) % 4
         else
+          if d == "left"
+            openStances()
+          else
+            if confirmKey(k)
+              choose()
+    if phase == "stance"
+      if d == "up"
+        stanceCursor = (stanceCursor + stances() - 1) % stances()
+      else
+        if d == "down"
+          stanceCursor = (stanceCursor + 1) % stances()
+        else
           if confirmKey(k)
-            choose()
+            pickStance()
+          else
+            if d == "right" or cancelKey(k)
+              phase = "menu"
+    if phase == "item"
+      if confirmKey(k)
+        usePotion()
+      else
+        if d == "right" or cancelKey(k)
+          phase = "menu"
     else
       if phase == "target"
         if d == "up" or d == "down"
           retarget()
-        if confirmKey(k)
-          startAct(cmd)
-        if cancelKey(k)
-          phase = "menu"
+        else
+          if confirmKey(k)
+            startAct(cmd, 0, target)
+          else
+            if cancelKey(k)
+              phase = "menu"
       else
         if phase == "won" and confirmKey(k)
           leaveBattle()

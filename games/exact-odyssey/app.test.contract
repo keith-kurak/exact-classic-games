@@ -28,26 +28,138 @@ test "trees and water block the way"
   expect state ty == 18
   expect state moving == false
 
-test "walking into the thicket starts a fight, and the party acts"
+test "walking into the thicket starts a fight; Rook casts, and Left opens the stances"
   type "root" key "ArrowRight" for 5300
   clock +1000
   expect state scene == "battle"
   expect state phase == "wait"
   clock +3000
   expect state phase == "menu"
-  type "root" key "ArrowDown"
+  expect state actor == 0
+  type "root" key "ArrowLeft"
+  expect state phase == "stance"
   type "root" key "ArrowDown"
   type "root" key " "
   expect state stance == 1
   expect state phase == "menu"
+  type "root" key "ArrowLeft"
   type "root" key "ArrowUp"
-  type "root" key "ArrowUp"
+  type "root" key " "
+  expect state stance == 0
   type "root" key " "
   expect state phase == "target"
   type "root" key " "
   expect state phase == "act"
-  expect state cmd == "FIGHT"
+  expect state cmd == "Fire"
   clock +450
   expect state step == 1
   clock +700
   expect state step == 0
+
+test "Ivy and Kai act on their own"
+  type "root" key "ArrowRight" for 5300
+  clock +1000
+  clock +3000
+  type "root" key " "
+  type "root" key " "
+  clock +6000
+  expect state lastAuto == "Ivy"
+
+test "a won fight shows its time and a rank"
+  type "root" key "ArrowRight" for 5300
+  clock +1000
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  type "root" key " "
+  clock +3000
+  expect state wins == 1
+  expect state rank == 5
+  expect state scene == "field"
+
+test "Rook's Item menu: a Potion heals the party and uses his turn"
+  type "root" key "ArrowRight" for 5300
+  clock +1000
+  clock +3000
+  expect state phase == "menu"
+  expect state potions == 3
+  type "root" key "ArrowDown"
+  type "root" key "ArrowDown"
+  type "root" key " "
+  expect state phase == "item"
+  type "root" key "Escape"
+  expect state phase == "menu"
+  type "root" key " "
+  type "root" key " "
+  expect state phase == "act"
+  expect state cmd == "Potion"
+  clock +450
+  expect state potions == 2
