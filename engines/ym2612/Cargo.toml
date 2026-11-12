@@ -1,0 +1,10 @@
+[package]
+name = "ym2612"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "A Yamaha YM2612 (OPN2) FM synthesis chip: six channels of four operators, the eight algorithms, feedback, the envelope generator with key scaling and SSG-EG, the LFO, channel 3's special mode and channel 6's DAC, driven by register writes and rendered to stereo PCM; with a frame-rate tracker driver, DAC drum samples and a WAV writer."
+
+[lib]
+path = "src/lib.rs"

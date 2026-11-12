@@ -1,0 +1,33 @@
+{
+  "$schema": "../../../../exact/scripts/app.schema.json",
+  "name": "Exact Drive Soundscapes",
+  "short_name": "Exact Drive Soundscapes",
+  "id": "com.example.exactdrivesoundscapes",
+  "start_url": "/",
+  "display": "standalone",
+  "app": {
+    "id": "com.example.exactdrivesoundscapes",
+    "name": "Exact Drive Soundscapes"
+  },
+  "host": {
+    "web": {},
+    "macos": {
+      "minimumOS": "14.0",
+      "window": {
+        "width": 960,
+        "height": 672
+      }
+    }
+  },
+  "deploy": {
+    "store": {
+      "web": "0",
+      "macos": "0"
+    }
+  },
+  "gpu": {
+    "shaderRoots": [
+      "../../engines/nes-screen/shaders"
+    ]
+  }
+}

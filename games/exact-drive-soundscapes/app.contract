@@ -1,0 +1,125 @@
+// Exact Drive Soundscapes: a jukebox for the ym2612 engine. Three original
+// songs and seven sound effects, each made by the emulated YM2612 FM chip
+// (engines/ym2612) and rendered to WAV ahead of time; the screen is drawn by
+// the sys16 picture engine at the Mega Drive's 320x224 (via gpu/). While a
+// song plays, six meters follow each channel's level, row by row, and the
+// watched channel's patch shows its algorithm (songs.contract).
+use songCount, songName, songFile, rowMs, rowCount, labels0, labels1, labels2, labels3, labels4, labels5, volumes0, volumes1, volumes2, volumes3, volumes4, volumes5, patches0, patches1, patches2, patches3, patches4, patchName, patchAlgorithm, patchFeedback, soundCount, soundName, soundFile from "./songs.contract"
+
+sound "assets/sfx/chime.wav"
+sound "assets/sfx/laser.wav"
+sound "assets/sfx/explosion.wav"
+sound "assets/sfx/warp.wav"
+sound "assets/sfx/siren.wav"
+sound "assets/sfx/engine.wav"
+sound "assets/sfx/boom.wav"
+
+fn isUp(k: string): bool = k == "ArrowUp" or k == "w"
+fn isDown(k: string): bool = k == "ArrowDown" or k == "s"
+fn isLeft(k: string): bool = k == "ArrowLeft" or k == "a"
+fn isRight(k: string): bool = k == "ArrowRight" or k == "d"
+fn isPlay(k: string): bool = k == "Enter" or k == " " or k == "z"
+fn isStop(k: string): bool = k == "Escape" or k == "x"
+fn tickMs(): number = 50
+fn items(): number = songCount() + soundCount()
+fn word(xs: string[], k: number): string = match xs.at(k) { case some(v) => v, case none => "" }
+fn nth(xs: number[], k: number): number = match xs.at(k) { case some(v) => v, case none => 0 }
+fn clock(ms: number): string = `${floor(ms / 60000)}:${floor(ms / 1000) % 60 < 10 ? "0" : ""}${floor(ms / 1000) % 60}`
+fn twoDigits(n: number): string = `${n < 10 ? "0" : ""}${n}`
+fn channelName(ch: number): string = (ch == 5 ? "DAC" : `FM${ch + 1}`)
+// The meters' columns, under each bar.
+fn meterCol(ch: number): number = 4 + ch * 6
+fn patchesOf(ch: number, i: number): number[] = (ch == 0 ? patches0(i) : (ch == 1 ? patches1(i) : (ch == 2 ? patches2(i) : (ch == 3 ? patches3(i) : patches4(i)))))
+
+component ExactDriveSoundscapes
+  // The list: songs first, then sounds.
+  state cursor = 0
+  // The song playing (-1 for none), and the tick it started on.
+  state playing = -1
+  state started = 0
+  state ticks = 0
+  // The FM channel whose patch is shown, 0-4.
+  state watch = 0
+  // The last sound played.
+  state lastSound = -1
+
+  task clock when ticks >= 0
+    every(50, tick)
+  action tick
+    ticks = ticks + 1
+
+  derive elapsed = (ticks - started) * tickMs()
+  derive row = playing >= 0 ? floor(elapsed / rowMs(playing)) % rowCount(playing) : 0
+  // What each channel plays on this row, and how loud.
+  derive notes = (playing >= 0
+    ? [word(labels0(playing), row), word(labels1(playing), row), word(labels2(playing), row), word(labels3(playing), row), word(labels4(playing), row), word(labels5(playing), row)]
+    : ["", "", "", "", "", ""])
+  derive levels = (playing >= 0
+    ? [nth(volumes0(playing), row), nth(volumes1(playing), row), nth(volumes2(playing), row), nth(volumes3(playing), row), nth(volumes4(playing), row), nth(volumes5(playing), row)]
+    : [0, 0, 0, 0, 0, 0])
+  // The watched channel's patch: the song's on this row, or (stopped) the
+  // chosen song's first.
+  derive shownSong = playing >= 0 ? playing : (cursor < songCount() ? cursor : 0)
+  derive patch = nth(patchesOf(watch, shownSong), row)
+
+  // ── The screen ──
+  derive levelSpec = levels.join(",")
+  derive patchSpec = `${patchAlgorithm(patch)},${patchFeedback(patch)},${nth(levels, watch)}`
+  derive clockSpec = `${ticks * tickMs()},${row}`
+  derive songLines = [0, 1, 2].map(i => `3,${5 + i}|${songName(i)}`)
+  derive soundLines = [0, 1, 2, 3, 4, 5, 6].map(i => `3,${10 + i}|${soundName(i)}`)
+  derive pointer = `1,${cursor < songCount() ? 5 + cursor : 10 + cursor - songCount()}|>`
+  derive nowPlaying = (playing >= 0
+    ? `${max(0, 20 - floor((songName(playing).length + 16) / 2))},17|{${songName(playing)}}  ${clock(elapsed)}  ROW ${twoDigits(row)}`
+    : "14,17|NOTHING PLAYING")
+  derive labels = [0, 1, 2, 3, 4, 5].map(ch => `${meterCol(ch)},26|${ch == watch ? "{" : ""}${channelName(ch)}${ch == watch ? "}" : ""}`)
+  derive noteLines = [0, 1, 2, 3, 4, 5].map(ch => `${meterCol(ch)},27|${word(notes, ch)}`)
+  derive hud = ([
+    "8,1|{EXACT DRIVE SOUNDSCAPES}",
+    "1,2|YM2612 FM: 6 CHANNELS X 4 OPERATORS",
+    "2,4|{SONGS}",
+    "2,9|{SOUNDS}",
+    `22,4|{${channelName(watch)} PATCH}`,
+    `22,5|${patchName(patch)}`,
+    `22,6|ALG ${patchAlgorithm(patch)}  FB ${patchFeedback(patch)}`,
+    pointer,
+    nowPlaying
+  ].concat(songLines).concat(soundLines).concat(labels).concat(noteLines)).join("^")
+
+  // ── Keys ──
+  action onKey(k: string, e: KeyboardEvent)
+    let at = cursor
+    let w = watch
+    if isUp(k) or isDown(k) or isLeft(k) or isRight(k) or isPlay(k) or isStop(k)
+      preventDefault()
+    if isUp(k)
+      cursor = (at + items() - 1) % items()
+    if isDown(k)
+      cursor = (at + 1) % items()
+    if isLeft(k)
+      watch = (w + 4) % 5
+    if isRight(k)
+      watch = (w + 1) % 5
+    if isPlay(k)
+      choose(at)
+    if isStop(k)
+      playing = -1
+
+  action choose(at: number)
+    if at < songCount()
+      playing = at
+      started = ticks
+    else
+      let s = at - songCount()
+      lastSound = s
+      playSound(soundFile(s), group="sfx")
+
+  view
+    main testId="root" key=onKey width="100%" height="100%" background-color="#000000"
+      canvas surface=s16(levelSpec, patchSpec, clockSpec, hud) width="100%" height="100%" testId="screen"
+      if playing == 0
+        audio songFile(0) autoplay=true loop=true testId="music"
+      if playing == 1
+        audio songFile(1) autoplay=true loop=true testId="music"
+      if playing == 2
+        audio songFile(2) autoplay=true loop=true testId="music"

@@ -1,0 +1,34 @@
+test "the list starts on the first song, nothing playing"
+  expect tree has "screen"
+  expect state cursor == 0
+  expect state playing == -1
+  expect state patch == 1
+
+test "Z plays a song; its meters follow the rows; X stops it"
+  type "root" key "z"
+  expect state playing == 0
+  expect tree has "music"
+  clock +1000
+  expect state row == 10
+  expect state notes.0 == "F#5"
+  expect state levels.0 == 15
+  type "root" key "x"
+  expect state playing == -1
+  expect tree missing "music"
+
+test "left and right choose the channel whose patch is shown"
+  type "root" key "ArrowRight"
+  expect state watch == 1
+  expect state patch == 2
+  type "root" key "ArrowLeft"
+  type "root" key "ArrowLeft"
+  expect state watch == 4
+
+test "a sound plays through the chip's rendered effect"
+  type "root" key "ArrowDown"
+  type "root" key "ArrowDown"
+  type "root" key "ArrowDown"
+  expect state cursor == 3
+  type "root" key "z"
+  expect state lastSound == 0
+  expect sound has "assets/sfx/chime.wav"

@@ -14,6 +14,7 @@ Each game has a README with screenshots, its controls, and how it's made.
 | **Links Exact86** | An early-90s PC golf game: hole 1, a dogleg-right par 4 laid out after Pebble Beach's first, ray-marched from a fixed camera behind the ball, with a three-press swing. | [`games/links-exact86`](games/links-exact86/README.md) |
 | **Exacticom Musicbox** | A jukebox for the shared NES sound engine: three original chiptunes and seven sound effects from an emulated 2A03, with live channel meters on an NES-drawn screen. | [`games/exacticom-musicbox`](games/exacticom-musicbox/README.md) |
 | **Exactulator** | A basic NES emulator on the shared NES engines: open a mapper 0 `.nes` file and play it. Passes nestest to the cycle; plays sound through the shared APU; comes with an original demo cart. | [`games/exactulator`](games/exactulator/README.md) |
+| **Exact Drive Soundscapes** | A jukebox for a new Mega Drive FM engine: three original songs and seven sound effects from an emulated YM2612, with channel meters and live FM algorithm diagrams on a sys16-drawn dusk screen. | [`games/exact-drive-soundscapes`](games/exact-drive-soundscapes/README.md) |
 | **Exact Space Dodgeball** | A mid-80s Sega arcade look on a new Super Scaler-style engine: fly over a checkerboard in space and dodge giant bouncing dodgeballs and pillars, every one zoomed from a speck to screen-filling. | [`games/exact-space-dodgeball`](games/exact-space-dodgeball/README.md) |
 
 Each game is its own Exact app, with its own Cargo workspace and tests. Their histories
@@ -53,6 +54,7 @@ bun run exactsylvania # build Exactsylvania and open it
 bun run musicbox      # build Exacticom Musicbox and open it
 bun run exactulator   # build Exactulator and open it
 bun run dodgeball     # build Exact Space Dodgeball and open it
+bun run soundscapes   # build Exact Drive Soundscapes and open it
 ```
 
 Or from a game's folder, `bun exact.mjs mac --run` (for Exactbound, see [Audio](#audio) first). The first build takes 1–3 minutes;
@@ -75,7 +77,8 @@ bun run test:exactsylvania # 7 tests
 bun run test:musicbox     # 3 tests
 bun run test:exactulator  # 3 tests
 bun run test:dodgeball    # 3 tests
-bun run test:engine       # the NES engines' own tests (picture, sound, emulator)
+bun run test:soundscapes  # 4 tests
+bun run test:engine       # the engines' own tests (picture, sound, emulator, FM)
 ```
 
 The tests are each game's `app.test.contract`. They build the macOS app and drive it.
@@ -86,6 +89,11 @@ The tests are each game's `app.test.contract`. They build the macOS app and driv
 Super Scaler boards: 320×224 in 15-bit colour, hardware-style sprite zoom, shadow sprites, raster
 backdrops, line-scrolled layers and a perspective checkerboard ground. Exact Space Dodgeball uses
 it, shown by `nes-screen` (which takes any frame size).
+
+[`engines/ym2612`](engines/ym2612) is the Mega Drive's FM sound chip, sample by sample: six
+channels of four operators, the eight algorithms, feedback, envelopes with SSG-EG, the LFO,
+channel 3's special mode and channel 6's DAC, with a 60 Hz sound driver, DAC drum samples and a
+stereo WAV writer. Exact Drive Soundscapes renders its music with it.
 
 The NES-style games share five Rust crates:
 
@@ -116,8 +124,10 @@ engines/
   nes-emu/          an NES emulator core: 6502, PPU, APU, mapper 0, controllers
   live-audio/       live samples to the speaker (AudioQueue), until Exact streams audio
   sys16/            a Super Scaler-style picture processor: 320x224, sprite zoom, ground, raster
+  ym2612/           the Mega Drive's FM sound chip, a sound driver, DAC drums, stereo WAV output
 games/
   exactsylvania/    app.contract, level.contract, gpu/ (its NesGame, sheets.rs), assets/sprites/ (PNG sheets), tools/
+  exact-drive-soundscapes/ app.contract, songs.contract (generated), gpu/ (music.rs, the sys16 screen), assets/ (rendered WAVs)
   exact-space-dodgeball/ field.contract, app.contract, gpu/ (art and scene for sys16)
   exactulator/      app.contract, app.ts (reads the ROM), gpu/ (runs nes-emu), assets/demo.nes, tools/democart.py
   exacticom-musicbox/     app.contract, songs.contract (generated), gpu/ (music.rs, its NesGame), assets/ (rendered WAVs)
