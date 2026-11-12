@@ -1,0 +1,59 @@
+// Exactulator: an NES emulator. Open an iNES (.nes) file with mapper 0 and
+// play it: engines/nes-emu runs the console (the 6502, the PPU, the
+// controllers), and gpu/ shows its picture through nes-screen. No sound yet.
+// The data module reads the picked file and hands its bytes over as base64.
+shape Rom
+  data: string
+  error: string
+
+fn keyButton(k: string): number = (k == "x" or k == "X" ? 1 : (k == "z" or k == "Z" ? 2 : (k == "Shift" ? 4 : (k == "Enter" ? 8
+  : (k == "ArrowUp" ? 16 : (k == "ArrowDown" ? 32 : (k == "ArrowLeft" ? 64 : (k == "ArrowRight" ? 128 : 0))))))))
+fn has(held: number[], b: number): bool = held.filter(h => h == b).length > 0
+
+component Exactulator
+  // The picked file's copy, and its name to show.
+  state romPath = ""
+  state romName = ""
+  // The NES buttons held now (each one a power of two: A 1, B 2, Select 4,
+  // Start 8, Up 16, Down 32, Left 64, Right 128).
+  state held: number[] = []
+  // Each press of Reset counts up; the emulator resets on a rise.
+  state resets = 0
+  resource rom = romFile(romPath) as shape Rom
+
+  derive pressed = ((has(held, 1) ? 1 : 0) + (has(held, 2) ? 2 : 0) + (has(held, 4) ? 4 : 0) + (has(held, 8) ? 8 : 0)
+    + (has(held, 16) ? 16 : 0) + (has(held, 32) ? 32 : 0) + (has(held, 64) ? 64 : 0) + (has(held, 128) ? 128 : 0))
+  derive romData = romPath == "" ? "" : rom.data
+  derive status = (romPath == "" ? "No cartridge"
+    : (rom.error != "" ? rom.error : romName))
+
+  action openRom
+    showPicker("rom")
+  action romPicked(files: Picked[])
+    romPath = match first(files) { case some(f) => f.path, case none => romPath }
+    romName = match first(files) { case some(f) => f.name, case none => romName }
+    blur("open")
+  action reset
+    resets = resets + 1
+    blur("reset")
+
+  action onKey(k: string, e: KeyboardEvent)
+    let b = keyButton(k)
+    if b > 0
+      preventDefault()
+      if not has(held, b)
+        held = held.concat([b])
+  action onKeyUp(k: string)
+    let b = keyButton(k)
+    if b > 0
+      held = held.filter(h => h != b)
+
+  view
+    main testId="root" key=onKey keyup=onKeyUp width="100%" height="100%" display="flex" flex-direction="column" background-color="#000000"
+      row display="flex" align-items="center" gap=12 padding=10
+        button "Open ROM…" press=openRom id="open" testId="open" color="#ffffff" background-color="#3a3a3a" padding-left=12 padding-right=12 padding-top=5 padding-bottom=5 border-radius=6
+        button "Reset" press=reset id="reset" testId="reset" disabled=(romData == "") color="#ffffff" background-color="#3a3a3a" padding-left=12 padding-right=12 padding-top=5 padding-bottom=5 border-radius=6 opacity=(romData == "" ? 0.4 : 1)
+        text status testId="status" flex=1 color="#d8d8d8"
+        text "Arrows · X A · Z B · Enter Start · Shift Select" color="#8a8a8a" font-size=12
+      canvas surface=ppu(romData, pressed, resets) flex=1 min-height=0 width="100%" testId="screen"
+      input type="file" id="rom" testId="rom" display="none" change=romPicked

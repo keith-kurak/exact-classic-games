@@ -25,6 +25,12 @@ pub trait NesGame: Default {
     fn bind(&mut self, inputs: &[Value]) -> Result<(), SurfaceError>;
     /// Draw frame number `frame` (60 a second) into `rgba`, 256×240×4 bytes.
     fn draw(&mut self, frame: u64, rgba: &mut [u8]);
+    /// The same, with the host's clock (`now_ms`) and whether the agent owns
+    /// time (`seekable`): for a game that keeps its own pace (an emulator
+    /// running 60.0988 frames a second on any display). It draws by default.
+    fn draw_at(&mut self, frame: u64, _now_ms: f64, _seekable: bool, rgba: &mut [u8]) {
+        self.draw(frame, rgba);
+    }
 }
 
 /// The surface for a game: create one with [`surface`].
@@ -73,7 +79,7 @@ impl<G: NesGame> Surface for NesSurface<G> {
             self.gpu = Some(build(device, format, frame.shader_generation));
         }
         self.frame += 1;
-        self.game.draw(self.frame, &mut self.rgba);
+        self.game.draw_at(self.frame, frame.now_ms, frame.seekable, &mut self.rgba);
         let gpu = self.gpu.as_mut().unwrap();
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {

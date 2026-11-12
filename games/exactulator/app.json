@@ -1,0 +1,33 @@
+{
+  "$schema": "../../../../exact/scripts/app.schema.json",
+  "name": "Exactulator",
+  "short_name": "Exactulator",
+  "id": "com.example.exactulator",
+  "start_url": "/",
+  "display": "standalone",
+  "app": {
+    "id": "com.example.exactulator",
+    "name": "Exactulator"
+  },
+  "host": {
+    "web": {},
+    "macos": {
+      "minimumOS": "14.0",
+      "window": {
+        "width": 768,
+        "height": 760
+      }
+    }
+  },
+  "deploy": {
+    "store": {
+      "web": "0",
+      "macos": "0"
+    }
+  },
+  "gpu": {
+    "shaderRoots": [
+      "../../engines/nes-screen/shaders"
+    ]
+  }
+}

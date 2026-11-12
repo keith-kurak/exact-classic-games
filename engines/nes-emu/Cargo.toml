@@ -1,0 +1,13 @@
+[package]
+name = "nes-emu"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "A basic NES emulator core: the 6502 (official and common unofficial opcodes), the PPU (registers, VRAM, OAM, scanline rendering into nes-ppu's frame), controllers and iNES cartridges with mapper 0 (NROM). No sound yet."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+nes-ppu = { path = "../nes-ppu" }

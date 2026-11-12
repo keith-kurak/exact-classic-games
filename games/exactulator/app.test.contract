@@ -1,0 +1,18 @@
+test "with no cartridge, the screen asks for one"
+  expect tree has "screen"
+  expect text "status" == "No cartridge"
+  expect state romData == ""
+
+test "opening the demo cart loads it, and keys become NES buttons"
+  tap "open"
+  pick "rom" "assets/demo.nes"
+  expect state romName == "demo.nes"
+  expect text "status" == "demo.nes"
+  expect state rom.error == ""
+  type "root" key "ArrowRight" down
+  type "root" key "x" down
+  expect state pressed == 129
+  type "root" key "ArrowRight" up
+  expect state pressed == 1
+  tap "reset"
+  expect state resets == 1
