@@ -24,6 +24,7 @@
     "test:dodgeball": "cd games/exact-space-dodgeball && bun exact.mjs test macos",
     "soundscapes": "cd games/exact-drive-soundscapes && bun exact.mjs mac --run",
     "test:soundscapes": "cd games/exact-drive-soundscapes && bun exact.mjs test macos",
-    "patch-exact": "bun scripts/patch-exact.ts"
+    "patch-exact": "bun scripts/patch-exact.ts",
+    "update-exact": "bun scripts/update-exact.ts"
   }
 }

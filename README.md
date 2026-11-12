@@ -86,7 +86,8 @@ The tests are each game's `app.test.contract`. They build the macOS app and driv
 ## Patches to Exact
 
 [`patches/exact`](patches/exact/README.md) holds fixes these games need in Exact itself. Apply
-them to your checkout with `bun run patch-exact`, then rebuild. One so far: gapless looping
+them to your checkout with `bun run patch-exact`, then rebuild. `bun run update-exact` pulls
+Exact and puts the patches back on it (`--check` first to see how far behind it is). One so far: gapless looping
 for `audio … loop=true`, used by the jukeboxes' songs.
 
 ## Engines
