@@ -18,7 +18,7 @@ test "the arrows fly you around the field, to its edges"
 test "balls come from far off; standing still, three hits end the game"
   type "root" key " "
   clock +3000
-  expect state kind.0 == 1
+  expect state kind.0 == 3
   clock +30000
   expect state hits == 3
   expect state lives == 0

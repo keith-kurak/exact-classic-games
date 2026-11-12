@@ -8,8 +8,9 @@ everything that comes at you is one piece of art, zoomed from a speck to the siz
 ![The title](docs/title.png)
 ![Flying high: the horizon sinks below you](docs/high.png)
 ![Flying low: balls bouncing overhead](docs/low.png)
+![Hit: knocked head over heels](docs/hit.png)
 
-*The title · flying high · flying low*
+*The title · flying high · flying low · hit*
 
 ## Run it
 
@@ -30,9 +31,11 @@ Or from this folder: `bun exact.mjs mac --run`, and `bun exact.mjs test macos`. 
 | Arrows or WASD | Fly: left, right, up, down |
 | Space or Enter | Start, or play again |
 
-Balls are thrown near where you are and bounce as they come; now and then a pillar stands in a
-lane. Each passes the spot where you fly: if it is where you are, you lose a life and flash for
-two seconds. You have three. The longer you last, the faster you fly and the more they throw.
+Balls come in four kinds. Bouncers bounce as they come (big ones bounce low). Flyers fly
+straight at where you were when they were thrown. Curvers come in from one side and weave
+across your lane. Rollers roll along the floor. Now and then a pillar stands in a lane. Each
+passes the spot where you fly: if it is where you are, the action stops and you are knocked
+head over heels to the floor. Then you get up and fly on, safe for a moment. You have three lives. The longer you last, the faster you fly and the more they throw.
 Your score is the distance you fly.
 
 ## How it's made

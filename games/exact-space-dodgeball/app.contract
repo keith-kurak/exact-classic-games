@@ -4,7 +4,7 @@
 // picture processor in the style of Sega's Super Scaler boards: everything
 // that comes at you is one piece of art, zoomed from a speck to the size of
 // the screen.
-use slots, farZ, goneZ, minX, maxX, minY, maxY, speedFor, gapFor, gravity, bounce, pillarHeight, startLives, hurtTicks, nextRng, kindFor, throwX, throwY, sizeFor, colorFor, nth, sq, clamp, pad, n2 from "./field.contract"
+use slots, farZ, goneZ, minX, maxX, minY, maxY, speedFor, gapFor, gravity, bounce, pillarHeight, isBall, flightTicks, aimX, aimY, bounceFor, weave, startLives, hurtTicks, downTicks, knockUp, fallPull, poseFor, nextRng, kindFor, throwX, throwY, sizeFor, colorFor, nth, sq, clamp, pad, n2 from "./field.contract"
 
 fn dirX(k: string): number = (k == "ArrowLeft" or k == "a" ? -1 : (k == "ArrowRight" or k == "d" ? 1 : 0))
 fn dirY(k: string): number = (k == "ArrowUp" or k == "w" ? 1 : (k == "ArrowDown" or k == "s" ? -1 : 0))
@@ -35,7 +35,13 @@ component ExactSpaceDodgeball
   state ov: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   state osize: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   state ocol: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  // Its way across each tick, and (a curver) the line it weaves about.
+  state ovx: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  state obase: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   state hits = 0
+  // Down: ticks left of a fall, when everything stops; how fast you fall.
+  state down = 0
+  state fallV = 0
 
   derive score = floor(travel * 10)
   derive playing = phase == "play"
@@ -44,6 +50,30 @@ component ExactSpaceDodgeball
     every(33, tick)
 
   action tick
+    if down > 0
+      fall()
+    else
+      fly()
+
+  // Hit: the world holds still while you are flung up, tumble and hit the
+  // floor, lie there, and get up. Then what hit you is gone, and you flash.
+  action fall
+    let d = down - 1
+    let y1 = max(0, py + fallV)
+    down = d
+    ticks = ticks + 1
+    py = y1
+    fallV = y1 <= 0 ? 0 : fallV - fallPull()
+    if d <= 0
+      if lives <= 0
+        phase = "over"
+        best = max(best, floor(travel * 10))
+      else
+        hurt = hurtTicks()
+        py = 2.5
+        kind = ks().map(i => (nth(oz, i) < 8 ? 0 : nth(kind, i)))
+
+  action fly
     let speed = speedFor(travel)
     let k0 = kind
     let x0 = ox
@@ -52,20 +82,23 @@ component ExactSpaceDodgeball
     let v0 = ov
     let s0 = osize
     // Flying: a little momentum, held to the field.
-    let nx = clamp(px + hx * 0.26, minX(), maxX())
-    let ny = clamp(py + hy * 0.2, minY(), maxY())
-    // Everything comes on; balls fall and bounce.
+    let nx = clamp(px + hx * 0.32, minX(), maxX())
+    let ny = clamp(py + hy * 0.25, minY(), maxY())
+    // Everything comes on. Bouncers fall and bounce; flyers and curvers keep
+    // their line (curvers weaving about it); rollers roll on the floor.
     let z1 = ks().map(i => nth(z0, i) - speed)
-    let v1 = ks().map(i => (nth(k0, i) == 1 ? nth(v0, i) - gravity() : 0))
-    let ya = ks().map(i => nth(y0, i) + nth(v1, i))
+    let b1 = ks().map(i => nth(obase, i) + nth(ovx, i))
+    let x1 = ks().map(i => (nth(k0, i) == 4 ? nth(b1, i) + weave(nth(z1, i)) : (nth(k0, i) == 3 ? nth(x0, i) + nth(ovx, i) : nth(x0, i))))
+    let v1 = ks().map(i => (nth(k0, i) == 1 ? nth(v0, i) - gravity() : (nth(k0, i) == 3 ? nth(v0, i) : 0)))
+    let ya = ks().map(i => (nth(k0, i) == 5 ? nth(s0, i) : nth(y0, i) + nth(v1, i)))
     let floored = ks().map(i => (nth(k0, i) == 1 and nth(ya, i) < nth(s0, i) ? 1 : 0))
-    let y1 = ks().map(i => (nth(floored, i) == 1 ? nth(s0, i) : nth(ya, i)))
-    let v2 = ks().map(i => (nth(floored, i) == 1 ? bounce() : nth(v1, i)))
+    let y1 = ks().map(i => (nth(floored, i) == 1 ? nth(s0, i) : max(nth(ya, i), (isBall(nth(k0, i)) ? nth(s0, i) : 0))))
+    let v2 = ks().map(i => (nth(floored, i) == 1 ? bounceFor(nth(s0, i)) : nth(v1, i)))
     // Passing you: a hit if it is where you are (you are 1.4 tall, centred
     // 0.7 above your feet at py).
     let crossing = ks().filter(i => nth(k0, i) > 0 and nth(z0, i) > 0 and nth(z1, i) <= 0)
-    let struck = crossing.filter(i => (nth(k0, i) == 1
-      ? sq(nth(x0, i) - nx) + sq(nth(y1, i) - (ny + 0.7)) < sq(nth(s0, i) + 0.5)
+    let struck = crossing.filter(i => (isBall(nth(k0, i))
+      ? sq(nth(x1, i) - nx) + sq(nth(y1, i) - (ny + 0.7)) < sq(nth(s0, i) + 0.5)
       : (nth(x0, i) - nx) * (nth(x0, i) - nx) < 1.0 and ny < pillarHeight()))
     let hitNow = playing and hurt == 0 and struck.length > 0
     let lives1 = hitNow ? lives - 1 : lives
@@ -83,18 +116,21 @@ component ExactSpaceDodgeball
     rng = r
     wait = throwing ? gapFor(t1) : wait - 1
     kind = ks().map(i => (i == slot ? k : (nth(z1, i) < goneZ() ? 0 : nth(k0, i))))
-    ox = ks().map(i => (i == slot ? throwX(r, nx, k) : nth(x0, i)))
-    oy = ks().map(i => (i == slot ? (k == 2 ? 0 : throwY(r)) : nth(y1, i)))
+    let sx = throwX(r, nx, k)
+    let sy = throwY(r, k)
+    ox = ks().map(i => (i == slot ? sx : nth(x1, i)))
+    oy = ks().map(i => (i == slot ? sy : nth(y1, i)))
     oz = ks().map(i => (i == slot ? farZ() : nth(z1, i)))
-    ov = ks().map(i => (i == slot ? 0 : nth(v2, i)))
+    ov = ks().map(i => (i == slot ? aimY(k, sy, ny, speed) : nth(v2, i)))
+    ovx = ks().map(i => (i == slot ? aimX(k, sx, nx, speed) : nth(ovx, i)))
+    obase = ks().map(i => (i == slot ? sx : nth(b1, i)))
     osize = ks().map(i => (i == slot ? sizeFor(r, k) : nth(s0, i)))
     ocol = ks().map(i => (i == slot ? colorFor(r) : nth(ocol, i)))
-    hurt = hitNow ? hurtTicks() : max(0, hurt - 1)
+    hurt = max(0, hurt - 1)
     lives = lives1
     hits = hitNow ? hits + 1 : hits
-    if playing and lives1 <= 0
-      phase = "over"
-      best = max(best, floor(t1 * 10))
+    down = hitNow ? downTicks() : 0
+    fallV = hitNow ? knockUp() : 0
 
   action start
     phase = "play"
@@ -106,11 +142,13 @@ component ExactSpaceDodgeball
     lives = startLives()
     hurt = 0
     hits = 0
+    down = 0
+    fallV = 0
     kind = zeros()
     oz = zeros()
 
   // ── What the picture is told ──
-  derive playerSpec = `${n2(px)},${n2(py)},${hx},${hurt},${ticks}`
+  derive playerSpec = `${n2(px)},${n2(py)},${down > 0 ? 0 : hx},${hurt},${ticks},${poseFor(down, py, ticks)},${down}`
   derive things = ks().filter(i => nth(kind, i) > 0).map(i =>
     `${nth(kind, i)},${n2(nth(ox, i))},${n2(nth(oy, i))},${n2(nth(oz, i))},${n2(nth(osize, i))},${nth(ocol, i)}`).join(";")
   derive hud = ([`1,1|SCORE ${pad(score, 6)}`, `16,1|TOP ${pad(max(best, score), 6)}`, `30,1|LIFE ${"****".slice(0, max(0, lives))}`]

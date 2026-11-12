@@ -9,27 +9,52 @@ fn maxX(): number = 7
 fn minY(): number = 0.4
 fn maxY(): number = 7
 // How fast you fly at first, the most you will, and how it builds.
-fn startSpeed(): number = 0.42
-fn topSpeed(): number = 0.9
-fn speedFor(travel: number): number = min(topSpeed(), startSpeed() + travel / 4000)
+fn startSpeed(): number = 0.58
+fn topSpeed(): number = 1.2
+fn speedFor(travel: number): number = min(topSpeed(), startSpeed() + travel / 2600)
 // Ticks between throws: fewer as you go.
-fn gapFor(travel: number): number = max(7, 22 - floor(travel / 220))
+fn gapFor(travel: number): number = max(6, 18 - floor(travel / 220))
 fn gravity(): number = 0.028
 fn bounce(): number = 0.5
 fn pillarHeight(): number = 6
 fn startLives(): number = 3
-fn hurtTicks(): number = 60
+// After a fall, you flash this long, untouchable.
+fn hurtTicks(): number = 45
+// A hit: everything stops while you fall (ticks), knocked up this fast,
+// pulled down this hard.
+fn downTicks(): number = 80
+fn knockUp(): number = 0.3
+fn fallPull(): number = 0.04
+// The poses the picture is told: flying, flung back, tumbling, flat, kneeling.
+fn poseFor(down: number, py: number, ticks: number): number =
+  (down <= 0 ? 0 : (down > 74 ? 1 : (py > 0.05 ? (floor(ticks / 3) % 2 == 0 ? 1 : 2) : (down > 14 ? 3 : 4))))
 
 // The ZX81's random numbers: exact in doubles, the same every game.
 fn nextRng(s: number): number = (s * 75 + 74) % 65537
 
-// A throw: a ball aimed near you, or now and then a pillar in a lane.
-fn kindFor(r: number): number = (r % 5 == 0 ? 2 : 1)
+// The kinds of throw: 1 a bouncer, 2 a pillar, 3 a flyer (straight at you),
+// 4 a curver (weaving across your lane), 5 a roller (along the floor).
+fn kindFor(r: number): number = nth([2, 2, 1, 1, 1, 3, 3, 4, 4, 5], r % 10)
+fn isBall(kind: number): bool = kind != 2
+// Where it starts across: a pillar in a lane; a curver well off to one side;
+// the rest near you.
 fn throwX(r: number, px: number, kind: number): number =
-  (kind == 2 ? (r % 15) - 7 : max(minX(), min(maxX(), px + ((r % 9) - 4) * 1.1)))
-fn throwY(r: number): number = 2 + (r % 4)
+  (kind == 2 ? (r % 15) - 7
+    : (kind == 4 ? (r % 2 == 0 ? -1 : 1) * 6
+    : max(minX(), min(maxX(), px + ((r % 9) - 4) * 1.1))))
+fn throwY(r: number, kind: number): number = (kind == 2 ? 0 : (kind == 5 ? 0 : 1 + (r % 5)))
 fn sizeFor(r: number, kind: number): number = (kind == 2 ? 0.6 : 0.7 + (r % 4) * 0.25)
 fn colorFor(r: number): number = r % 4
+// How long a throw takes to reach you, in ticks, at the current speed.
+fn flightTicks(speed: number): number = farZ() / speed
+// A flyer's and a curver's way across and down each tick: from where it
+// starts to where you were (at your middle) when it left.
+fn aimX(kind: number, x0: number, px: number, speed: number): number = (kind == 3 or kind == 4 ? (px - x0) / flightTicks(speed) : 0)
+fn aimY(kind: number, y0: number, py: number, speed: number): number = (kind == 3 ? (py + 0.7 - y0) / flightTicks(speed) : 0)
+// A bouncer's bounce: big balls bounce low.
+fn bounceFor(size: number): number = 0.62 - size * 0.18
+// A curver swings this far either side of its line.
+fn weave(z: number): number = sin(z * 0.16) * 2.4
 
 // ── Helpers ──
 fn nth(xs: number[], k: number): number = match xs.at(k) { case some(v) => v, case none => 0 }

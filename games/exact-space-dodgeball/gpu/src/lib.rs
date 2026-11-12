@@ -4,7 +4,7 @@
 //! one piece of 4-bit art zoomed to its distance.
 //!
 //! Inputs: 1. you `x,y,lean,hurt,tick`; 2. the distance travelled; 3. the
-//! things `kind,x,y,z,size,colour;…` (kind 1 a ball, 2 a pillar); 4. text
+//! things `kind,x,y,z,size,colour;…` (kind 2 a pillar, the rest balls); 4. text
 //! `col,row|text` joined by `^` (`{…}` yellow).
 
 use exact_gpu::json::text;
@@ -123,22 +123,30 @@ fn pillar() -> Image {
 /// You, from behind, 48×64, flying: helmet, suit, a jet pack, arms out,
 /// legs trailing. `lean` 1 banks right (−1 is its mirror); the flame flickers.
 fn hero(lean: i32, flame: bool) -> Image {
+    hero_pose(lean, flame, false, false)
+}
+
+/// The hero in any pose: `flung` throws the arms up and the legs apart (hit),
+/// `kneel` folds the legs (getting up), and neither has the jets lit.
+fn hero_pose(lean: i32, flame: bool, flung: bool, kneel: bool) -> Image {
     let mut img = Image::new(48, 64);
     let tilt = lean as f32 * 2.0;
+    let leg_end = if kneel { 50 } else { 62 };
+    let boot = if kneel { 46 } else { 56 };
     let lit = |x: f32, cx: f32, w: f32| shade_index(0.75 - (x - cx) / w * 0.45);
     // Legs, trailing, a little apart.
-    for y in 38..62 {
-        let spread = (y - 38) as f32 * 0.12;
+    for y in 38..leg_end {
+        let spread = (y - 38) as f32 * if flung { 0.45 } else if kneel { 0.3 } else { 0.12 };
         for (lx, rx) in [(17.0 - spread - tilt * 0.3, 22.0 - spread - tilt * 0.3), (26.0 + spread - tilt * 0.3, 31.0 + spread - tilt * 0.3)] {
             for x in lx.round() as i32..rx.round() as i32 {
-                let c = if y >= 56 { 3 } else { lit(x as f32, (lx + rx) / 2.0, 6.0) };
+                let c = if y >= boot { 3 } else { lit(x as f32, (lx + rx) / 2.0, 6.0) };
                 img.set(x as usize, y as usize, c);
             }
         }
     }
     // Arms out: the banked side lower.
     for (sx, sign) in [(15.0f32, -1.0f32), (33.0, 1.0)] {
-        let drop = 10.0 + sign * lean as f32 * 4.0;
+        let drop = if flung { -14.0 } else if kneel { 13.0 } else { 10.0 + sign * lean as f32 * 4.0 };
         for t in 0..14 {
             let (ax, ay) = (sx + sign * t as f32 * 0.8 + tilt, 21.0 + t as f32 * drop / 14.0);
             for w in -2..2 {
@@ -170,7 +178,8 @@ fn hero(lean: i32, flame: bool) -> Image {
             img.set((x as f32 + tilt * 0.6) as usize, y, if y == 19 || x == 18 || x == 29 { 1 } else { 3 + ((x + y) % 3 == 0) as u8 });
         }
     }
-    for (nx, len) in [(20.0, if flame { 9 } else { 6 }), (26.0, if flame { 6 } else { 9 })] {
+    let lit_jets = !flung && !kneel;
+    for (nx, len) in [(20.0, if !lit_jets { 0 } else if flame { 9 } else { 6 }), (26.0, if !lit_jets { 0 } else if flame { 6 } else { 9 })] {
         for y in 35..37 {
             for x in 0..3 {
                 img.set((nx + x as f32 + tilt * 0.6) as usize, y, 2);
@@ -195,6 +204,19 @@ fn hero(lean: i32, flame: bool) -> Image {
         }
     }
     img
+}
+
+/// An image turned a quarter: counter-clockwise (its top to the left), or
+/// clockwise. The boards could not turn sprites; games drew such frames.
+fn turned(img: &Image, clockwise: bool) -> Image {
+    let mut out = Image::new(img.height, img.width);
+    for ny in 0..out.height {
+        for nx in 0..out.width {
+            let (x, y) = if clockwise { (ny, img.height - 1 - nx) } else { (img.width - 1 - ny, nx) };
+            out.set(nx, ny, img.get(x, y));
+        }
+    }
+    out
 }
 
 fn shadow() -> Image {
@@ -307,6 +329,11 @@ const SHADOW: usize = 2;
 const PLANET_IMG: usize = 3;
 /// The hero: straight (two flame frames), banked right (two).
 const HERO: usize = 4;
+/// Hit: tumbling (turned), standing still, flat on the floor, kneeling, flung.
+const TUMBLE: usize = 8;
+const FLAT: usize = 10;
+const KNEEL: usize = 11;
+const FLUNG: usize = 12;
 
 fn build() -> Art {
     let mut tiles = Tiles::default();
@@ -318,7 +345,16 @@ fn build() -> Art {
     }
     let hills = hills(&mut tiles);
     let stars = stars(&mut tiles);
-    let images = vec![ball(), pillar(), shadow(), planet(), hero(0, false), hero(0, true), hero(1, false), hero(1, true)];
+    let flung = hero_pose(0, false, true, false);
+    let images = vec![
+        ball(), pillar(), shadow(), planet(),
+        hero(0, false), hero(0, true), hero(1, false), hero(1, true),
+        turned(&flung, true),
+        hero_pose(0, false, false, false),
+        turned(&hero_pose(0, false, false, false), false),
+        hero_pose(0, false, false, true),
+        flung,
+    ];
     Art { palettes: palettes(), images, tiles, font: font.clone(), gold: gold_tiles, hills, stars }
 }
 
@@ -350,7 +386,7 @@ impl Camera {
     fn of(px: f32, py: f32) -> Camera {
         // It climbs with you, nearly as high, and tilts: flying high, the
         // horizon sinks down the screen, so you stay in the picture.
-        Camera { x: px * 0.55, height: 1.2 + py * 0.85, horizon: 96.0 + (py - 2.5) * 8.0 }
+        Camera { x: px * 0.7, height: 1.2 + py * 0.85, horizon: 96.0 + (py - 2.5) * 8.0 }
     }
     /// A world point on screen, and its scale (pixels a world unit).
     fn project(&self, x: f32, y: f32, z: f32) -> Option<(f32, f32, f32)> {
@@ -393,13 +429,15 @@ impl Game {
 
     pub fn draw_frame(&self, rgba: &mut [u8]) {
         let art = art();
-        let [px, py, lean, hurt, tick] = self.player[..] else { return };
-        let cam = Camera::of(px, py);
+        let [px, py, lean, hurt, tick, pose, down] = self.player[..] else { return };
+        let cam = Camera::of(px, py.max(0.4));
+        // The instant of a hit: everything flashes white.
+        let flash = ((down - 74.0) / 6.0).clamp(0.0, 1.0);
         // The sky: deep space overhead to a pink haze at the horizon.
         let backdrop: Vec<u16> = (0..HEIGHT)
             .map(|y| {
                 let t = (y as f32 / cam.horizon.max(1.0)).clamp(0.0, 1.0);
-                sys16::mix(rgb8(6, 0, 30), rgb8(240, 90, 150), t * t)
+                sys16::mix(sys16::mix(rgb8(6, 0, 30), rgb8(240, 90, 150), t * t), rgb8(255, 255, 255), flash)
             })
             .collect();
         let mut stars = art.stars.clone();
@@ -416,7 +454,7 @@ impl Game {
             travel: self.travel - BEHIND,
             shift: cam.x,
             check: (3.0, 3.0),
-            colors: [rgb8(70, 230, 160), rgb8(20, 120, 110)],
+            colors: [sys16::mix(rgb8(70, 230, 160), rgb8(255, 255, 255), flash), sys16::mix(rgb8(20, 120, 110), rgb8(255, 255, 255), flash)],
             fog: rgb8(240, 90, 150),
             fog_far: 520.0,
         };
@@ -432,7 +470,7 @@ impl Game {
             sh.anchor_y = 0.5;
             sh.shadow = true;
             sprites.push(sh);
-            if kind as i32 == 1 {
+            if kind as i32 != 2 {
                 let Some((bx, by, _)) = cam.project(x, y, z) else { continue };
                 let mut b = Sprite::zoom(BALL, bx, by, 2.0 * size * s / 64.0, BALLS + col as usize % 4, z);
                 b.anchor_y = 0.5;
@@ -450,7 +488,20 @@ impl Game {
             sh.anchor_y = 0.5;
             sh.shadow = true;
             sprites.push(sh);
-            if hurt < 0.5 || (tick as i32) % 4 < 2 {
+            let p = pose as i32;
+            if p > 0 {
+                // Down: flung back, tumbling end over end, flat on the floor,
+                // then up on one knee.
+                let (img, flip) = match p {
+                    1 => (FLUNG, false),
+                    2 => (TUMBLE, (tick as i32 / 6) % 2 == 1),
+                    3 => (FLAT, false),
+                    _ => (KNEEL, false),
+                };
+                let mut h = Sprite::zoom(img, sx, sy, 1.5 * s / 64.0, YOU, 0.0);
+                h.flip_x = flip;
+                sprites.push(h);
+            } else if hurt < 0.5 || (tick as i32) % 4 < 2 {
                 let flame = (tick as i32) % 2 == 1;
                 let banked = lean.abs() > 0.5;
                 let img = HERO + if banked { 2 } else { 0 } + flame as usize;
@@ -516,7 +567,7 @@ mod tests {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../assets");
         std::fs::create_dir_all(&root).unwrap();
         let g = Game {
-            player: vec![1.0, 2.5, 1.0, 0.0, 3.0],
+            player: vec![1.0, 2.5, 1.0, 0.0, 3.0, 0.0, 0.0],
             travel: 37.0,
             things: vec![
                 vec![1.0, 0.5, 2.6, 6.0, 1.3, 0.0],
