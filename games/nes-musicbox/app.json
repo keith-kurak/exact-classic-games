@@ -1,0 +1,33 @@
+{
+  "$schema": "../../../../exact/scripts/app.schema.json",
+  "name": "NES Musicbox",
+  "short_name": "NES Musicbox",
+  "id": "com.example.nesmusicbox",
+  "start_url": "/",
+  "display": "standalone",
+  "app": {
+    "id": "com.example.nesmusicbox",
+    "name": "NES Musicbox"
+  },
+  "host": {
+    "web": {},
+    "macos": {
+      "minimumOS": "14.0",
+      "window": {
+        "width": 768,
+        "height": 720
+      }
+    }
+  },
+  "deploy": {
+    "store": {
+      "web": "0",
+      "macos": "0"
+    }
+  },
+  "gpu": {
+    "shaderRoots": [
+      "../../engines/nes-screen/shaders"
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+test "the list starts on the first song, nothing playing"
+  expect tree has "screen"
+  expect state cursor == 0
+  expect state playing == -1
+
+test "Z plays a song; its meters follow the rows; X stops it"
+  type "root" key "z"
+  expect state playing == 0
+  expect tree has "music"
+  clock +1000
+  expect state row == 10
+  expect state notes.0 == "D5"
+  expect state levels.0 == 13
+  type "root" key "x"
+  expect state playing == -1
+  expect tree missing "music"
+
+test "a sound plays through the APU's rendered effect"
+  type "root" key "ArrowDown"
+  type "root" key "ArrowDown"
+  type "root" key "ArrowDown"
+  expect state cursor == 3
+  type "root" key "z"
+  expect state lastSound == 0
+  expect sound has "assets/sfx/jump.wav"

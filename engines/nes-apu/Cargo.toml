@@ -1,0 +1,10 @@
+[package]
+name = "nes-apu"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "An NES (2A03) audio processing unit: two pulse channels, triangle, noise and the DMC's output level, the frame counter, the non-linear mixer and output filters, driven by register writes and rendered to PCM; with a small frame-rate tracker driver and a WAV writer."
+
+[lib]
+path = "src/lib.rs"

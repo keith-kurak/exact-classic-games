@@ -1,0 +1,104 @@
+// NES Musicbox: a jukebox for the nes-apu engine. Three original songs and
+// seven sound effects, each made by the emulated 2A03 (engines/nes-apu) and
+// rendered to WAV ahead of time; the screen is drawn by the NES picture
+// engine (engines/nes-ppu, via gpu/). While a song plays, each channel's
+// meter follows the notes the driver wrote, row by row (songs.contract).
+use songCount, songName, songFile, rowMs, rowCount, labels0, labels1, labels2, labels3, volumes0, volumes1, volumes2, volumes3, soundCount, soundName, soundFile from "./songs.contract"
+
+sound "assets/sfx/jump.wav"
+sound "assets/sfx/coin.wav"
+sound "assets/sfx/laser.wav"
+sound "assets/sfx/explosion.wav"
+sound "assets/sfx/powerup.wav"
+sound "assets/sfx/hit.wav"
+sound "assets/sfx/fanfare.wav"
+
+fn isUp(k: string): bool = k == "ArrowUp" or k == "w"
+fn isDown(k: string): bool = k == "ArrowDown" or k == "s"
+fn isPlay(k: string): bool = k == "Enter" or k == " " or k == "z"
+fn isStop(k: string): bool = k == "Escape" or k == "x"
+fn tickMs(): number = 50
+fn items(): number = songCount() + soundCount()
+fn word(xs: string[], k: number): string = match xs.at(k) { case some(v) => v, case none => "" }
+fn nth(xs: number[], k: number): number = match xs.at(k) { case some(v) => v, case none => 0 }
+// A volume, 0-15, as a meter of up to seven tiles (eight pixels each).
+fn meterTile(px: number): string = `~${max(0, min(8, floor(px)))}`
+fn meter(volume: number): string = [0, 1, 2, 3, 4, 5, 6].map(i => meterTile(volume * 56 / 15 - i * 8)).join("")
+fn pad(s: string, n: number): string = `${s}${"        ".slice(0, max(0, n - s.length))}`
+fn clock(ms: number): string = `${floor(ms / 60000)}:${floor(ms / 1000) % 60 < 10 ? "0" : ""}${floor(ms / 1000) % 60}`
+
+component NesMusicbox
+  // The list: songs first, then sounds.
+  state cursor = 0
+  // The song playing (-1 for none), and the tick it started on.
+  state playing = -1
+  state started = 0
+  state ticks = 0
+  // The last sound played, for the screen.
+  state lastSound = -1
+
+  task clock when playing >= 0
+    every(50, tick)
+  action tick
+    ticks = ticks + 1
+
+  derive elapsed = (ticks - started) * tickMs()
+  derive row = playing >= 0 ? floor(elapsed / rowMs(playing)) % rowCount(playing) : 0
+  // What each channel plays on this row, and how loud.
+  derive notes = (playing >= 0
+    ? [word(labels0(playing), row), word(labels1(playing), row), word(labels2(playing), row), word(labels3(playing), row)]
+    : ["", "", "", ""])
+  derive levels = (playing >= 0
+    ? [nth(volumes0(playing), row), nth(volumes1(playing), row), nth(volumes2(playing), row), nth(volumes3(playing), row)]
+    : [0, 0, 0, 0])
+
+  // ── The screen ──
+  derive titleWindow = "1,1,30,4|{       NES MUSICBOX}|  2A03 SOUND, CYCLE BY CYCLE"
+  derive songWindow = `1,6,18,9,2|{SONGS}|${[0, 1, 2].map(i => ` ${songName(i)}`).join("|")}`
+  derive soundWindow = `19,6,12,17,2|{SOUNDS}|${[0, 1, 2, 3, 4, 5, 6].map(i => ` ${soundName(i)}`).join("|")}`
+  derive names = ["P1", "P2", "TR", "NO"]
+  derive meters = [0, 1, 2, 3].map(ch => `%${ch}${word(names, ch)} ${pad(word(notes, ch), 4)}${meter(nth(levels, ch))}`)
+  derive playWindow = (playing >= 0
+    ? `1,15,18,14,2|{${songName(playing)}}|${clock(elapsed)}  ROW ${row < 10 ? "0" : ""}${row}|${meters.join("|")}`
+    : "1,15,18,14,2|{NOW PLAYING}|  NOTHING|%0P1|%1P2|%2TR|%3NO")
+  derive keysWindow = "19,23,12,6|UP/DN PICK|Z PLAY|X STOP"
+  derive windows = [titleWindow, songWindow, soundWindow, playWindow, keysWindow].join("^")
+  // The hand points at the cursor; a note bounces on the beat while a song plays.
+  derive handY = (9 + (cursor < songCount() ? cursor : cursor - songCount()) * 2) * 8
+  derive handX = cursor < songCount() ? 4 : 148
+  derive bounce = playing >= 0 ? (row % 4 < 2 ? 0 : 3) : 0
+  derive sprites = `hand:${handX}:${handY};note:${playing >= 0 ? 128 : -16}:${136 + bounce}`
+
+  // ── Keys ──
+  action onKey(k: string, e: KeyboardEvent)
+    let at = cursor
+    if isUp(k) or isDown(k) or isPlay(k) or isStop(k)
+      preventDefault()
+    if isUp(k)
+      cursor = (at + items() - 1) % items()
+    if isDown(k)
+      cursor = (at + 1) % items()
+    if isPlay(k)
+      choose(at)
+    if isStop(k)
+      playing = -1
+
+  action choose(at: number)
+    if at < songCount()
+      playing = at
+      started = ticks
+    else
+      let s = at - songCount()
+      lastSound = s
+      playSound(soundFile(s), group="sfx")
+
+  view
+    main testId="root" key=onKey width="100%" height="100%" background-color="#000000"
+      canvas surface=ppu(sprites, windows) width="100%" height="100%" testId="screen"
+      if playing == 0
+        audio songFile(0) autoplay=true loop=true testId="music"
+      if playing == 1
+        audio songFile(1) autoplay=true loop=true testId="music"
+      if playing == 2
+        audio songFile(2) autoplay=true loop=true testId="music"
+      text `${playing}` testId="playing" position="absolute" left=-9999 top=0

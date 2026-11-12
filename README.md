@@ -11,6 +11,7 @@ Each game has a README with screenshots, its controls, and how it's made.
 | **Exact Odyssey** | An 8-bit console RPG on a real NES-style picture processor: 2C02 colours, 8×8 CHR tiles, attribute-limited backgrounds, 3-colour sprites. Walk Reedholm with Thunda, Tooth and Chocolat, then fight real-time ATB battles with stagger chains, juggling and party stances. | [`games/exact-odyssey`](games/exact-odyssey/README.md) |
 | **Exactsylvania** | A gothic action platformer on the shared NES engine, in the style of the 8-bit castle crawlers. Vesper Holt and her chain whip cross the Gatehouse: a moonlit courtyard of rising ghouls, the castle gate, an entrance hall of bats, knights, candles and stairs, and the Belfry, where a giant bat waits. | [`games/exactsylvania`](games/exactsylvania/README.md) |
 | **Links Exact86** | An early-90s PC golf game: hole 1, a dogleg-right par 4 laid out after Pebble Beach's first, ray-marched from a fixed camera behind the ball, with a three-press swing. | [`games/links-exact86`](games/links-exact86/README.md) |
+| **NES Musicbox** | A jukebox for the shared NES sound engine: three original chiptunes and seven sound effects from an emulated 2A03, with live channel meters on an NES-drawn screen. | [`games/nes-musicbox`](games/nes-musicbox/README.md) |
 
 Each game is its own Exact app, with its own Cargo workspace and tests. Their histories
 came in with `git subtree`, so `git log -- games/<game>` shows each game's commits.
@@ -45,6 +46,7 @@ bun run links         # build Links Exact86 and open it
 bun run gear          # build Exact Gear Solid and open it
 bun run odyssey       # build Exact Odyssey and open it
 bun run exactsylvania # build Exactsylvania and open it
+bun run musicbox      # build NES Musicbox and open it
 ```
 
 Or from a game's folder, `bun exact.mjs mac --run` (for Exactbound, see [Audio](#audio) first). The first build takes 1–3 minutes;
@@ -63,20 +65,24 @@ bun run test:links        # 5 tests
 bun run test:gear         # 10 tests
 bun run test:odyssey      # 18 tests
 bun run test:exactsylvania # 7 tests
-bun run test:engine       # the NES picture processor's own tests
+bun run test:musicbox     # 3 tests
+bun run test:engine       # the NES picture and sound engines' own tests
 ```
 
 The tests are each game's `app.test.contract`. They build the macOS app and drive it.
 
 ## Engines
 
-The NES-style games share two Rust crates:
+The NES-style games share three Rust crates:
 
 - [`engines/nes-ppu`](engines/nes-ppu): an NES-style picture processor: the 2C02 palette, 2bpp
   8×8 tiles, metatiles and attribute palettes, OAM sprites, fades, a bold 8×8 font, PNG sheets
   in and out, and `Limits`: which NES rules to keep (`Limits::NES`) or lift (`Limits::MODERN`).
 - [`engines/nes-screen`](engines/nes-screen): shows its frames on an Exact GPU surface; a game
   implements `NesGame` (its inputs and its scene).
+- [`engines/nes-apu`](engines/nes-apu): the NES sound chip (the 2A03's APU), cycle by cycle:
+  pulses, triangle, noise, the frame counter and mixer, with a 60 Hz sound driver and a WAV
+  writer. NES Musicbox renders its music with it.
 
 Exact Odyssey draws its art as text in code; Exactsylvania draws everything from PNG sprite
 sheets. Each game's README says how.
@@ -87,8 +93,10 @@ sheets. Each game's README says how.
 engines/
   nes-ppu/          an NES-style picture processor (Rust): palette, CHR tiles, metatiles, OAM
   nes-screen/       shows an nes-ppu frame on an Exact GPU surface (the NesGame trait)
+  nes-apu/          the NES sound chip, a sound driver, WAV output
 games/
   exactsylvania/    app.contract, level.contract, gpu/ (its NesGame, sheets.rs), assets/sprites/ (PNG sheets), tools/
+  nes-musicbox/     app.contract, songs.contract (generated), gpu/ (music.rs, its NesGame), assets/ (rendered WAVs)
   exact-odyssey/    app.contract, field.contract, battle.contract, gpu/ (art.rs, its NesGame), tools/ (art generators)
   exactbound/       app.contract, world.contract, battle.contract, gpu/ (aurora shader), assets/ (audio, not in git)
   exact-gear-solid/ app.contract, room.contract, items.contract, gpu/ (room shader)
