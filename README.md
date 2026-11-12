@@ -130,7 +130,7 @@ Deep in the thicket east of the bridge waits the **Gloamwarden**, the forest's b
 it and talk to it to start the fight. It is one huge enemy (too big to launch), and every third
 turn it sweeps the whole party with Gloom Tide. Beaten, it is gone from the wood.
 
-The picture comes from [`engines/nes-ppu`](engines/nes-ppu). To write the game's pattern tables
+The picture comes from [`engines/nes-ppu`](engines/nes-ppu), shown by [`engines/nes-screen`](engines/nes-screen). To write the game's pattern tables
 as PNG sprite sheets and two sample frames to `games/exact-odyssey/assets/sheets/`:
 
 ```sh
@@ -154,9 +154,10 @@ gets touchier.
 
 ```
 engines/
-  nes-ppu/          an NES-style picture processor (Rust), shared by NES-style games
+  nes-ppu/          an NES-style picture processor (Rust): palette, CHR tiles, metatiles, OAM
+  nes-screen/       shows an nes-ppu frame on an Exact GPU surface (the NesGame trait)
 games/
-  exact-odyssey/    app.contract, field.contract, battle.contract, gpu/ (art.rs, the ppu surface)
+  exact-odyssey/    app.contract, field.contract, battle.contract, gpu/ (art.rs, its NesGame), tools/ (art generators)
   exactbound/       app.contract, world.contract, battle.contract, gpu/ (aurora shader), assets/ (audio, not in git)
   exact-gear-solid/ app.contract, room.contract, items.contract, gpu/ (room shader)
   links-exact86/    app.contract, course.contract, golfer.contract, gpu/ (course shader)

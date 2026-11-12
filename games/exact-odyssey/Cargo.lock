@@ -726,8 +726,8 @@ name = "exact-odyssey-gpu"
 version = "0.1.0"
 dependencies = [
  "exact-gpu",
- "exact-gpu-reflect",
  "nes-ppu",
+ "nes-screen",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -1477,6 +1477,15 @@ dependencies = [
 [[package]]
 name = "nes-ppu"
 version = "0.1.0"
+
+[[package]]
+name = "nes-screen"
+version = "0.1.0"
+dependencies = [
+ "exact-gpu",
+ "exact-gpu-reflect",
+ "nes-ppu",
+]
 
 [[package]]
 name = "num-traits"

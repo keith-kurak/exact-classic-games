@@ -1,6 +1,7 @@
 //! Exact Odyssey's GPU module: the `ppu` surface. The view says what is on
 //! screen in a few small text specs; this composes the scene from the game's
-//! art, has the nes-ppu engine draw the 256×240 frame, and shows it scaled.
+//! art and has the nes-ppu engine draw the 256×240 frame; the shared
+//! nes-screen crate shows it scaled.
 //!
 //! Inputs, in order:
 //! 1. scene: "field" or "battle"
@@ -24,17 +25,10 @@ pub mod art;
 
 use art::{Art, BATTLE, BATTLE_MAP, FIELD, FIELD_MAP, WINDOW_PALETTE};
 use exact_gpu::json::{number, text};
-use exact_gpu::wgpu;
-use exact_gpu::{Frame, FrameUniform, Registry, Surface, SurfaceError, Value};
-use nes_ppu::{render, Cell, Scene, Sprite, FLIP_H, HEIGHT, WIDTH};
+use exact_gpu::{Registry, SurfaceError, Value};
+use nes_ppu::{render, Cell, Scene, Sprite, FLIP_H};
+use nes_screen::NesGame;
 use std::sync::OnceLock;
-
-/// The shaders under `shaders/`, reflected at build by `build.rs`.
-pub mod shaders {
-    include!(concat!(env!("OUT_DIR"), "/shaders.rs"));
-}
-
-use shaders::screen::{entry, module, Uniforms, GROUP_0, SCREEN, SCREEN_SAMPLER, U};
 
 pub const INPUTS: usize = 7;
 const COLS: usize = 32;
@@ -273,35 +267,20 @@ pub fn write_sheets(dir: &std::path::Path) -> std::io::Result<()> {
     Ok(())
 }
 
-pub struct PpuSurface {
+/// The game's side of the shared NES screen (`nes-screen`): the scene the
+/// view last described.
+pub struct Odyssey {
     spec: Spec,
-    frame: u64,
-    rgba: Vec<u8>,
-    gpu: Option<Gpu>,
 }
 
-impl Default for PpuSurface {
+impl Default for Odyssey {
     fn default() -> Self {
-        PpuSurface {
-            spec: Spec { overlay: vec![None; COLS * ROWS], stage: vec![None; COLS * ROWS], ..Default::default() },
-            frame: 0,
-            rgba: vec![0; WIDTH * HEIGHT * 4],
-            gpu: None,
-        }
+        Odyssey { spec: Spec { overlay: vec![None; COLS * ROWS], stage: vec![None; COLS * ROWS], ..Default::default() } }
     }
 }
 
-struct Gpu {
-    format: wgpu::TextureFormat,
-    generation: u32,
-    pipeline: wgpu::RenderPipeline,
-    uniforms: FrameUniform,
-    texture: wgpu::Texture,
-    bind_groups: Vec<wgpu::BindGroup>,
-}
-
-impl Surface for PpuSurface {
-    fn bind(&mut self, inputs: &[Value], _: Option<f64>) -> Result<(), SurfaceError> {
+impl NesGame for Odyssey {
+    fn bind(&mut self, inputs: &[Value]) -> Result<(), SurfaceError> {
         let [scene, sx, sy, sprites, windows, enemies, fade] = inputs else {
             return Err(SurfaceError(format!("ppu: expected {INPUTS} inputs, got {}", inputs.len())));
         };
@@ -319,125 +298,15 @@ impl Surface for PpuSurface {
         Ok(())
     }
 
-    fn render(
-        &mut self,
-        frame: &Frame,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        encoder: &mut wgpu::CommandEncoder,
-        target: &wgpu::TextureView,
-        format: wgpu::TextureFormat,
-    ) -> bool {
-        if self.gpu.as_ref().map(|g| (g.format, g.generation)) != Some((format, frame.shader_generation)) {
-            self.gpu = Some(build(device, format, frame.shader_generation));
-        }
-        self.frame += 1;
-        draw(&self.spec, self.frame, &mut self.rgba);
-        let gpu = self.gpu.as_mut().unwrap();
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &gpu.texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &self.rgba,
-            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(WIDTH as u32 * 4), rows_per_image: None },
-            wgpu::Extent3d { width: WIDTH as u32, height: HEIGHT as u32, depth_or_array_layers: 1 },
-        );
-        let (w, h) = frame.pixels();
-        let uniforms = Uniforms { width: w as f32, height: h as f32, pad0: 0.0, pad1: 0.0 };
-        let slot = gpu.uniforms.write(queue, &uniforms.bytes());
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("ppu"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: target,
-                    resolve_target: None,
-                    depth_slice: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_pipeline(&gpu.pipeline);
-            pass.set_bind_group(0, &gpu.bind_groups[slot], &[]);
-            pass.draw(0..3, 0..1);
-        }
-        // The picture processor draws every frame (60 a second), so sprite
-        // flicker and timing behave as on the console.
-        true
+    fn draw(&mut self, frame: u64, rgba: &mut [u8]) {
+        draw(&self.spec, frame, rgba);
     }
-}
-
-fn build(device: &wgpu::Device, format: wgpu::TextureFormat, generation: u32) -> Gpu {
-    let shader = device.create_shader_module(module());
-    let layout = device.create_bind_group_layout(&GROUP_0);
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("nes frame"),
-        size: wgpu::Extent3d { width: WIDTH as u32, height: HEIGHT as u32, depth_or_array_layers: 1 },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8UnormSrgb,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-        view_formats: &[],
-    });
-    let view = texture.create_view(&Default::default());
-    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-        label: Some("nes pixels"),
-        mag_filter: wgpu::FilterMode::Nearest,
-        min_filter: wgpu::FilterMode::Nearest,
-        ..Default::default()
-    });
-    let uniforms = FrameUniform::new(device, Uniforms::SIZE, "ppu uniforms");
-    let bind_groups = (0..uniforms.slots())
-        .map(|slot| {
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("ppu"),
-                layout: &layout,
-                entries: &[
-                    wgpu::BindGroupEntry { binding: U.binding, resource: uniforms.buffer(slot).as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: SCREEN.binding, resource: wgpu::BindingResource::TextureView(&view) },
-                    wgpu::BindGroupEntry { binding: SCREEN_SAMPLER.binding, resource: wgpu::BindingResource::Sampler(&sampler) },
-                ],
-            })
-        })
-        .collect();
-    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("ppu"),
-        bind_group_layouts: &[Some(&layout)],
-        immediate_size: 0,
-    });
-    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("ppu"),
-        layout: Some(&pipeline_layout),
-        vertex: wgpu::VertexState { module: &shader, entry_point: Some(entry::VS), buffers: &[], compilation_options: Default::default() },
-        fragment: Some(wgpu::FragmentState {
-            module: &shader,
-            entry_point: Some(entry::FS),
-            targets: &[Some(format.into())],
-            compilation_options: Default::default(),
-        }),
-        primitive: Default::default(),
-        depth_stencil: None,
-        multisample: Default::default(),
-        multiview_mask: None,
-        cache: None,
-    });
-    Gpu { format, generation, pipeline, uniforms, texture, bind_groups }
-}
-
-fn ppu() -> Box<dyn Surface> {
-    Box::new(PpuSurface::default())
 }
 
 /// Each surface: its name, its number of inputs, its factory.
 pub static REGISTRY: Registry = Registry {
-    surfaces: &[("ppu", INPUTS, ppu)],
-    shaders: shaders::SHADERS,
+    surfaces: &[("ppu", INPUTS, nes_screen::surface::<Odyssey>)],
+    shaders: nes_screen::shaders::SHADERS,
 };
 
 exact_gpu::module!(REGISTRY);
@@ -445,6 +314,7 @@ exact_gpu::module!(REGISTRY);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nes_ppu::{HEIGHT, WIDTH};
 
     /// Writes the sprite sheets and two sample frames to assets/ (run with
     /// `cargo test -p exact-odyssey-gpu sheets -- --ignored`).

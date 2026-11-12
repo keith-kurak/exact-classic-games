@@ -24,5 +24,10 @@
       "web": "0",
       "macos": "0"
     }
+  },
+  "gpu": {
+    "shaderRoots": [
+      "../../engines/nes-screen/shaders"
+    ]
   }
 }
