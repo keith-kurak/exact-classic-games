@@ -83,6 +83,12 @@ bun run test:engine       # the engines' own tests (picture, sound, emulator, FM
 
 The tests are each game's `app.test.contract`. They build the macOS app and drive it.
 
+## Patches to Exact
+
+[`patches/exact`](patches/exact/README.md) holds fixes these games need in Exact itself. Apply
+them to your checkout with `bun run patch-exact`, then rebuild. One so far: gapless looping
+for `audio … loop=true`, used by the jukeboxes' songs.
+
 ## Engines
 
 [`engines/sys16`](engines/sys16) is a picture processor in the style of Sega's System 16 and
