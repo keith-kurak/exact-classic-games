@@ -15,6 +15,9 @@
 //!   (parallax mountains, wavy horizons).
 //! - A ground ([`Ground`]): a checkerboard in perspective, drawn a line at a
 //!   time from the camera's height and the distance travelled, with fog.
+//! - A tube ([`Tube`]): a half-pipe seen from inside, curving and climbing,
+//!   its skin found for every pixel from the pipe's true geometry (Out Run's
+//!   road layer, one step on).
 //!
 //! [`render`] composes a [`Scene`] into a [`Frame`].
 
@@ -170,6 +173,196 @@ pub struct Ground {
     pub fog_far: f32,
 }
 
+/// A stripe of the tube drawn in another palette line: a start line, a
+/// checkpoint. `at` and `len` are distances along the course.
+#[derive(Clone, Copy, Debug)]
+pub struct TubeMark {
+    pub at: f32,
+    pub len: f32,
+    pub palette: usize,
+}
+
+/// The tube: the inside of a half-pipe, seen from within, running away to a
+/// vanishing point, curving and climbing as it goes.
+///
+/// This is the System 16 family's road layer carried one step on. Out Run's
+/// road generator was a layer of its own behind the sprites, drawn line by
+/// line from tables the CPU rewrote every frame: where the road's centre
+/// was on each line, how wide, which stripe. The tube keeps that split: the
+/// game writes a small table each frame (`bend`: how far the tube's axis has
+/// swung sideways and up at each step ahead) and the layer does the rest.
+/// But where the road chip spread one stripe pattern across each line, the
+/// tube finds the true point of the pipe behind every pixel (its angle round
+/// the pipe and its distance), so the walls curve as walls do and nothing is
+/// a canned frame. A Mega Drive half-pipe was a flip-book of pre-drawn tube
+/// frames; this one is computed.
+///
+/// Coordinates: x across, y up, z ahead of the camera. The pipe's axis
+/// starts at the origin; its floor is at `y = -radius`; the camera sits
+/// `eye` above the floor, on the axis line.
+#[derive(Clone, Debug)]
+pub struct Tube<'a> {
+    /// The screen line and column the axis runs away to.
+    pub horizon: f32,
+    pub center: f32,
+    pub focal: f32,
+    pub radius: f32,
+    pub eye: f32,
+    /// How far round from the floor the pipe goes before it ends (π/2: a
+    /// half-pipe whose rims are level with the axis).
+    pub rim: f32,
+    /// The distance travelled: the skin scrolls by it.
+    pub travel: f32,
+    /// The axis's offset (sideways, up) at z = i × `bend_step`; between
+    /// entries it is interpolated, past the last it carries on straight.
+    pub bend: &'a [(f32, f32)],
+    pub bend_step: f32,
+    /// The skin: 4-bit art wrapped round the pipe, its width covering
+    /// `skin_round` radians centred on the floor (2π: once round), its
+    /// height `skin_len` world units along.
+    pub skin: usize,
+    pub skin_round: f32,
+    pub skin_len: f32,
+    pub palette: usize,
+    pub marks: &'a [TubeMark],
+    /// The camera's roll round the pipe's axis (radians): it orbits the axis
+    /// and turns with it, so the angle `roll` is straight below it.
+    pub roll: f32,
+    /// Fog: none until `fog_near`, total at `fog_far`.
+    pub fog: u16,
+    pub fog_near: f32,
+    pub fog_far: f32,
+}
+
+impl Tube<'_> {
+    /// The axis's offset at depth z, as the rolled camera sees it.
+    pub fn bend_at(&self, z: f32) -> (f32, f32) {
+        let (x, y) = self.bend_world(z);
+        if self.roll == 0.0 {
+            return (x, y);
+        }
+        let (s, c) = self.roll.sin_cos();
+        (x * c + y * s, -x * s + y * c)
+    }
+
+    /// The axis's offset at depth z, in the world.
+    fn bend_world(&self, z: f32) -> (f32, f32) {
+        if self.bend.is_empty() {
+            return (0.0, 0.0);
+        }
+        let f = (z / self.bend_step).max(0.0);
+        let i = f.floor() as usize;
+        if i + 1 < self.bend.len() {
+            let t = f - i as f32;
+            let (a, b) = (self.bend[i], self.bend[i + 1]);
+            (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t)
+        } else {
+            // Past the table: on along the last step's heading.
+            let n = self.bend.len();
+            let last = self.bend[n - 1];
+            let prev = if n > 1 { self.bend[n - 2] } else { last };
+            let over = f - (n - 1) as f32;
+            (last.0 + (last.0 - prev.0) * over, last.1 + (last.1 - prev.1) * over)
+        }
+    }
+
+    /// Where the camera's ray through screen point (sx, sy) meets the pipe:
+    /// its depth and its angle round the pipe from the floor (negative to
+    /// the left). The bend is followed by refining the depth a few times.
+    pub fn hit(&self, sx: f32, sy: f32) -> Option<(f32, f32)> {
+        let (dx, dy) = ((sx - self.center) / self.focal, -(sy - self.horizon) / self.focal);
+        let cy = -self.radius + self.eye;
+        let a = dx * dx + dy * dy;
+        if a < 1e-9 {
+            return None;
+        }
+        let r2 = self.radius * self.radius;
+        // The ray against the pipe as it lies at depth z: where it leaves.
+        let solve = |bx: f32, by: f32| -> Option<f32> {
+            let (ox, oy) = (-bx, cy - by);
+            let b = 2.0 * (ox * dx + oy * dy);
+            let c = ox * ox + oy * oy - r2;
+            let disc = b * b - 4.0 * a * c;
+            let t = (-b + disc.max(0.0).sqrt()) / (2.0 * a);
+            (disc >= 0.0 && t > 0.0).then_some(t)
+        };
+        // Straight first, then follow the bend: a few refinements usually
+        // settle; where they do not (round a sharp bend), march.
+        let mut z = solve(0.0, 0.0)?;
+        let mut settled = self.bend.is_empty();
+        for _ in 0..4 {
+            if settled {
+                break;
+            }
+            let (bx, by) = self.bend_at(z);
+            match solve(bx, by) {
+                Some(n) => {
+                    settled = (n - z).abs() < 0.01 * z.max(1.0);
+                    z = n;
+                }
+                None => break,
+            }
+        }
+        let outside = |z: f32| {
+            let (bx, by) = self.bend_at(z);
+            let (x, y) = (dx * z - bx, cy + dy * z - by);
+            x * x + y * y >= r2
+        };
+        if !settled || outside(z * 0.85) {
+            // March out from the camera to the first point outside the
+            // pipe, then halve the step to the wall.
+            let (mut lo, mut hi) = (0.3f32, 0.3f32);
+            loop {
+                if hi > 2000.0 {
+                    return None;
+                }
+                if outside(hi) {
+                    break;
+                }
+                lo = hi;
+                hi = hi * 1.1 + 0.2;
+            }
+            for _ in 0..10 {
+                let mid = (lo + hi) * 0.5;
+                if outside(mid) { hi = mid } else { lo = mid }
+            }
+            z = hi;
+        }
+        let (bx, by) = self.bend_at(z);
+        let rel = (dx * z - bx).atan2(-(cy + dy * z - by));
+        let ang = wrap(rel + self.roll);
+        (ang.abs() <= self.rim).then_some((z, ang))
+    }
+
+    /// A point `lift` in from the pipe's surface (toward the axis), at angle
+    /// `ang` from the floor and depth z, on screen; and its scale (pixels a
+    /// world unit). None behind the camera.
+    pub fn project(&self, ang: f32, lift: f32, z: f32) -> Option<(f32, f32, f32)> {
+        if z < 0.3 {
+            return None;
+        }
+        let (bx, by) = self.bend_at(z);
+        let r = self.radius - lift;
+        let rel = ang - self.roll;
+        let (x, y) = (bx + r * rel.sin(), by - r * rel.cos());
+        let s = self.focal / z;
+        let cy = -self.radius + self.eye;
+        Some((self.center + x * s, self.horizon - (y - cy) * s, s))
+    }
+
+    /// Whether a point at depth z, drawn at (sx, sy), is hidden behind a
+    /// nearer stretch of wall (round a bend).
+    pub fn hides(&self, sx: f32, sy: f32, z: f32) -> bool {
+        matches!(self.hit(sx, sy), Some((wall, _)) if wall < z * 0.9 - 0.5)
+    }
+}
+
+/// An angle brought into −π..π.
+pub fn wrap(a: f32) -> f32 {
+    use std::f32::consts::PI;
+    (a + PI).rem_euclid(2.0 * PI) - PI
+}
+
 /// Everything a frame is drawn from, back to front.
 pub struct Scene<'a> {
     pub palettes: &'a [Palette],
@@ -179,7 +372,12 @@ pub struct Scene<'a> {
     pub backdrop: &'a [u16],
     /// Layers behind the ground (the sky's far scenery), then the ground.
     pub back: &'a [Layer],
+    /// Turn the backdrop and back layers clockwise by this angle (radians)
+    /// about a screen point: (angle, x, y). For a camera that rolls.
+    pub turn: Option<(f32, f32, f32)>,
     pub ground: Option<Ground>,
+    /// The tube, in front of the ground and the back layers.
+    pub tube: Option<Tube<'a>>,
     pub sprites: &'a [Sprite],
     /// Layers in front of everything (text).
     pub front: &'a [Layer],
@@ -200,6 +398,44 @@ impl Frame {
                 (v << 3) | (v >> 2)
             };
             out[i * 4..i * 4 + 4].copy_from_slice(&[ch(10), ch(5), ch(0), 255]);
+        }
+    }
+}
+
+/// A layer's colour at screen point (x, line), if any.
+fn layer_at(scene: &Scene, layer: &Layer, x: i32, line: i32) -> Option<u16> {
+    let ly = line - layer.top;
+    if ly < 0 || ly >= (layer.rows * 8) as i32 {
+        return None;
+    }
+    let (ty, fy) = (ly as usize / 8, ly as usize % 8);
+    let scroll = layer.scroll_at(line.clamp(0, HEIGHT as i32 - 1) as usize);
+    let lx = (x + scroll).rem_euclid((layer.cols * 8) as i32) as usize;
+    let (tile, pal) = layer.map[ty * layer.cols + lx / 8];
+    if tile == 0 {
+        return None;
+    }
+    let c = scene.tiles.tiles[tile as usize][fy][lx % 8];
+    (c != 0).then(|| scene.palettes[pal as usize][c as usize])
+}
+
+/// The backdrop and the back layers turned about a point: each screen pixel
+/// looks up where it came from (the Y Board's rotating screen did this).
+fn draw_turned_back(scene: &Scene, (angle, cx, cy): (f32, f32, f32), px: &mut [u16]) {
+    let (s, c) = angle.sin_cos();
+    let backdrop = |line: i32| *scene.backdrop.get(line.clamp(0, HEIGHT as i32 - 1) as usize).unwrap_or(scene.backdrop.last().unwrap_or(&0));
+    for line in 0..HEIGHT {
+        for x in 0..WIDTH {
+            let (dx, dy) = (x as f32 + 0.5 - cx, line as f32 + 0.5 - cy);
+            let (sx, sy) = (cx + c * dx + s * dy, cy - s * dx + c * dy);
+            let (ix, iy) = (sx.floor() as i32, sy.floor() as i32);
+            let mut col = backdrop(iy);
+            for layer in scene.back {
+                if let Some(v) = layer_at(scene, layer, ix, iy) {
+                    col = v;
+                }
+            }
+            px[line * WIDTH + x] = col;
         }
     }
 }
@@ -245,6 +481,27 @@ fn draw_ground(g: &Ground, px: &mut [u16]) {
     }
 }
 
+fn draw_tube(scene: &Scene, t: &Tube, px: &mut [u16]) {
+    let skin = &scene.images[t.skin];
+    let (w, h) = (skin.width as f32, skin.height as f32);
+    for line in 0..HEIGHT {
+        for x in 0..WIDTH {
+            let Some((z, ang)) = t.hit(x as f32 + 0.5, line as f32 + 0.5) else { continue };
+            let along = z + t.travel;
+            let u = ((ang / t.skin_round + 0.5) * w).clamp(0.0, w - 1.0) as usize;
+            let v = ((along / t.skin_len).rem_euclid(1.0) * h) as usize % skin.height;
+            let c = skin.get(u, v);
+            if c == 0 {
+                continue;
+            }
+            let pal = t.marks.iter().find(|m| along >= m.at && along < m.at + m.len).map_or(t.palette, |m| m.palette);
+            let col = scene.palettes[pal][c as usize];
+            let fog = ((z - t.fog_near) / (t.fog_far - t.fog_near)).clamp(0.0, 1.0);
+            px[line * WIDTH + x] = if fog > 0.0 { mix(col, t.fog, fog) } else { col };
+        }
+    }
+}
+
 /// Draw a sprite the Super Scaler's way: for each screen pixel, the source
 /// pixel is the one the zoom steps to, whole pixels only.
 fn draw_sprite(scene: &Scene, s: &Sprite, px: &mut [u16]) {
@@ -284,15 +541,22 @@ fn draw_sprite(scene: &Scene, s: &Sprite, px: &mut [u16]) {
 /// Draw one frame.
 pub fn render(scene: &Scene) -> Frame {
     let mut px = vec![0u16; WIDTH * HEIGHT];
-    for line in 0..HEIGHT {
-        let c = *scene.backdrop.get(line).unwrap_or(scene.backdrop.last().unwrap_or(&0));
-        px[line * WIDTH..(line + 1) * WIDTH].fill(c);
-    }
-    for layer in scene.back {
-        draw_layer(scene, layer, &mut px);
+    if let Some(turn) = scene.turn.filter(|t| t.0.abs() > 1e-4) {
+        draw_turned_back(scene, turn, &mut px);
+    } else {
+        for line in 0..HEIGHT {
+            let c = *scene.backdrop.get(line).unwrap_or(scene.backdrop.last().unwrap_or(&0));
+            px[line * WIDTH..(line + 1) * WIDTH].fill(c);
+        }
+        for layer in scene.back {
+            draw_layer(scene, layer, &mut px);
+        }
     }
     if let Some(g) = &scene.ground {
         draw_ground(g, &mut px);
+    }
+    if let Some(t) = &scene.tube {
+        draw_tube(scene, t, &mut px);
     }
     let mut order: Vec<&Sprite> = scene.sprites.iter().take(scene.max_sprites.unwrap_or(usize::MAX)).collect();
     order.sort_by(|a, b| b.depth.partial_cmp(&a.depth).unwrap_or(std::cmp::Ordering::Equal));
@@ -339,7 +603,7 @@ mod tests {
     use super::*;
 
     fn scene_with<'a>(palettes: &'a [Palette], images: &'a [Image], tiles: &'a Tiles, sprites: &'a [Sprite], backdrop: &'a [u16]) -> Scene<'a> {
-        Scene { palettes, images, tiles, backdrop, back: &[], ground: None, sprites, front: &[], max_sprites: None }
+        Scene { palettes, images, tiles, backdrop, back: &[], turn: None, ground: None, tube: None, sprites, front: &[], max_sprites: None }
     }
 
     #[test]
@@ -379,6 +643,63 @@ mod tests {
         let tiles = Tiles::default();
         let f = render(&scene_with(&[pal], &[img], &tiles, &[near, far], &[rgb(31, 31, 31)]));
         assert_eq!(f.pixels[0], rgb(10, 10, 10), "the far sprite, then the near shadow over it");
+    }
+
+    fn tube<'a>(bend: &'a [(f32, f32)]) -> Tube<'a> {
+        Tube { horizon: 90.0, center: 160.0, focal: 200.0, radius: 4.0, eye: 3.4, rim: std::f32::consts::FRAC_PI_2, travel: 0.0, bend, bend_step: 8.0, skin: 0, skin_round: std::f32::consts::PI, skin_len: 4.0, palette: 0, marks: &[], roll: 0.0, fog: 0, fog_near: 40.0, fog_far: 200.0 }
+    }
+
+    #[test]
+    fn the_tube_meets_each_ray_where_its_points_project() {
+        // A point projected onto the screen is found again by the ray
+        // through that pixel: the same depth, the same angle.
+        for bend in [vec![], vec![(0.0, 0.0), (0.3, 0.0), (1.2, 0.4), (2.7, 0.9), (4.8, 1.6)]] {
+            let t = tube(&bend);
+            for (ang, z) in [(0.0f32, 7.0f32), (0.8, 12.0), (-1.2, 20.0), (0.4, 30.0)] {
+                let (sx, sy, _) = t.project(ang, 0.0, z).unwrap();
+                let (hz, ha) = t.hit(sx, sy).unwrap();
+                assert!((hz - z).abs() < z * 0.03, "depth {hz} for {z} (bend {})", bend.len());
+                assert!((ha - ang).abs() < 0.05, "angle {ha} for {ang}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_floor_is_below_the_horizon_and_the_sky_shows_above_the_rims() {
+        let t = tube(&[]);
+        let (_, y, _) = t.project(0.0, 0.0, 7.0).unwrap();
+        assert!(y > 160.0, "the floor near you is low on the screen: {y}");
+        assert!(t.hit(160.0, 200.0).is_some());
+        assert!(t.hit(160.0, 20.0).is_none(), "straight up is sky: the pipe is open");
+        let (lx, _, _) = t.project(-1.0, 0.0, 7.0).unwrap();
+        let (rx, _, _) = t.project(1.0, 0.0, 7.0).unwrap();
+        assert!(lx < 160.0 && rx > 160.0);
+    }
+
+    #[test]
+    fn a_bend_swings_the_far_end_and_hides_what_is_round_it() {
+        let bend: Vec<(f32, f32)> = (0..12).map(|i| ((i as f32).powi(2) * 0.35, 0.0)).collect();
+        let t = tube(&bend);
+        let (near, _, _) = t.project(0.0, 0.0, 7.0).unwrap();
+        let (far, _, _) = t.project(0.0, 0.0, 70.0).unwrap();
+        assert!(far > near + 60.0, "the tube curves right: {near} then {far}");
+        // Far round the bend, the left wall's outside is in front of the floor.
+        let (sx, sy, _) = t.project(-1.4, 0.0, 80.0).unwrap();
+        let _ = t.hides(sx, sy, 80.0);
+    }
+
+    #[test]
+    fn a_rolled_camera_keeps_what_it_follows_below_it() {
+        let mut t = tube(&[]);
+        t.rim = std::f32::consts::PI;
+        t.roll = 2.5;
+        let (x, y, _) = t.project(2.5, 0.0, 7.0).unwrap();
+        assert!((x - 160.0).abs() < 0.5 && y > 160.0, "straight below: {x},{y}");
+        let (z, a) = t.hit(x, y).unwrap();
+        assert!((z - 7.0).abs() < 0.2 && (a - 2.5).abs() < 0.02);
+        // Followed up the right wall and over, the floor is up to the left.
+        let (fx, fy, _) = t.project(0.0, 0.0, 7.0).unwrap();
+        assert!(fx < 160.0 && fy < 84.0, "{fx},{fy}");
     }
 
     #[test]

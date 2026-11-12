@@ -1,0 +1,231 @@
+// Exact Armadillo Run: an armadillo races down a desert half-pipe at dusk,
+// collecting spinning golden beetles and rolling up to jump the thorn balls.
+// Three stretches, each ending at a checkpoint that wants enough beetles.
+//
+// The picture is engines/sys16 (a System 16-style board) with its tube
+// layer: the pipe is found for every pixel from its true shape, and every
+// beetle, thorn and the armadillo is one piece of art zoomed to its true
+// size by the scaler (gpu/). The sound is engines/ym2612, rendered ahead of
+// time to WAV (gpu/src/music.rs).
+use gate, gateCount, goal, stageEnd, gemDist, gemStop, endLength, speedFor, ahead, thingDist, kindOf, angOf, curveAt, riseAt, steer, grip, coast, follow, readyTicks, wrapA, jumpUp, gravity, reach, hurtTicks, dropped, nth, absv, clamp, pad, n3 from "./course.contract"
+
+sound "assets/sfx/beetle.wav"
+sound "assets/sfx/jump.wav"
+sound "assets/sfx/thorn.wav"
+sound "assets/sfx/checkpoint.wav"
+sound "assets/sfx/fail.wav"
+sound "assets/sfx/clear.wav"
+sound "assets/sfx/ready.wav"
+
+fn dirX(k: string): number = (k == "ArrowLeft" or k == "a" ? -1 : (k == "ArrowRight" or k == "d" ? 1 : 0))
+fn isJump(k: string): bool = k == " " or k == "ArrowUp" or k == "w" or k == "z"
+fn dirY(k: string): number = (k == "ArrowUp" or k == "w" ? -1 : (k == "ArrowDown" or k == "s" ? 1 : 0))
+fn schemeName(i: number): string = (i == 0 ? "DUSK" : (i == 1 ? "TURQUOISE" : "MIDNIGHT"))
+fn isGo(k: string): bool = k == " " or k == "Enter"
+
+component ExactArmadilloRun
+  // "title", "ready" (the fanfare), "play", "end" (at the gem) or "over".
+  state phase = "title"
+  // "clear" or "short" when it is over.
+  state result = ""
+  state travel = 0
+  state ang = 0
+  state av = 0
+  // The camera's roll round the pipe, following the armadillo.
+  state cam = 0
+  state wait = 0
+  state hx = 0
+  state lift = 0
+  state vy = 0
+  state beetles = 0
+  state hurt = 0
+  // The first thing not yet passed, and the beetles taken since.
+  state next = 0
+  state got: number[] = []
+  state seg = 0
+  state ticks = 0
+  state pan = 0
+  state msg = ""
+  state msgTicks = 0
+  state jumps = 0
+  state endTicks = 0
+  // The camera, chosen on the title: false follows you round the pipe (the
+  // world turns with you), true stays put (only you move). Nothing else
+  // changes.
+  state fixed = false
+  // The track's colours, chosen on the title: 0 dusk, 1 turquoise, 2
+  // midnight. And which line of the title's menu is picked (0 camera, 1 track).
+  state scheme = 0
+  state menu = 0
+
+  derive playing = phase == "play"
+
+  task frame when phase != "over"
+    every(33, tick)
+
+  action tick
+    if playing
+      run()
+    else if phase == "end"
+      let e = endTicks + 1
+      ticks = ticks + 1
+      endTicks = e
+      if e >= endLength()
+        phase = "over"
+    else if phase == "ready"
+      ticks = ticks + 1
+      let w = wait - 1
+      wait = w
+      if w <= 0
+        phase = "play"
+    else
+      let t1 = (travel > 300 ? 0 : travel + 0.3)
+      ticks = ticks + 1
+      travel = t1
+      next = max(0, floor((t1 - 30) / 5) * 3 + 3)
+      pan = pan + curveAt(t1) * 0.3 * 900
+
+  action run
+    let speed = speedFor(seg)
+    let t1 = travel + speed
+    // Steering, with a little momentum; let go and you stop. All the way
+    // round is allowed: the angle runs on past ±π.
+    let av1 = hx == 0 ? (absv(av) < 0.002 ? 0 : av * coast()) : av * grip() + hx * steer()
+    let a1 = ang + av1
+    // In the air (rolled up), rising and falling.
+    let l1 = max(0, lift + vy)
+    let vy1 = l1 <= 0 ? 0 : vy - gravity()
+    // What you pass this tick: the next few things, by distance.
+    let passing = range(6).map(j => next + j).filter(i => thingDist(i) <= t1)
+    let near = passing.filter(i => kindOf(i) > 0 and absv(wrapA(angOf(i) - a1)) < reach())
+    let taken = near.filter(i => kindOf(i) == 1 and l1 < 1.6)
+    let thorned = hurt == 0 and near.filter(i => kindOf(i) == 2 and l1 < 0.7).length > 0
+    let b1 = thorned ? max(0, beetles + taken.length - dropped()) : beetles + taken.length
+    // A checkpoint crossed: enough beetles, or not. Then the gem.
+    let crossed = range(gateCount() - 1).filter(k => travel < gate(k) and gate(k) <= t1)
+    let atGate = crossed.length > 0
+    let gk = atGate ? nth(crossed, 0) : -1
+    let enough = atGate and b1 >= goal(gk)
+    let stop = gemDist() - gemStop()
+    let atGem = travel < stop and stop <= t1
+    let won = b1 >= goal(gateCount() - 1)
+    travel = atGem ? stop : t1
+    ticks = ticks + 1
+    av = av1
+    ang = a1
+    cam = fixed ? 0 : cam + (a1 - cam) * follow()
+    lift = l1
+    vy = vy1
+    next = next + passing.length
+    got = got.filter(i => thingDist(i) > t1 - 10).concat(taken)
+    beetles = b1
+    hurt = thorned ? hurtTicks() : max(0, hurt - 1)
+    pan = pan + curveAt(t1) * speed * 900
+    msgTicks = max(0, msgTicks - 1)
+    if taken.length > 0
+      playSound("assets/sfx/beetle.wav", group="sfx")
+    if thorned
+      playSound("assets/sfx/thorn.wav", group="hit")
+    if atGate and enough
+      seg = gk + 1
+      msg = gk + 1 == gateCount() - 1 ? `{COOL!}  THE GEM NEEDS ${goal(gk + 1)}` : `{COOL!}  NEXT GOAL ${goal(gk + 1)}`
+      msgTicks = 75
+      playSound("assets/sfx/checkpoint.wav", group="jingle")
+    if atGate and not enough
+      phase = "over"
+      result = "short"
+      playSound("assets/sfx/fail.wav", group="jingle")
+    if atGem
+      phase = "end"
+      endTicks = 0
+      result = won ? "clear" : "short"
+      playSound(won ? "assets/sfx/clear.wav" : "assets/sfx/fail.wav", group="jingle")
+
+  action jump
+    if playing and lift <= 0
+      vy = jumpUp()
+      lift = 0.01
+      jumps = jumps + 1
+      playSound("assets/sfx/jump.wav", group="jump")
+
+  action start
+    phase = "ready"
+    wait = readyTicks()
+    result = ""
+    endTicks = 0
+    travel = 0
+    ang = 0
+    av = 0
+    cam = 0
+    lift = 0
+    vy = 0
+    beetles = 0
+    hurt = 0
+    next = 0
+    got = []
+    seg = 0
+    ticks = 0
+    msg = `GET ${goal(0)} BEETLES!`
+    msgTicks = 30
+    jumps = 0
+    playSound("assets/sfx/ready.wav", group="jingle")
+
+  // ── What the picture is told ──
+  derive camAt = travel - ahead()
+  derive playerSpec = `${n3(ang)},${n3(lift)},${hurt},${ticks},${lift > 0 ? 1 : 0},${n3(cam)},${scheme}`
+  derive runSpec = `${n3(travel)},${playing ? speedFor(seg) : (phase == "ready" or phase == "end" ? 0 : 0.3)},${round(pan)}`
+  derive courseSpec = `${range(16).map(i => n3(curveAt(camAt + i * 8 + 4))).join(",")}|${range(16).map(i => n3(riseAt(camAt + i * 8 + 4))).join(",")}`
+  derive things = (range(66).map(j => next - 6 + j)
+    .filter(i => kindOf(i) > 0 and not got.includes(i) and thingDist(i) - travel > -1 and thingDist(i) - travel < 150)
+    .map(i => `${kindOf(i)},${n3(angOf(i))},${n3(thingDist(i) - travel)}`)
+    .concat(got.filter(i => thingDist(i) - travel > -4).map(i => `5,${n3(angOf(i))},${n3(thingDist(i) - travel)}`))
+    .concat((playing or phase == "end") and gemDist() - travel < 160 ? [`6,${phase == "end" ? (result == "clear" ? 1 : 2) : 0},${n3(gemDist() - travel)},${endTicks}`] : [])
+    .concat(range(gateCount() - 1).filter(k => gate(k) - travel > -8 and gate(k) - travel < 150).map(k => `3,0,${n3(gate(k) - travel)}`))
+    .concat(travel < 20 ? [`4,0,${n3(3 - travel)}`] : [])
+    .join(";"))
+  derive goalNow = goal(seg)
+  // The title's menu: the picked line has a pointer and arrows.
+  derive menuLines = [
+    `6,16|${menu == 0 ? ">" : " "} CAMERA ${menu == 0 ? "<" : " "} {${fixed ? "FIXED" : "FOLLOW"}} ${menu == 0 ? ">" : ""}`,
+    `6,17|${menu == 1 ? ">" : " "} TRACK  ${menu == 1 ? "<" : " "} {${schemeName(scheme)}} ${menu == 1 ? ">" : ""}`
+  ]
+  derive hud = ([`1,1|BEETLES {${pad(beetles, 3)}}`, `29,1|GOAL ${beetles >= goalNow ? "{" : "["}${pad(goalNow, 3)}${beetles >= goalNow ? "}" : "]"}`, `17,1|${playing or phase == "ready" ? `${seg + 1}/${gateCount()}` : ""}`]
+    .concat(phase == "ready" ? [`${20 - floor(msg.length / 2)},6|{${msg}}`, (ticks % 10 < 6 ? "17,9|READY" : "")] : [])
+    .concat(playing and msgTicks > 0 ? [`${20 - floor(msg.replaceAll("{", "").replaceAll("}", "").length / 2)},6|${msg}`] : [])
+    .concat(phase == "title" ? ["10,7|{EXACT ARMADILLO RUN}", "8,10|LEFT RIGHT: RUN THE WALLS", "8,11|SPACE: ROLL UP AND JUMP", "8,13|GET THE GOLDEN BEETLES", "8,14|JUMP THE THORN BALLS", (fixed ? "8,19|THE CAMERA STAYS PUT" : "8,19|THE WORLD TURNS WITH YOU")].concat(menuLines).concat([(ticks % 30 < 18 ? "14,22|PRESS SPACE" : "")]) : [])
+    .concat(phase == "end" and result == "clear" and endTicks > 20 ? ["8,7|{YOU GOT THE TEXAS GEM!}"] : [])
+    .concat((phase == "end" or phase == "over") and result == "short" ? ["10,7|[NOT ENOUGH BEETLES...]"] : [])
+    .concat(phase == "over" and result == "clear" ? ["8,7|{YOU GOT THE TEXAS GEM!}"] : [])
+    .concat(phase == "over" ? [`13,10|BEETLES ${result == "clear" ? "{" : ""}${pad(beetles, 3)}${result == "clear" ? "}" : ""}`, "14,14|PRESS SPACE"] : [])
+    .concat(phase == "over" ? menuLines : [])
+    .join("^"))
+
+  // ── Keys ──
+  action onKey(k: string, e: KeyboardEvent)
+    let picked = menu
+    if dirX(k) != 0 or dirY(k) != 0 or isJump(k) or isGo(k)
+      preventDefault()
+    if dirX(k) != 0
+      hx = dirX(k)
+    if dirY(k) != 0 and (phase == "title" or phase == "over")
+      menu = 1 - menu
+    if dirX(k) != 0 and (phase == "title" or phase == "over") and picked == 0
+      fixed = not fixed
+    if dirX(k) != 0 and (phase == "title" or phase == "over") and picked == 1
+      scheme = (scheme + dirX(k) + 3) % 3
+    if isGo(k) and (phase == "title" or phase == "over")
+      start()
+    else
+      if isJump(k)
+        jump()
+
+  action onKeyUp(k: string)
+    if dirX(k) != 0 and dirX(k) == hx
+      hx = 0
+
+  view
+    main testId="root" key=onKey keyup=onKeyUp width="100%" height="100%" background-color="#000000"
+      canvas surface=s16(playerSpec, runSpec, courseSpec, things, hud) width="100%" height="100%" testId="screen"
+      text phase testId="phase" position="absolute" left=-9999 top=0
+      if playing
+        audio "assets/music/stage.wav" autoplay=true loop=true testId="music"

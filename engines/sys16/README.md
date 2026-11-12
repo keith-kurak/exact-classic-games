@@ -11,6 +11,8 @@ and the Super Scaler's sprite zoom (the hardware behind Space Harrier, Hang-On a
 | Backdrop | a colour for every scanline (raster sky gradients) |
 | Layers | 8×8 tiles that wrap sideways, with a horizontal scroll for every line (parallax) |
 | Ground | a perspective checkerboard drawn a line at a time from the camera's height, the distance travelled and its sideways shift, fading into fog |
+| Tube | a half-pipe seen from inside (`Tube`): the game writes a small table of the axis's sideways and upward offsets ahead each frame, as Out Run's CPU wrote its road tables; the layer finds the pipe's true point behind every pixel (depth and angle), skins it, fogs it, and stripes marked stretches in another palette line. `project` and `hides` place sprites on it; `roll` orbits the camera round the axis |
+| Turn | `Scene::turn` turns the backdrop and back layers about a screen point (a rolling camera's sky), as the Y Board's rotating screen did |
 | Text | `font_tiles`: the shared bold font with an arcade drop shadow |
 
 ```rust
@@ -19,4 +21,4 @@ frame.to_rgba(&mut rgba);   // 320×224×4
 ```
 
 It is shown on screen by [`nes-screen`](../nes-screen), whose `NesGame::size` takes any frame size.
-Exact Space Dodgeball uses it.
+Exact Space Dodgeball and Exact Armadillo Run use it.

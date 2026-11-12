@@ -1,0 +1,84 @@
+test "Space starts a ready fanfare, then the run"
+  expect tree has "screen"
+  expect state phase == "title"
+  type "root" key " "
+  expect state phase == "ready"
+  clock +1000
+  expect state travel == 0
+  clock +1500
+  expect state phase == "play"
+  expect state beetles == 0
+
+test "running straight down the middle collects beetles"
+  type "root" key " "
+  clock +8200
+  expect state beetles == 10
+  expect state seg == 0
+
+test "holding right runs you up the wall, over the top and round again (8.08 is past 2π)"
+  type "root" key " "
+  clock +2500
+  type "root" key "ArrowRight" down
+  clock +2000
+  type "root" key "ArrowRight" up
+  clock +100
+  expect state ang == 8.08410805892258
+
+test "let go, and you stop turning"
+  type "root" key " "
+  clock +2500
+  type "root" key "ArrowLeft" down
+  clock +500
+  type "root" key "ArrowLeft" up
+  clock +500
+  expect state av == 0
+
+test "Space rolls you up and jumps"
+  type "root" key " "
+  clock +2500
+  type "root" key " "
+  expect state jumps == 1
+  clock +3000
+  expect state lift == 0
+  type "root" key " "
+  expect state jumps == 2
+
+test "doing nothing, the stage is not cleared"
+  type "root" key " "
+  clock +75000
+  expect state phase == "over"
+  expect state result == "short"
+
+test "Left or Right on the title picks the camera; fixed, it stays put as you run round"
+  expect state fixed == false
+  type "root" key "ArrowRight"
+  expect state fixed == true
+  type "root" key "ArrowLeft"
+  expect state fixed == false
+  type "root" key "ArrowLeft"
+  type "root" key "ArrowLeft" up
+  expect state fixed == true
+  type "root" key " "
+  clock +2500
+  type "root" key "ArrowRight" down
+  clock +2000
+  type "root" key "ArrowRight" up
+  clock +100
+  expect state ang == 8.08410805892258
+  expect state cam == 0
+
+test "Down then Left or Right on the title picks the track's colours"
+  expect state scheme == 0
+  type "root" key "ArrowDown"
+  expect state menu == 1
+  type "root" key "ArrowRight"
+  expect state scheme == 1
+  type "root" key "ArrowRight"
+  expect state scheme == 2
+  type "root" key "ArrowRight"
+  expect state scheme == 0
+  type "root" key "ArrowLeft"
+  expect state scheme == 2
+  expect state fixed == false
+  type "root" key "ArrowUp"
+  expect state menu == 0

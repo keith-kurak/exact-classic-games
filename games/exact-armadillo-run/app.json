@@ -1,0 +1,33 @@
+{
+  "$schema": "../../../../exact/scripts/app.schema.json",
+  "name": "Exact Armadillo Run",
+  "short_name": "Exact Armadillo Run",
+  "id": "com.example.exactarmadillorun",
+  "start_url": "/",
+  "display": "standalone",
+  "app": {
+    "id": "com.example.exactarmadillorun",
+    "name": "Exact Armadillo Run"
+  },
+  "host": {
+    "web": {},
+    "macos": {
+      "minimumOS": "14.0",
+      "window": {
+        "width": 960,
+        "height": 672
+      }
+    }
+  },
+  "deploy": {
+    "store": {
+      "web": "0",
+      "macos": "0"
+    }
+  },
+  "gpu": {
+    "shaderRoots": [
+      "../../engines/nes-screen/shaders"
+    ]
+  }
+}

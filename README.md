@@ -16,6 +16,7 @@ Each game has a README with screenshots, its controls, and how it's made.
 | **Exactulator** | A basic NES emulator on the shared NES engines: open a mapper 0 `.nes` file and play it. Passes nestest to the cycle; plays sound through the shared APU; comes with an original demo cart. | [`games/exactulator`](games/exactulator/README.md) |
 | **Exact Drive Soundscapes** | A jukebox for a new Mega Drive FM engine: three original songs and seven sound effects from an emulated YM2612, with channel meters and live FM algorithm diagrams on a sys16-drawn dusk screen. | [`games/exact-drive-soundscapes`](games/exact-drive-soundscapes/README.md) |
 | **Exact Space Dodgeball** | A mid-80s Sega arcade look on a new Super Scaler-style engine: fly over a checkerboard in space and dodge giant bouncing dodgeballs and pillars, every one zoomed from a speck to screen-filling. | [`games/exact-space-dodgeball`](games/exact-space-dodgeball/README.md) |
+| **Exact Armadillo Run** | An early-90s half-pipe bonus stage on the sys16 engine's new tube layer: run a desert pipe at dusk, collect spinning golden beetles, jump thorn balls, with YM2612 music. The pipe is found for every pixel and every sprite is truly scaled. | [`games/exact-armadillo-run`](games/exact-armadillo-run/README.md) |
 
 Each game is its own Exact app, with its own Cargo workspace and tests. Their histories
 came in with `git subtree`, so `git log -- games/<game>` shows each game's commits.
@@ -55,6 +56,7 @@ bun run musicbox      # build Exacticom Musicbox and open it
 bun run exactulator   # build Exactulator and open it
 bun run dodgeball     # build Exact Space Dodgeball and open it
 bun run soundscapes   # build Exact Drive Soundscapes and open it
+bun run armadillo     # build Exact Armadillo Run and open it
 ```
 
 Or from a game's folder, `bun exact.mjs mac --run` (for Exactbound, see [Audio](#audio) first). The first build takes 1–3 minutes;
@@ -78,6 +80,7 @@ bun run test:musicbox     # 3 tests
 bun run test:exactulator  # 3 tests
 bun run test:dodgeball    # 3 tests
 bun run test:soundscapes  # 4 tests
+bun run test:armadillo    # 8 tests
 bun run test:engine       # the engines' own tests (picture, sound, emulator, FM)
 ```
 
