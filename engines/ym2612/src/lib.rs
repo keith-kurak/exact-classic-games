@@ -526,7 +526,7 @@ impl Ym2612 {
             return (0, 0.0);
         }
         let s = self.lfo_step;
-        let am = if s < 64 { s * 2 } else { 252 - s * 2 };
+        let am = if s < 64 { s * 2 } else { 252u32.saturating_sub(s * 2) };
         let pm = match s {
             0..=31 => s as f32 / 32.0,
             32..=95 => (64.0 - s as f32) / 32.0,
