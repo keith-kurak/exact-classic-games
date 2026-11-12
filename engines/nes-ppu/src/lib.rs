@@ -395,6 +395,25 @@ pub fn glyph_tile(rows: &[&str], ink: u8, paper: u8) -> Tile {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn png_round_trip_to_art() {
+        // A 8×8 sheet in a sprite's three colours plus clear pixels.
+        let pal = [0x16u8, 0x27, 0x30];
+        let mut rgba = vec![0u8; 8 * 8 * 4];
+        for i in 0..64 {
+            let c = i % 4;
+            if c > 0 {
+                let rgb = NES_PALETTE[pal[c - 1] as usize];
+                rgba[i * 4..i * 4 + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 255]);
+            }
+        }
+        let img = crate::png::decode(&crate::png::encode(8, 8, &rgba)).unwrap();
+        let art = img.art(0, 0, 8, 8, pal);
+        assert_eq!(art.lines().next().unwrap(), ".123.123");
+        let (w, h, tiles) = parse_art(&art);
+        assert_eq!((w, h, tiles.len()), (1, 1, 1));
+    }
+
     use super::*;
 
     #[test]

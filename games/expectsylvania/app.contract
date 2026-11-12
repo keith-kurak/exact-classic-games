@@ -4,7 +4,7 @@
 // breaks candles and enemies; jumps are committed arcs; stairs climb when you
 // press Up at their foot; the dagger (Up + whip) costs a heart. The rules run
 // at 30 ticks a second; gpu/ draws the picture (nes-ppu, nes-screen).
-use levelMap, tileAt, solidAt, rowTop, standsOn, floorY, balconyY, minX, maxX, camMax, doorX, stairs, stairBx, stairDir, stairLen, stairTopX, candles, candleX, candleY, dropOf, slots, kindOf, startX, startY, wakeX, patrolMin, patrolMax, maxHpOf, damageOf, pointsOf, ghoulZone, nth, wordAt, flag, sgn, clamp, overlaps, pad from "./level.contract"
+use levelMap, tileAt, solidAt, rowTop, standsOn, floorY, balconyY, minX, maxX, camMax, doorX, roomMinX, roomMaxX, belfryCam, belfryStart, bossMaxHp, bossLeft, bossRight, bossHomeY, swoopEvery, swoopTicks, bossDamage, stairs, stairBx, stairDir, stairLen, stairTopX, candles, candleX, candleY, dropOf, slots, kindOf, startX, startY, wakeX, patrolMin, patrolMax, maxHpOf, damageOf, pointsOf, ghoulZone, nth, wordAt, flag, sgn, clamp, overlaps, pad from "./level.contract"
 
 fn keyDir(k: string): number = (k == "ArrowLeft" or k == "a" ? -1 : (k == "ArrowRight" or k == "d" ? 1 : 0))
 fn isUp(k: string): bool = k == "ArrowUp" or k == "w"
@@ -21,7 +21,7 @@ fn whipLive(t: number): bool = t >= 5 and t <= 8
 fn startHp(): number = 16
 fn startHearts(): number = 5
 fn startTime(): number = 300
-fn nine(): number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+fn nine(): number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 fn seven(): number[] = [0, 1, 2, 3, 4, 5, 6]
 // A bar of 16 points as 8 tiles, two halves each.
 fn bar(v: number, a: string, b: string, c: string): string =
@@ -71,11 +71,11 @@ component Expectsylvania
   state phaseT = 0
   state ticks = 0
   state time = 300
-  state cLit: bool[] = [true, true, true, true, true, true, true, true, true]
+  state cLit: bool[] = [true, true, true, true, true, true, true, true, true, true, true]
   // Each candle's drop: 0 none yet, 1 out, 2 taken; its height; its age.
-  state dropS: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-  state dropY: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-  state dropT: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+  state dropS: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  state dropY: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  state dropT: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   // ── Enemies, by slot ──
   state eX: number[] = [0, 0, 488, 712, 920, 760, 960]
   state eY: number[] = [208, 208, 96, 76, 112, 144, 208]
@@ -88,9 +88,25 @@ component Expectsylvania
   state eBase: number[] = [0, 0, 96, 76, 112, 0, 0]
   state ePuff: number[] = [0, 0, 0, 0, 0, 0, 0]
   state lastHit = -1
+  // ── The room (0 the Gatehouse, 1 the Belfry) and the boss ──
+  state room = 0
+  state bossX = 1140
+  state bossY = 72
+  state bossHp = 16
+  // "fly", "swoop" or "dead"; the swoop's start, end and lowest point.
+  state bossMode = "fly"
+  state bossDir = 1
+  state bossT = 0
+  state bossCd = 0
+  state bossSX = 0
+  state bossSY = 0
+  state bossEX = 0
+  state bossTY = 0
+  state bossS = 0
+  state bossDeadT = 0
 
   derive hx = (rHeld ? 1 : 0) - (lHeld ? 1 : 0)
-  derive cam = clamp(round(x) - 128, 0, camMax())
+  derive cam = room == 1 ? belfryCam() : clamp(round(x) - 128, 0, camMax())
   derive playing = phase == "play"
 
   // ── One tick ──
@@ -108,9 +124,15 @@ component Expectsylvania
       play()
     if phase == "dead" and pt >= 60
       if lives > 1
-        restart(lives - 1)
+        restart(lives - 1, room)
       else
         phase = "over"
+    // Through the door: fade out, into the Belfry, fade in.
+    if phase == "door" and pt >= 20
+      enterBelfry()
+    if phase == "enter" and pt >= 20
+      phase = "play"
+      phaseT = 0
     // A press waits for one tick, then lapses.
     jumpQ = false
     whipQ = false
@@ -170,32 +192,47 @@ component Expectsylvania
     hearts = min(99, hearts + hg - spend)
     sub = gotDagger ? "dagger" : sub
     let sc = score + pts
-    lastHit = hitAny.length > 0 ? nth(hitAny, 0) : lastHit
+    lastHit = room == 1 ? 7 : (hitAny.length > 0 ? nth(hitAny, 0) : lastHit)
     if throwNow
       dOn = true
       dX = x0 + f0 * 8
       dY = y0 - 24
       dDir = f0
     else
-      dOn = dOn and hitAny.filter(i => flag(dagHit, i)).length == 0 and dX > cm - 16 and dX < cm + 272
+      dOn = dOn and hitAny.filter(i => flag(dagHit, i)).length == 0 and not (room == 1 and bossMode != "dead" and bossCd == 0 and overlaps(dX - 8, dX + 8, bossX - 20, bossX + 20) and overlaps(dY - 3, dY + 3, bossY - 10, bossY + 10)) and dX > cm - 16 and dX < cm + 272
       dX = dX + dDir * 6
+    // ── The boss: whip and dagger hits, and its touch ──
+    let inBelfry = room == 1 and bossMode != "dead"
+    let bHitW = inBelfry and live and bossCd == 0 and overlaps(wx0, wx1, bossX - 20, bossX + 20) and overlaps(wy0, wy1, bossY - 10, bossY + 10)
+    let bHitD = inBelfry and dOn and bossCd == 0 and overlaps(dX - 8, dX + 8, bossX - 20, bossX + 20) and overlaps(dY - 3, dY + 3, bossY - 10, bossY + 10)
+    let bDmg = (bHitW ? 1 : 0) + (bHitD ? 2 : 0)
+    let bTouch = inBelfry and inv == 0 and not hurt and overlaps(x0 - 6, x0 + 6, bossX - 14, bossX + 14) and overlaps(by0, y0, bossY - 8, bossY + 8)
+    let dmg = toucher >= 0 ? damageOf(kindOf(toucher)) : (bTouch ? bossDamage() : 0)
+    let fromX = toucher >= 0 ? nth(ex0, toucher) : bossX
     moveEnemies(newHp, killed, whipHit, dagHit, x0, y0, f0, cm)
-    moveVesper(throwNow, toucher, toucher >= 0 ? nth(ex0, toucher) : x0, x0, y0)
+    if room == 1
+      moveBoss(bDmg, x0, y0)
+    moveVesper(throwNow, dmg, fromX, x0, y0)
     // ── The clock, a fall, the door ──
     let t1 = max(0, time - (ticks % 30 == 29 ? 1 : 0))
     time = t1
     if hp <= 0 or t1 <= 0 or y0 > 240
       phase = "dead"
       phaseT = 0
-    if x0 >= doorX() and not air and y0 == floorY()
+    if room == 0 and x0 >= doorX() and not air and y0 == floorY()
+      phase = "door"
+      phaseT = 0
+    // The boss's fall: a burst of flame, then the stage is clear.
+    if room == 1 and bossMode == "dead" and bossDeadT >= 60
       phase = "clear"
       phaseT = 0
-      score = sc + t1 * 10
+      score = sc + 3000 + t1 * 10
     else
       score = sc
 
   // Ghouls walk straight on, and rise again near the screen's edge; bats
-  // wake as Vesper passes and swoop at her; knights pace their ground.
+  // wake as Vesper passes and swoop at her; knights pace their ground, and
+  // turn on her when she comes close on it.
   action moveEnemies(newHp: number[], killed: bool[], whipHit: bool[], dagHit: bool[], px: number, py: number, pf: number, cm: number)
     let a0 = eAlive
     let aw0 = eAwake
@@ -212,16 +249,18 @@ component Expectsylvania
       : (not flag(a0, i) or flag(killed, i) or not flag(aw0, i) ? nth(x0, i)
       : (kindOf(i) == "ghoul" ? nth(x0, i) + nth(d0, i)
       : (kindOf(i) == "bat" ? nth(x0, i) + nth(d0, i) * 2.5
-      : nth(x0, i) + nth(d0, i) * 0.75)))))
+      : clamp(nth(x0, i) + nth(d0, i) * 0.75, patrolMin(i), patrolMax(i)))))))
     let nb = seven().map(i => (kindOf(i) == "bat" and flag(aw0, i) ? nth(b0, i) + clamp(py - 20 - nth(b0, i), -1, 1) : nth(b0, i)))
     eX = nx
     eBase = nb
     eY = seven().map(i => (kindOf(i) == "bat" and flag(aw0, i) ? nth(nb, i) + sin(nth(t0, i) * 0.35) * 8 : nth(y0, i)))
     eDir = seven().map(i => (flag(spawn, i) ? sgn(px - nth(sx, i)) : (flag(wake, i) ? sgn(px - nth(x0, i))
-      : (kindOf(i) == "knight" and (nth(x0, i) < patrolMin(i) or nth(x0, i) > patrolMax(i)) ? (nth(x0, i) < patrolMin(i) ? 1 : -1) : nth(d0, i)))))
+      : (kindOf(i) == "knight" and nth(y0, i) == py and overlaps(px, px, nth(x0, i) - 96, nth(x0, i) + 96) ? sgn(px - nth(x0, i))
+      : (kindOf(i) == "knight" and (nth(x0, i) < patrolMin(i) or nth(x0, i) > patrolMax(i)) ? (nth(x0, i) < patrolMin(i) ? 1 : -1) : nth(d0, i))))))
     eAwake = seven().map(i => flag(aw0, i) or flag(wake, i))
-    // Off screen by a margin: gone (a ghoul rises again later).
-    let away = seven().map(i => flag(a0, i) and flag(aw0, i) and (nth(nx, i) < cm - 48 or nth(nx, i) > cm + 304))
+    // Off screen by a margin, a ghoul or a woken bat is gone (a ghoul rises
+    // again later); knights keep their posts.
+    let away = seven().map(i => flag(a0, i) and flag(aw0, i) and kindOf(i) != "knight" and (nth(nx, i) < cm - 48 or nth(nx, i) > cm + 304))
     eAlive = seven().map(i => (flag(spawn, i) or (flag(a0, i) and not flag(killed, i) and not flag(away, i))))
     eHp = seven().map(i => (flag(spawn, i) ? maxHpOf(kindOf(i)) : nth(newHp, i)))
     eT = seven().map(i => (flag(spawn, i) or flag(killed, i) or flag(away, i) ? 0 : nth(t0, i) + 1))
@@ -230,7 +269,7 @@ component Expectsylvania
 
   // Vesper: walk, crouch, jump (a fixed arc), whip, climb stairs, and be
   // knocked back when hit.
-  action moveVesper(throwNow: bool, toucher: number, tx: number, x0: number, y0: number)
+  action moveVesper(throwNow: bool, dmg: number, tx: number, x0: number, y0: number)
     let onStair = stair >= 0
     let ground = not air and not onStair
     let atk1 = throwNow ? 1 : (atk > 0 ? (atk + 1 >= whipEnd() ? 0 : atk + 1) : (whipQ and not hurt ? 1 : 0))
@@ -238,9 +277,9 @@ component Expectsylvania
     let crouchNow = ground and dHeld and not hurt
     // Hit: knocked up and back, then flashing for two seconds. On a stair
     // she only flashes.
-    let hitNow = toucher >= 0
+    let hitNow = dmg > 0
     let kdir = hitNow ? (x0 >= tx ? 1 : -1) : 0
-    hp = hitNow ? max(0, hp - damageOf(kindOf(toucher))) : hp
+    hp = hitNow ? max(0, hp - dmg) : hp
     inv = hitNow ? 60 : max(0, inv - 1)
     atk = hitNow ? 0 : atk1
     throwing = throwNow or (throwing and atk1 > 0)
@@ -269,7 +308,7 @@ component Expectsylvania
           let jv = launched ? kdir * 1.5 : (jumping ? hx * walkSpeed() : jvx)
           let walkV = ground and not attacking and not crouchNow and not hitNow ? hx * walkSpeed() : 0
           let vx = air1 ? jv : walkV
-          let nx = clamp(x0 + vx, minX(), maxX())
+          let nx = clamp(x0 + vx, roomMinX(room), roomMaxX(room))
           let v1 = launched ? -4 : (jumping ? 0 - jumpSpeed() : (air ? min(7, vy + gravity()) : 0))
           let ny = y0 + v1
           // Landing: falling onto a surface's top.
@@ -297,10 +336,75 @@ component Expectsylvania
     if (s1 >= stairLen() and move > 0) or (s1 <= 0 and move < 0)
       stair = -1
 
-  // Back to the stage's start: a life spent, or a new game.
-  action restart(left: number)
+  // The Night Lord: back and forth over the room, bobbing; every few
+  // seconds a swoop down through where Vesper stood and up the far side.
+  // Each hit flashes it and leaves it unhurtable for a moment.
+  action moveBoss(dmg: number, px: number, py: number)
+    let hp1 = max(0, bossHp - dmg)
+    let t1 = bossT + 1
+    bossHp = hp1
+    bossCd = dmg > 0 ? 12 : max(0, bossCd - 1)
+    bossT = t1
+    if bossMode == "dead"
+      bossDeadT = bossDeadT + 1
+    else
+      if hp1 <= 0
+        bossMode = "dead"
+        bossDeadT = 0
+      else
+        if bossMode == "swoop"
+          let s1 = bossS + 1
+          let f = s1 / swoopTicks()
+          bossS = s1
+          bossX = bossSX + (bossEX - bossSX) * f
+          bossY = bossSY + (bossTY - bossSY) * sin(f * 3.14159)
+          if s1 >= swoopTicks()
+            bossMode = "fly"
+            bossDir = bossEX >= bossSX ? 1 : -1
+        else
+          let x1 = bossX + bossDir * 1.6
+          let y1 = bossHomeY() + sin(t1 * 0.12) * 10
+          bossX = x1
+          bossY = y1
+          bossDir = x1 >= bossRight() ? -1 : (x1 <= bossLeft() ? 1 : bossDir)
+          if t1 % swoopEvery() == 0
+            let tx = clamp(px, 1048, 1240)
+            bossMode = "swoop"
+            bossS = 0
+            bossSX = x1
+            bossSY = y1
+            bossTY = py - 14
+            // Its lowest point is where she stood: the far side mirrors the start.
+            bossEX = clamp(tx + (tx - x1), 1048, 1240)
+
+  action enterBelfry
+    room = 1
+    x = belfryStart()
+    y = floorY()
+    vy = 0
+    air = false
+    jvx = 0
+    facing = 1
+    stair = -1
+    atk = 0
+    hurt = false
+    dOn = false
+    phase = "enter"
+    phaseT = 0
+
+  // Back to the start of the room you fell in: a life spent, or a new game.
+  action restart(left: number, r: number)
     lives = left
-    x = 40
+    room = r
+    bossX = 1140
+    bossY = 72
+    bossHp = bossMaxHp()
+    bossMode = "fly"
+    bossDir = 1
+    bossT = 0
+    bossCd = 0
+    bossDeadT = 0
+    x = r == 1 ? belfryStart() : 40
     y = 208
     vy = 0
     air = false
@@ -317,10 +421,10 @@ component Expectsylvania
     hearts = startHearts()
     time = startTime()
     dOn = false
-    cLit = [true, true, true, true, true, true, true, true, true]
-    dropS = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-    dropY = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-    dropT = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    cLit = [true, true, true, true, true, true, true, true, true, true, true]
+    dropS = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    dropY = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    dropT = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     eX = [0, 0, 488, 712, 920, 760, 960]
     eY = [208, 208, 96, 76, 112, 144, 208]
     eDir = [1, 1, -1, -1, -1, -1, -1]
@@ -338,10 +442,10 @@ component Expectsylvania
   // ── What is on screen ──
   derive heroName = (hurt ? "hurt"
     : (atk > 0 ? `${crouch ? "cwhip" : "whip"}${atk <= 4 ? "back" : "fore"}`
-    : (stair >= 0 ? (floor(ss / 8) % 2 == 0 ? "walk0" : "walk1")
+    : (stair >= 0 ? wordAt(["walk0", "walk1", "walk2", "walk3"], floor(ss / 4) % 4)
     : (air ? "jump"
     : (crouch ? "crouch"
-    : (hx != 0 ? wordAt(["walk0", "stand", "walk1", "stand"], floor(ticks / 4) % 4) : "stand"))))))
+    : (hx != 0 ? wordAt(["walk0", "walk1", "walk2", "walk3"], floor(ticks / 4) % 4) : "stand"))))))
   derive flip = facing < 0 ? "h" : ""
   derive heroShown = phase != "dead" or phaseT % 4 < 2
   derive heroSprite = (heroShown and (inv == 0 or hurt or inv % 4 < 2) ? [`${heroName}:${round(x) - 8 - cam}:${round(y) - 32}:${flip}`] : [])
@@ -358,15 +462,23 @@ component Expectsylvania
   derive candleSprites = nine().filter(i => flag(cLit, i)).map(i => `candle${floor((ticks + i * 3) / 5) % 2}:${candleX(i) - 4 - cam}:${candleY(i) - 16}:`)
   derive dropSprites = nine().filter(i => nth(dropS, i) == 1 and (nth(dropT, i) < 240 or ticks % 4 < 2)).map(i =>
     `${dropOf(i)}:${candleX(i) - (dropOf(i) == "heart" ? 4 : 8) - cam}:${round(nth(dropY, i)) - (dropOf(i) == "bigheart" ? 13 : (dropOf(i) == "heart" ? 6 : 6))}:`)
-  derive sprites = daggerSprite.concat(lashSprite).concat(heroSprite).concat(puffSprites).concat(enemySprites).concat(dropSprites).concat(candleSprites).join(";")
-  derive enemyBar = lastHit >= 0 ? round(nth(eHp, lastHit) / maxHpOf(kindOf(lastHit)) * 16) : 16
+  derive sprites = daggerSprite.concat(lashSprite).concat(heroSprite).concat(bossSprites).concat(puffSprites).concat(enemySprites).concat(dropSprites).concat(candleSprites).join(";")
+  derive enemyBar = room == 1 ? bossHp : (lastHit >= 0 ? round(nth(eHp, lastHit) / maxHpOf(kindOf(lastHit)) * 16) : 16)
+  // The boss: flapping, flashing when hit; at its fall, flames where it was.
+  derive bossSprites = (room != 1 ? []
+    : (bossMode == "dead"
+      ? (bossDeadT < 40 ? [`puff${floor(bossDeadT / 4) % 2}:${round(bossX) - 20 - cam}:${round(bossY) - 10}:`, `puff${floor(bossDeadT / 4 + 1) % 2}:${round(bossX) + 4 - cam}:${round(bossY) - 4}:`] : [])
+      : [`gbat${floor(bossT / 6) % 2}:${round(bossX) - 24 - cam}:${round(bossY) - 12}:${bossCd > 0 and bossCd % 4 < 2 ? "2" : ""}`]))
   derive hudText = [`0,0|SCORE-${pad(score, 6)} TIME ${pad(time, 3)} STAGE 01`,
     `0,1|PLAYER ${bar(hp, "a", "b", "c")} ~h-${pad(hearts, 2)}`,
     `0,2|ENEMY  ${bar(enemyBar, "x", "y", "z")} ${sub == "dagger" ? "~d~e" : ""}  P-${lives}`]
   derive banner = (phase == "ready" ? ["9,13|STAGE 01", "7,15|THE GATEHOUSE"]
+    : (phase == "enter" ? ["10,13|THE BELFRY"]
     : (phase == "clear" ? ["8,13|STAGE CLEAR!", "6,15|PRESS ENTER"]
-    : (phase == "over" ? ["10,13|GAME OVER", "6,15|ENTER TO RETRY"] : [])))
-  derive fade = phase == "dead" ? clamp(floor((phaseT - 30) / 6), 0, 4) : 0
+    : (phase == "over" ? ["10,13|GAME OVER", "6,15|ENTER TO RETRY"] : []))))
+  derive fade = (phase == "dead" ? clamp(floor((phaseT - 30) / 6), 0, 4)
+    : (phase == "door" ? clamp(floor(phaseT / 4), 0, 4)
+    : (phase == "enter" ? clamp(4 - floor(phaseT / 4), 0, 4) : 0)))
 
   // ── Keys ──
   action onKey(k: string, e: KeyboardEvent)
@@ -389,7 +501,7 @@ component Expectsylvania
       wHeld = true
     if isStart(k) and (phase == "over" or phase == "clear")
       score = 0
-      restart(3)
+      restart(3, 0)
 
   action onKeyUp(k: string)
     let d = keyDir(k)

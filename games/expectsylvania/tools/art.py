@@ -348,6 +348,60 @@ LEGS_LUNGE = [
     "1111..........11",
     "................",
 ]
+# The walk: arms swing opposite the legs; on the passing frames the body
+# rises a pixel.
+TORSO_SWING_F = [
+    "......222222....",
+    ".....22222222...",
+    "....2222232222..",
+    "....222222222222",
+    "....22222222.222",
+    "....22222222..33",
+    "....2222222.....",
+    ".....2222222....",
+    ".....1111111....",
+    ".....2222222....",
+    "....222222222...",
+    "....2222.2222...",
+]
+TORSO_SWING_B = [
+    "......222222....",
+    ".....22222222...",
+    "...22222232222..",
+    "..222222222222..",
+    "..22.22222222...",
+    ".33..22222222...",
+    "....222222222...",
+    ".....2222222....",
+    ".....1111111....",
+    ".....2222222....",
+    "....222222222...",
+    "....2222.2222...",
+]
+LEGS_PASS_F = [
+    "....22222222....",
+    ".....111.111....",
+    ".....111..111...",
+    ".....111...11...",
+    ".....111..11....",
+    ".....111.11.....",
+    ".....111........",
+    ".....111........",
+    "....1111........",
+    "................",
+]
+LEGS_PASS_B = [
+    "....22222222....",
+    "....111.111.....",
+    "...111...111....",
+    "..111....111....",
+    "..11.....111....",
+    "..1......111....",
+    ".........111....",
+    ".........111....",
+    ".........1111...",
+    "................",
+]
 TUCK = [
     "....222222222...",
     "....11111111....",
@@ -362,8 +416,9 @@ TUCK = [
 ]
 
 
-def hero(torso, legs, drop=0):
+def hero(torso, legs, drop=0, lift=0):
     rows = ['.' * 16] * drop + HEAD + torso + legs
+    rows = rows[lift:] + ['.' * 16] * lift
     return grid(rows[:32], 16, 32)
 
 
@@ -617,18 +672,64 @@ PUFF_1 = grid([
     "......1111......",
 ], 16, 16)
 
+# Vesper's frames, in the order of her sheet (assets/sprites/hero.png, 16x32 cells).
+HERO = [
+    ('stand', hero(TORSO, LEGS)),
+    ('walk0', hero(TORSO_SWING_F, LEGS_A)),
+    ('walk1', hero(TORSO, LEGS_PASS_F, lift=1)),
+    ('walk2', hero(TORSO_SWING_B, LEGS_A)),
+    ('walk3', hero(TORSO, LEGS_PASS_B, lift=1)),
+    ('jump', hero(TORSO, TUCK, 0)),
+    ('crouch', crouch(TORSO)),
+    ('whipback', hero(TORSO_BACK, LEGS_LUNGE)),
+    ('whipfore', hero(TORSO_FORE, LEGS_LUNGE)),
+    ('cwhipback', crouch(TORSO_BACK)),
+    ('cwhipfore', crouch(TORSO_FORE)),
+    ('hurt', HURT),
+]
+
+# The boss: a giant bat, 48x24, two flaps. Fire palette: 1 red membrane,
+# 2 orange bones and fur, 3 white eyes and fangs. Drawn as the left half,
+# mirrored.
+def giant_bat(up):
+    half = [[0] * 24 for _ in range(24)]
+    import math
+    for y in range(24):
+        for x in range(24):
+            # Body (right edge of the half is the centre line).
+            if (x - 23.5) ** 2 / 36 + (y - 13) ** 2 / 64 <= 1:
+                half[y][x] = 2 if (x + y) % 3 else 1
+            # Ears.
+            if 18 <= x <= 20 and 2 <= y <= 6 and x - 18 >= (6 - y) // 2:
+                half[y][x] = 1
+    # Wing: a membrane between the arm and three finger bones, scalloped below.
+    lift = -7 if up else 5
+    for x in range(0, 19):
+        t = (18 - x) / 18
+        top = 9 + lift * t - 3 * math.sin(t * math.pi)
+        bottom = 15 + lift * t + 3 * abs(math.sin(t * math.pi * 3))
+        for y in range(24):
+            if top <= y <= bottom:
+                half[y][x] = 1
+            if abs(y - top) < 0.8:
+                half[y][x] = 2
+    for fx in (3, 8, 13):
+        t = (18 - fx) / 18
+        top = 9 + lift * t - 3 * math.sin(t * math.pi)
+        for y in range(24):
+            if top <= y <= top + 6 + 3 * abs(math.sin(t * math.pi * 3)) and half[y][fx] == 1:
+                half[y][fx] = 2
+    for (x, y) in ((20, 11), (21, 11), (21, 12)):
+        half[y][x] = 3
+    for (x, y) in ((22, 17), (22, 18)):
+        half[y][x] = 3
+    rows = [''.join(str(c) for c in r) + ''.join(str(c) for c in reversed(r)) for r in half]
+    return grid([r.replace('0', '.') for r in rows], 48, 24)
+
+
 SPRITES = [
     # name, art, palette
-    ('stand', hero(TORSO, LEGS), 0),
-    ('walk0', hero(TORSO, LEGS_A), 0),
-    ('walk1', hero(TORSO, LEGS_B), 0),
-    ('jump', hero(TORSO, TUCK, 0), 0),
-    ('crouch', crouch(TORSO), 0),
-    ('whipback', hero(TORSO_BACK, LEGS_LUNGE), 0),
-    ('whipfore', hero(TORSO_FORE, LEGS_LUNGE), 0),
-    ('cwhipback', crouch(TORSO_BACK), 0),
-    ('cwhipfore', crouch(TORSO_FORE), 0),
-    ('hurt', HURT, 0),
+    ('gbat0', giant_bat(True), 3), ('gbat1', giant_bat(False), 3),
     ('lashback', WHIP_BACK, 2),
     ('lash', WHIP_OUT, 2),
     ('ghoul0', GHOUL_0, 1), ('ghoul1', GHOUL_1, 1),
@@ -669,12 +770,7 @@ NES = None
 
 
 def preview(path):
-    global NES
-    import re
-    src = open(os.path.join(HERE, '../../../engines/nes-ppu/src/lib.rs')).read()
-    body = src[src.index('= [', src.index('pub const NES_PALETTE')):]
-    body = body[:body.index('];')]
-    NES = [tuple(int(v, 16) for v in m) for m in re.findall(r'\[0x(..), 0x(..), 0x(..)\]', body)]
+    load_nes()
     S = 4
     # Sprites in a row on dark grey, metatiles in a grid below.
     W = 640
@@ -682,7 +778,7 @@ def preview(path):
     x = 4
     y = 4
     rowh = 0
-    for name, art, pal in SPRITES:
+    for name, art, pal in [(n, a, 0) for n, a in HERO] + SPRITES:
         w, h = len(art[0]), len(art)
         if x + w > W // S:
             x = 4
@@ -721,7 +817,42 @@ def preview(path):
                            + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b''))
 
 
+def hero_sheet(path):
+    """Write Vesper's frames as a PNG sheet in her palette's exact colours:
+    the starting point for editing her in a paint program."""
+    global NES
+    if NES is None:
+        load_nes()
+    W, H = 16 * len(HERO), 32
+    img = [[(0, 0, 0, 0)] * W for _ in range(H)]
+    for i, (name, art) in enumerate(HERO):
+        for y, row in enumerate(art):
+            for x, ch in enumerate(row):
+                if ch in '123':
+                    img[y][i * 16 + x] = NES[SPR[0][int(ch)]] + (255,)
+    raw = b''.join(b'\x00' + bytes(v for p in r for v in p) for r in img)
+    def chunk(t, d): return struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d) & 0xffffffff)
+    open(path, 'wb').write(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', W, H, 8, 6, 0, 0, 0))
+                           + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b''))
+
+
+def load_nes():
+    global NES
+    import re
+    src = open(os.path.join(HERE, '../../../engines/nes-ppu/src/lib.rs')).read()
+    body = src[src.index('= [', src.index('pub const NES_PALETTE')):]
+    body = body[:body.index('];')]
+    NES = [tuple(int(v, 16) for v in m) for m in re.findall(r'\[0x(..), 0x(..), 0x(..)\]', body)]
+
+
 if __name__ == '__main__':
+    import sys
+    sheet = os.path.join(HERE, '../assets/sprites/hero.png')
+    # The sheet is the source once it exists: rewrite it only when asked.
+    if '--hero' in sys.argv or not os.path.exists(sheet):
+        os.makedirs(os.path.dirname(sheet), exist_ok=True)
+        hero_sheet(sheet)
+        print('wrote', sheet)
     os.makedirs(os.path.join(HERE, '../gpu/src'), exist_ok=True)
     open(os.path.join(HERE, '../gpu/src/data.rs'), 'w').write(rust())
     preview(os.path.join(HERE, 'preview.png'))

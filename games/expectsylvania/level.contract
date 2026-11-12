@@ -4,22 +4,22 @@
 // solid; `/` and `z` draw the stairs, which the rules below define.
 
 fn levelMap(): string[] = [
-  "`          `          WWWWccccccccccccccccccccccccccccccccccccc#",
-  "     mn          `    WWWWbPbbCCPbbbbbbbbbPbbbbbbbPbCCbbbPbbbbb#",
-  " `   oq     `         WWWWbPbwCCPbbwbbbbbbPbbbbwbbPbCCbbbPbwbbb#",
-  "       `          `   WWWWbPbvCCPbbvbbbbbbPbbbbvbbPbCCbbbPbvbbb#",
-  "  `        KkKkKkKkKkKWWWWbPbvbbPbbvbbbbbbPbbbbvbbPbbbbbbPbvbbb#",
-  " TTT    `  kkkkkTTTkkkWAAWbPbvbbPbbvbbbbbbPbbbbvbbPbbbbbbPbvbbb#",
-  " TTT       kkjkkTTTkjkWaaWbPbbbbPbbbbbbbbbPbbbbbbbPbbbbbbPbbbbb#",
-  "  t        kkkkkktkkkkWaaWbPbbbbPbbbbb/==============zbbbPbbbbb#",
-  "  t        kkkkkktkkkkWaaWbPbbbbPbbbb/bbbbPbbbbbbbPbbbzbbPbbbbb#",
-  "FFtFFFFFFFFFFFFFFtFFFFWaaWbPbbbbPbbb/bbbbbPbbbbbbbPbbbbzbPbbbDE#",
-  "fftfffffffffffffftffffWaaWbPbbbbPbb/bbbbbbPbbbbbbbPbbbbbzPbbbde#",
-  "################################################################",
-  "################################################################"
+  "`          `          WWWWccccccccccccccccccccccccccccccccccccc#################",
+  "     mn          `    WWWWbPbbCCPbbbbbbbbbPbbbbbbbPbCCbbbPbbbbb##bPbbbbPPbbbbPb#",
+  " `   oq     `         WWWWbPbwCCPbbwbbbbbbPbbbbwbbPbCCbbbPbwbbb##bPbwbbPPbbwbPb#",
+  "       `          `   WWWWbPbvCCPbbvbbbbbbPbbbbvbbPbCCbbbPbvbbb##bPbvbbPPbbvbPb#",
+  "  `        KkKkKkKkKkKWWWWbPbvbbPbbvbbbbbbPbbbbvbbPbbbbbbPbvbbb##bPbvbbPPbbvbPb#",
+  " TTT    `  kkkkkTTTkkkWAAWbPbvbbPbbvbbbbbbPbbbbvbbPbbbbbbPbvbbb##bPbvbbPPbbvbPb#",
+  " TTT       kkjkkTTTkjkWaaWbPbbbbPbbbbbbbbbPbbbbbbbPbbbbbbPbbbbb##bPbvbbPPbbvbPb#",
+  "  t        kkkkkktkkkkWaaWbPbbbbPbbbbb/==============zbbbPbbbbb##bPbbbbPPbbbbPb#",
+  "  t        kkkkkktkkkkWaaWbPbbbbPbbbb/bbbbPbbbbbbbPbbbzbbPbbbbb##bPbbbbPPbbbbPb#",
+  "FFtFFFFFFFFFFFFFFtFFFFWaaWbPbbbbPbbb/bbbbbPbbbbbbbPbbbbzbPbbbDE##===bbbPPbbb===#",
+  "fftfffffffffffffftffffWaaWbPbbbbPbb/bbbbbbPbbbbbbbPbbbbbzPbbbde##bPbbbbPPbbbbPb#",
+  "################################################################################",
+  "################################################################################"
 ]
 fn tileAt(c: number, r: number): string =
-  (c < 0 or r < 0 or c >= 64 or r >= 13 ? "#" : match levelMap().at(r) { case some(s) => s.slice(c, c + 1), case none => "#" })
+  (c < 0 or r < 0 or c >= 80 or r >= 13 ? "#" : match levelMap().at(r) { case some(s) => s.slice(c, c + 1), case none => "#" })
 fn solidAt(x: number, y: number): bool = (y < 32 ? false : (tileAt(floor(x / 16), floor((y - 32) / 16)) == "#" or tileAt(floor(x / 16), floor((y - 32) / 16)) == "="))
 // The top of the tile row holding y: where feet stand.
 fn rowTop(y: number): number = 32 + floor((y - 32) / 16) * 16
@@ -31,6 +31,20 @@ fn minX(): number = 8
 fn maxX(): number = 1000
 fn camMax(): number = 768
 fn doorX(): number = 984
+// Room 1, the Belfry: one locked screen at columns 64–79.
+fn roomMinX(room: number): number = (room == 0 ? minX() : 1040)
+fn roomMaxX(room: number): number = (room == 0 ? maxX() : 1248)
+fn belfryCam(): number = 1024
+fn belfryStart(): number = 1056
+// The boss, the Night Lord: a giant bat that sweeps back and forth over
+// the room and, every few seconds, swoops down through where you stand.
+fn bossMaxHp(): number = 16
+fn bossLeft(): number = 1068
+fn bossRight(): number = 1212
+fn bossHomeY(): number = 72
+fn swoopEvery(): number = 100
+fn swoopTicks(): number = 45
+fn bossDamage(): number = 3
 
 // Stairs: a bottom point, the way "up" goes along x, and a 64-pixel rise.
 fn stairs(): number = 2
@@ -40,10 +54,10 @@ fn stairLen(): number = 64
 fn stairTopX(i: number): number = stairBx(i) + stairDir(i) * stairLen()
 
 // Candles: where each hangs (centre x, bottom y) and what it drops.
-fn candles(): number = 9
-fn candleX(i: number): number = nth([72, 184, 296, 456, 520, 680, 760, 872, 952], i)
-fn candleY(i: number): number = nth([192, 180, 192, 192, 176, 128, 128, 192, 184], i)
-fn dropOf(i: number): string = wordAt(["heart", "bigheart", "heart", "dagger", "heart", "bigheart", "heart", "heart", "bigheart"], i)
+fn candles(): number = 11
+fn candleX(i: number): number = nth([72, 184, 296, 456, 520, 680, 760, 872, 952, 1112, 1176], i)
+fn candleY(i: number): number = nth([192, 180, 192, 192, 176, 128, 128, 192, 184, 192, 192], i)
+fn dropOf(i: number): string = wordAt(["heart", "bigheart", "heart", "dagger", "heart", "bigheart", "heart", "heart", "bigheart", "heart", "bigheart"], i)
 
 // Enemies, in seven slots: two ghouls that keep rising in the courtyard,
 // three bats that wake as you pass, two knights on patrol.

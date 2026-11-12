@@ -57,7 +57,269 @@ test "Up at a stair's foot climbs to the balcony"
   expect state stair == -1
   expect state x == 624
   expect state y == 144
-  type "root" key "ArrowRight" for 600
+
+test "the floor knight turns to fight; the door leads to the Belfry"
+  clock +1600
+  type "root" key "ArrowRight" for 9000
   clock +100
-  expect state x == 660
-  expect state y == 144
+  type "root" key "ArrowRight" for 4000
+  clock +100
+  type "root" key "ArrowRight" for 2150
+  clock +50
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  expect state eAlive.6 == false
+  type "root" key "ArrowRight" for 1500
+  clock +1500
+  expect state room == 1
+  expect state x == 1056
+  expect state phase == "play"
+
+test "the Night Lord swoops, takes sixteen lashes, and the stage is clear"
+  clock +1600
+  type "root" key "ArrowRight" for 9000
+  clock +100
+  type "root" key "ArrowRight" for 4000
+  clock +100
+  type "root" key "ArrowRight" for 2150
+  clock +50
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "ArrowRight" for 1500
+  clock +1500
+  expect state bossMode == "fly"
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  type "root" key "x"
+  clock +400
+  clock +2500
+  expect state bossHp == 0
+  expect state phase == "clear"

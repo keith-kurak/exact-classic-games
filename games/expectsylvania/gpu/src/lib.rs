@@ -25,6 +25,13 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 pub const INPUTS: usize = 4;
+
+/// Vesper's frames come from a PNG sheet, drawn in her palette's colours
+/// (16×32 cells, left to right in this order); everything else is text art in
+/// data.rs. Edit the sheet in any paint program and rebuild.
+const HERO_SHEET: &[u8] = include_bytes!("../../assets/sprites/hero.png");
+const HERO_FRAMES: [&str; 12] =
+    ["stand", "walk0", "walk1", "walk2", "walk3", "jump", "crouch", "whipback", "whipfore", "cwhipback", "cwhipfore", "hurt"];
 const COLS: usize = 32;
 const ROWS: usize = 30;
 /// The HUD's height in tiles: the level is drawn below it.
@@ -92,6 +99,12 @@ pub fn build() -> Art {
     let mut sprites = HashMap::new();
     for (name, pal, art) in SPRITES {
         sprites.insert(*name, Metasprite::from_art(&mut spr, art, *pal));
+    }
+    let sheet = nes_ppu::png::decode(HERO_SHEET).expect("assets/sprites/hero.png");
+    let [_, c1, c2, c3] = SPRITE_PALETTES[0];
+    for (i, name) in HERO_FRAMES.into_iter().enumerate() {
+        assert!(sheet.width >= (i + 1) * 16 && sheet.height >= 32, "hero.png needs {} frames of 16×32", HERO_FRAMES.len());
+        sprites.insert(name, Metasprite::from_art(&mut spr, &sheet.art(i * 16, 0, 16, 32, [c1, c2, c3]), 0));
     }
     Art { bg, spr, metatiles, sprites, glyphs, escapes }
 }
@@ -228,7 +241,7 @@ mod tests {
     fn level_and_art_agree() {
         let art = build();
         for row in LEVEL {
-            assert_eq!(row.chars().count(), 64);
+            assert_eq!(row.chars().count(), 80);
             for ch in row.chars() {
                 assert!(art.metatiles.contains_key(&ch), "no metatile for {ch:?}");
             }

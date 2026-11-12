@@ -1,6 +1,8 @@
-# The Gatehouse, stage 1: 64x13 metatiles (16x16), under a 2-metatile HUD.
+# The Gatehouse, stage 1: 80x13 metatiles (16x16), under a 2-metatile HUD.
+# Columns 0-63 are the courtyard, gate and hall; 64-79 the Belfry, the boss's
+# room, one locked screen behind the hall's door.
 # Writes the map once, for both level.contract and gpu/src/level.rs.
-W, H = 64, 13
+W, H = 80, 13
 g = [[' '] * W for _ in range(H)]
 def put(c, r, ch): g[r][c] = ch
 # ── Courtyard, columns 0-21: night sky, stars, moon, a far castle, dead
@@ -56,6 +58,22 @@ for c, r, ch in ((61, 9, 'D'), (62, 9, 'E'), (61, 10, 'd'), (62, 10, 'e')):
     put(c, r, ch)
 for r in range(0, 11):
     put(63, r, '#')
+# ── The Belfry, columns 64-79: a walled room, two ledges, tall windows.
+for c in range(64, 80):
+    put(c, 0, '#')
+    for r in range(1, 11):
+        put(c, r, 'b')
+for r in range(0, 11):
+    put(64, r, '#'); put(79, r, '#')
+for c in (68, 75):
+    put(c, 2, 'w')
+    for r in (3, 4, 5, 6):
+        put(c, r, 'v')
+for c in (66, 71, 72, 77):
+    for r in range(1, 11):
+        put(c, r, 'P')
+for c in (65, 66, 67, 76, 77, 78):
+    put(c, 9, '=')
 for c in range(W):
     put(c, 11, '#'); put(c, 12, '#')
 rows = [''.join(r) for r in g]
@@ -68,7 +86,7 @@ block = 'fn levelMap(): string[] = [\n' + ',\n'.join(f'  "{r}"' for r in rows) +
 src = re.sub(r'fn levelMap\(\): string\[\] = \[\n.*?\n\]', lambda m: block, src, flags=re.S)
 open(lc, 'w').write(src)
 open(os.path.join(here, '../gpu/src/level.rs'), 'w').write(
-    '// The Gatehouse, stage 1: 64x13 metatiles under the HUD. Must match\n'
+    '// The Gatehouse, stage 1: 80x13 metatiles under the HUD (the Belfry from\n// column 64). Must match\n'
     '// level.contract (both written by tools/level.py).\n'
     'pub const LEVEL: [&str; 13] = [\n' + ',\n'.join(f'    "{r}"' for r in rows) + ',\n];\n')
 print('ok')

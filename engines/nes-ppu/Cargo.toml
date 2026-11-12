@@ -8,3 +8,7 @@ description = "An NES-style picture processor: 2C02 palette, 2bpp CHR tiles, att
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+# Inflate for reading PNG sprite sheets (already in every Exact app's graph via wgpu).
+miniz_oxide = "0.8"
