@@ -1,4 +1,4 @@
-//! NES Musicbox on Apple: the Contract UI and the TypeScript data module.
+//! Exacticom Musicbox on Apple: the Contract UI and the TypeScript data module.
 
 include!(concat!(env!("OUT_DIR"), "/module.rs"));
 

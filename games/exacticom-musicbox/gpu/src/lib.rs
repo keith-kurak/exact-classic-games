@@ -1,6 +1,6 @@
-//! NES Musicbox's GPU module: its screen, an NES picture from the shared
+//! Exacticom Musicbox's GPU module: its screen, an NES picture from the shared
 //! engines (nes-ppu draws it, nes-screen shows it). The music itself is made
-//! by nes-apu ahead of time: `cargo test --release -p nes-musicbox-gpu render
+//! by nes-apu ahead of time: `cargo test --release -p exacticom-musicbox-gpu render
 //! -- --ignored` renders the songs and sound effects (music.rs) to WAV files
 //! and writes songs.contract, the rows the screen's meters follow.
 //!
@@ -271,7 +271,7 @@ mod tests {
         std::fs::create_dir_all(root.join("assets/music")).unwrap();
         std::fs::create_dir_all(root.join("assets/sfx")).unwrap();
         let mut c = String::from(
-            "// Written by the nes-musicbox-gpu `render` test from gpu/src/music.rs: do not\n\
+            "// Written by the exacticom-musicbox-gpu `render` test from gpu/src/music.rs: do not\n\
              // edit. Each song's rows, per channel: what sounds (a note, a drum, or \"\"\n\
              // for silence) and its volume, 0-15.\n\n",
         );
@@ -342,7 +342,7 @@ mod tests {
         let mut rgba = vec![0u8; WIDTH * HEIGHT * 4];
         let g = Musicbox {
             sprites: "hand:4:48;note:40:12".into(),
-            windows: parse_windows("1,1,30,4|{  NES MUSICBOX}|2A03 SOUND, CYCLE BY CYCLE^1,5,18,8,2| Morning Road| Castle Nocturne^1,14,18,14,2|{Morning Road}|%0P1 E5  ~8~8~8~4|%1P2 C4  ~8~4|%2TR C3  ~8~8~8~8~8~8|%3NO K   ~8~8~8~8"),
+            windows: parse_windows("1,1,30,4|{  EXACTICOM MUSICBOX}|2A03 SOUND, CYCLE BY CYCLE^1,5,18,8,2| Morning Road| Castle Nocturne^1,14,18,14,2|{Morning Road}|%0P1 E5  ~8~8~8~4|%1P2 C4  ~8~4|%2TR C3  ~8~8~8~8~8~8|%3NO K   ~8~8~8~8"),
         };
         g.draw_frame(0, &mut rgba);
         std::fs::write(root.join("assets/frame.png"), nes_ppu::png::encode(256, 240, &rgba)).unwrap();

@@ -1,4 +1,4 @@
-# NES Musicbox
+# Exacticom Musicbox
 
 A jukebox for the [`nes-apu`](../../engines/nes-apu) engine: three original chiptunes and seven
 sound effects, each made by the emulated NES sound chip, on a screen drawn by the NES picture
@@ -49,7 +49,7 @@ noise over a falling blip), **Fanfare** (both pulses and the triangle together).
   sound effects (register writes).
 - `gpu/src/lib.rs`: the screen, drawn by [`nes-ppu`](../../engines/nes-ppu) and shown by
   [`nes-screen`](../../engines/nes-screen): windows, text, meters and sprites in NES tiles.
-  Its `render` test makes the audio: `cargo test --release -p nes-musicbox-gpu render -- --ignored`
+  Its `render` test makes the audio: `cargo test --release -p exacticom-musicbox-gpu render -- --ignored`
   renders each song (two passes, for a seamless loop) and effect to `assets/music/` and
   `assets/sfx/`, and writes `songs.contract`, each song's notes and volumes by row.
 - `app.contract`: the view: the list, the keys, the song's `audio` (looping), each effect's

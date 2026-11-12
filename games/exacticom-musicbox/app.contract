@@ -1,4 +1,4 @@
-// NES Musicbox: a jukebox for the nes-apu engine. Three original songs and
+// Exacticom Musicbox: a jukebox for the nes-apu engine. Three original songs and
 // seven sound effects, each made by the emulated 2A03 (engines/nes-apu) and
 // rendered to WAV ahead of time; the screen is drawn by the NES picture
 // engine (engines/nes-ppu, via gpu/). While a song plays, each channel's
@@ -27,7 +27,7 @@ fn meter(volume: number): string = [0, 1, 2, 3, 4, 5, 6].map(i => meterTile(volu
 fn pad(s: string, n: number): string = `${s}${"        ".slice(0, max(0, n - s.length))}`
 fn clock(ms: number): string = `${floor(ms / 60000)}:${floor(ms / 1000) % 60 < 10 ? "0" : ""}${floor(ms / 1000) % 60}`
 
-component NesMusicbox
+component ExacticomMusicbox
   // The list: songs first, then sounds.
   state cursor = 0
   // The song playing (-1 for none), and the tick it started on.
@@ -53,7 +53,7 @@ component NesMusicbox
     : [0, 0, 0, 0])
 
   // ── The screen ──
-  derive titleWindow = "1,1,30,4|{       NES MUSICBOX}|  2A03 SOUND, CYCLE BY CYCLE"
+  derive titleWindow = "1,1,30,4|{    EXACTICOM MUSICBOX}|  2A03 SOUND, CYCLE BY CYCLE"
   derive songWindow = `1,6,18,9,2|{SONGS}|${[0, 1, 2].map(i => ` ${songName(i)}`).join("|")}`
   derive soundWindow = `19,6,12,17,2|{SOUNDS}|${[0, 1, 2, 3, 4, 5, 6].map(i => ` ${soundName(i)}`).join("|")}`
   derive names = ["P1", "P2", "TR", "NO"]

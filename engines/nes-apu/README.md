@@ -31,5 +31,5 @@ on the noise channel). `driver::render` returns the samples and each row's notes
 `driver::render_writes` plays raw register writes, frame by frame, for sound effects.
 
 Exact apps play declared WAV files, so a game renders its music and effects ahead of time and
-ships the WAVs; [NES Musicbox](../../games/nes-musicbox) shows how. `cargo test` checks pitch,
+ships the WAVs; [Exacticom Musicbox](../../games/exacticom-musicbox) shows how. `cargo test` checks pitch,
 lengths, envelopes, sweeps, the short noise loop and the mixer.

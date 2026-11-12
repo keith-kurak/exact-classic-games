@@ -1,4 +1,4 @@
-// Written by the nes-musicbox-gpu `render` test from gpu/src/music.rs: do not
+// Written by the exacticom-musicbox-gpu `render` test from gpu/src/music.rs: do not
 // edit. Each song's rows, per channel: what sounds (a note, a drum, or ""
 // for silence) and its volume, 0-15.
 

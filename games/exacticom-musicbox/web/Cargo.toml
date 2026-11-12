@@ -1,5 +1,5 @@
 [package]
-name = "nes-musicbox-web"
+name = "exacticom-musicbox-web"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

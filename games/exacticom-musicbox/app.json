@@ -1,13 +1,13 @@
 {
   "$schema": "../../../../exact/scripts/app.schema.json",
-  "name": "NES Musicbox",
-  "short_name": "NES Musicbox",
-  "id": "com.example.nesmusicbox",
+  "name": "Exacticom Musicbox",
+  "short_name": "Exacticom Musicbox",
+  "id": "com.example.exacticommusicbox",
   "start_url": "/",
   "display": "standalone",
   "app": {
-    "id": "com.example.nesmusicbox",
-    "name": "NES Musicbox"
+    "id": "com.example.exacticommusicbox",
+    "name": "Exacticom Musicbox"
   },
   "host": {
     "web": {},

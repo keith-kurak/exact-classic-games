@@ -14,7 +14,7 @@
     "test:engine": "cd engines/nes-ppu && cargo test && cd ../nes-apu && cargo test",
     "exactsylvania": "cd games/exactsylvania && bun exact.mjs mac --run",
     "test:exactsylvania": "cd games/exactsylvania && bun exact.mjs test macos",
-    "musicbox": "cd games/nes-musicbox && bun exact.mjs mac --run",
-    "test:musicbox": "cd games/nes-musicbox && bun exact.mjs test macos"
+    "musicbox": "cd games/exacticom-musicbox && bun exact.mjs mac --run",
+    "test:musicbox": "cd games/exacticom-musicbox && bun exact.mjs test macos"
   }
 }
