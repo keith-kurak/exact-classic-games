@@ -3,7 +3,7 @@
 // it walks the field, starts fights, runs the battle, and tells the surface
 // what is on screen as small text specs (see gpu/src/lib.rs).
 use Npc, fieldMap, tileAt, walkable, thicket, npcs, npcAt, blocked, dx, dy, camAxis, nextRng from "./field.contract"
-use Foe, foeOf, group, foeTx, foeTy, labelRow, juggleTicks, panelName, panelBar, potionHeal, startPotions, startRevives, fallen, raiseHp, segBlock, shiftTicks, bannerX, parOf, nameOf, maxHp, atkOf, speedOf, full, stances, stanceName, roleOf, abilityOf, needsTarget, isStrike, power, chainGain, hitFor, chainUp, maxChain, drain, staggerTicks, rolePlan, segments, segment, announce, slotText, lowest, stars, starLine, clockOf, nth, word, put, pad3, padTo, gauge from "./battle.contract"
+use Foe, foeOf, group, foeTx, foeTy, labelRow, juggleTicks, spellExtend, panelName, panelBar, potionHeal, startPotions, startRevives, fallen, raiseHp, segBlock, shiftTicks, bannerX, parOf, nameOf, maxHp, atkOf, speedOf, full, stances, stanceName, roleOf, abilityOf, needsTarget, isStrike, power, chainGain, hitFor, chainUp, maxChain, drain, staggerTicks, rolePlan, segments, segment, announce, slotText, lowest, stars, starLine, clockOf, nth, word, put, pad3, padTo, gauge from "./battle.contract"
 
 fn keyDir(k: string): string = (k == "ArrowUp" or k == "w" ? "up" : (k == "ArrowDown" or k == "s" ? "down"
   : (k == "ArrowLeft" or k == "a" ? "left" : (k == "ArrowRight" or k == "d" ? "right" : ""))))
@@ -149,7 +149,7 @@ component ExactOdyssey
   derive foeLines = [0, 1].filter(i => i < foes.length).map(i => (nth(foeHp, i) <= 0 ? ""
     : (nth(brk, i) > 0 ? `{${word(foes, i)}}` : word(foes, i))))
   derive hpBars = ([0, 1].filter(i => i < foes.length and nth(foeHp, i) > 0).map(i =>
-    `@${foeTx(i, foes.length)},${labelRow()},0|${gauge(nth(foeHp, i) / foeOf(word(foes, i)).hp * 64, 8)}`))
+    `@${foeTx(i, foes.length) + 1},${labelRow()},0|${gauge(nth(foeHp, i) / foeOf(word(foes, i)).hp * 48, 6)}`))
   derive panel = (foes.length > 0 and nth(foeHp, aimAt) > 0
     ? [`0,0,12,4|${panelName(word(foes, aimAt), nth(chain, aimAt), nth(brk, aimAt))}|${panelBar(nth(chain, aimAt), nth(brk, aimAt), foeOf(word(foes, aimAt)).breakAt)}`] : [])
   // The chooser: the commands, or, while picking a target, the enemies.
@@ -308,7 +308,7 @@ component ExactOdyssey
   // wear off; when nothing is playing, the next one ready acts ──
 
   task battleClock when inBattle and fading == ""
-    every(50, battleTick)
+    every(55, battleTick)
   action battleTick
     let ks = [0, 1]
     let f0 = fx
@@ -473,9 +473,9 @@ component ExactOdyssey
     play = "act"
 
   task windUp when play != "" and step == 0 key=`${play}-${actor}-${qi}-${bticks > 0}`
-    after(220, actStep)
+    after(240, actStep)
   task followThrough when play != "" and step == 1 key=`${play}-${actor}-${qi}`
-    after(320, actStep)
+    after(350, actStep)
   action actStep
     if step == 0
       if play == "act"
@@ -514,7 +514,8 @@ component ExactOdyssey
       let hpBefore = nth(foeHp, t)
       foeHp = put(foeHp, t, max(0, hpBefore - d))
       chain = put(chain, t, min(maxChain(), breaks ? up + 50 : up))
-      brk = breaks ? put(brk, t, staggerTicks()) : brk
+      // A spell on a staggered enemy keeps the stagger going a little longer.
+      brk = breaks ? put(brk, t, staggerTicks()) : (broken and not isStrike(c) ? put(brk, t, min(staggerTicks(), nth(brk, t) + spellExtend())) : brk)
       hold = isStrike(c) ? put(hold, t, 40) : hold
       // Strike hits on a staggered enemy launch it and keep it in the air.
       if isStrike(c) and broken and hpBefore > d

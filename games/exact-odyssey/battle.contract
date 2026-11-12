@@ -17,7 +17,7 @@ shape Foe
   atk: number
   breakAt: number
   speed: number
-  // The time to beat for a five-star rank, in battle ticks (50 ms).
+  // The time to beat for a five-star rank, in battle ticks (55 ms).
   par: number
 
 fn drone(): Foe = Foe(name="Drone", hp=600, atk=24, breakAt=180, speed=0.4, par=300)
@@ -70,6 +70,8 @@ fn maxChain(): number = 400
 // How fast a chain drains a tick: slowly while a Strike hit steadies it.
 fn drain(held: bool): number = (held ? 0.08 : 0.3)
 fn staggerTicks(): number = 120
+// Each Fire or Ice on a staggered enemy adds this many ticks (0.4 s) to its stagger.
+fn spellExtend(): number = 8
 // A Strike hit on a staggered enemy launches it: upside down in the air for
 // this long, unable to act; more Strike hits keep it up.
 fn juggleTicks(): number = 30
@@ -113,7 +115,10 @@ fn startRevives(): number = 1
 // The rank for a win: five stars at or under par, one fewer each quarter over.
 fn stars(ticks: number, par: number): number = max(1, min(5, 5 - floor(max(0, ticks - par) * 4 / par)))
 fn starLine(n: number): string = `{${"*****".slice(0, n)}}${"^^^^^".slice(0, 5 - n)}`
-fn clockOf(ticks: number): string = `${floor(ticks / 1200)}:${floor(ticks / 20) % 60 < 10 ? "0" : ""}${floor(ticks / 20) % 60}`
+// The battle clock ticks every 55 ms (10% slower than the 50 it began at).
+fn tickMs(): number = 55
+fn secondsOf(ticks: number): number = floor(ticks * tickMs() / 1000)
+fn clockOf(ticks: number): string = `${floor(secondsOf(ticks) / 60)}:${secondsOf(ticks) % 60 < 10 ? "0" : ""}${secondsOf(ticks) % 60}`
 
 // ── Small helpers ──
 fn nth(xs: number[], k: number): number = match xs.at(k) { case some(v) => v, case none => 0 }

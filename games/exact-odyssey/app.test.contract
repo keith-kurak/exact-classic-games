@@ -30,18 +30,18 @@ test "trees and water block the way"
 
 test "the battle runs in real time: allies act while Thunda's menu is open"
   type "root" key "ArrowRight" for 5300
-  clock +1000
+  clock +1100
   expect state scene == "battle"
   expect state phase == "fight"
   expect state ui == "menu"
-  clock +3000
+  clock +3300
   expect state lastAuto == "Tooth"
   expect state ui == "menu"
   expect state committed == false
 
 test "one ability fills a slot; a second and its target commit both; Thunda acts when full"
   type "root" key "ArrowRight" for 5300
-  clock +1000
+  clock +1100
   type "root" key "ArrowDown"
   type "root" key " "
   expect state plan.0 == "Fire"
@@ -56,13 +56,13 @@ test "one ability fills a slot; a second and its target commit both; Thunda acts
   type "root" key " "
   expect state committed == true
   expect state ui == "menu"
-  clock +4000
+  clock +4400
   expect state committed == false
   expect state plan.length == 0
 
 test "Right commits a single queued ability early, and it leaves the bar when done"
   type "root" key "ArrowRight" for 5300
-  clock +1000
+  clock +1100
   type "root" key "ArrowDown"
   type "root" key " "
   expect state plan.length == 1
@@ -71,13 +71,13 @@ test "Right commits a single queued ability early, and it leaves the bar when do
   type "root" key " "
   expect state committed == true
   expect state plan.length == 1
-  clock +3000
+  clock +3300
   expect state rookTurns == 1
   expect state committed == false
 
 test "Auto fills both slots by role, then the chooser asks the target"
   type "root" key "ArrowRight" for 5300
-  clock +1000
+  clock +1100
   type "root" key " "
   expect state ui == "target"
   expect state plan.0 == "Fire"
@@ -87,20 +87,20 @@ test "Auto fills both slots by role, then the chooser asks the target"
 
 test "Enter before the bar fills runs only the commands with filled segments"
   type "root" key "ArrowRight" for 5300
-  clock +1000
+  clock +1100
   type "root" key " "
   type "root" key " "
   expect state committed == true
   type "root" key "Enter"
   expect state rush == true
-  clock +300
+  clock +330
   expect state rookTurns == 1
   expect state queue.length == 1
   expect state committed == false
 
 test "Left opens the stances, free and at any time"
   type "root" key "ArrowRight" for 5300
-  clock +1000
+  clock +1100
   type "root" key "ArrowLeft"
   expect state ui == "stance"
   type "root" key "ArrowDown"
@@ -110,177 +110,177 @@ test "Left opens the stances, free and at any time"
 
 test "a Potion takes Thunda's turn and heals the party"
   type "root" key "ArrowRight" for 5300
-  clock +1000
+  clock +1100
   type "root" key "ArrowUp"
   type "root" key " "
   expect state ui == "item"
   type "root" key " "
   expect state committed == true
   expect state plan.0 == "Potion"
-  clock +4000
+  clock +4400
   expect state potions == 2
 
 test "Auto alone in Assault, all Blast, is wiped out"
   type "root" key "ArrowRight" for 5300
-  clock +1000
+  clock +1100
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   expect state wins == 0
   expect state tx == 11
 
 test "Auto in Balance staggers the hounds and wins, with a rank"
   type "root" key "ArrowRight" for 5300
-  clock +1000
+  clock +1100
   type "root" key "ArrowLeft"
   type "root" key "ArrowDown"
   type "root" key "ArrowDown"
   type "root" key " "
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   type "root" key " "
   type "root" key " "
-  clock +2500
+  clock +2750
   expect state wins == 1
   expect state rank == 3
   expect state staggers == 3
-  expect state juggles == 4
+  expect state juggles == 5
   expect state hp.2 == 90
   expect state scene == "field"
 
 test "a Revive needs a fallen ally; a stance shift flashes its banner"
   type "root" key "ArrowRight" for 5300
-  clock +1000
+  clock +1100
   type "root" key "ArrowUp"
   type "root" key " "
   type "root" key "ArrowDown"
@@ -293,33 +293,33 @@ test "a Revive needs a fallen ally; a stance shift flashes its banner"
   type "root" key "ArrowDown"
   type "root" key " "
   expect state shiftT == 26
-  clock +1400
+  clock +1540
   expect state shiftT == 0
 
 test "a Revive brings a fallen ally back at half HP"
   type "root" key "ArrowRight" for 5300
-  clock +1000
+  clock +1100
   type "root" key "ArrowLeft"
   type "root" key "ArrowDown"
   type "root" key " "
-  clock +13000
+  clock +14300
   expect state hp.2 == 0
   type "root" key "ArrowUp"
   type "root" key " "
   type "root" key "ArrowDown"
   type "root" key " "
   expect state plan.0 == "Revive"
-  clock +1500
+  clock +1650
   expect state hp.2 == 45
   expect state revives == 0
 
 test "Mend casts Raise by itself when an ally has fallen, then Cure"
   type "root" key "ArrowRight" for 5300
-  clock +1000
+  clock +1100
   type "root" key "ArrowLeft"
   type "root" key "ArrowDown"
   type "root" key " "
-  clock +13000
+  clock +14300
   expect state hp.2 == 0
   type "root" key "ArrowLeft"
   type "root" key "ArrowDown"
@@ -329,18 +329,18 @@ test "Mend casts Raise by itself when an ally has fallen, then Cure"
   type "root" key " "
   type "root" key " "
   expect state plan.0 == "Potion"
-  clock +4500
+  clock +4950
   expect state queue.0 == "Raise"
-  clock +300
+  clock +330
   expect state hp.2 == 62
 
 test "a stance shift mid-attack cancels the party's commands"
   type "root" key "ArrowRight" for 5300
-  clock +1000
+  clock +1100
   type "root" key " "
   type "root" key " "
   expect state committed == true
-  clock +1800
+  clock +1980
   expect state play == "act"
   expect state actor == 0
   type "root" key "ArrowLeft"

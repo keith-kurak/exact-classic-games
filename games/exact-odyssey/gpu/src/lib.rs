@@ -195,11 +195,7 @@ fn parse_stage(spec: &str) -> Vec<Option<Cell>> {
         let (Ok(tx), Ok(ty), Ok(fx)) = (tx.parse::<usize>(), ty.parse::<usize>(), fx.parse::<usize>()) else { continue };
         let Some(e) = art.enemies.get(name) else { continue };
         let (w, h) = (e.w, e.h);
-        let palette = match (fx, name) {
-            (1, _) => WINDOW_PALETTE,
-            (_, "drone") => 1,
-            _ => 3,
-        };
+        let flash = fx == 1;
         // Juggled: upside down (each tile flipped, the rows in reverse), two
         // rows higher.
         let juggled = fx == 7;
@@ -211,6 +207,7 @@ fn parse_stage(spec: &str) -> Vec<Option<Cell>> {
                 let (cx, cy) = (tx + x, ty + y);
                 if cx < COLS && cy < ROWS {
                     let (src, flip) = if juggled { ((h - 1 - y) * w + x, nes_ppu::FLIP_V) } else { (y * w + x, 0) };
+                    let palette = if flash { WINDOW_PALETTE } else { e.palettes[src] };
                     cells[cy * COLS + cx] = Some(Cell { tile: e.tiles[src], palette, flip });
                 }
             }
