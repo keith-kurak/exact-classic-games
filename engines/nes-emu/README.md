@@ -15,7 +15,10 @@ nes.frame().to_rgba(&mut rgba);                                  // nes_ppu::Fra
   pattern tables, with 8×8 or 8×16 sprites (8 a line, in OAM order), sprite-0 hit and the
   left-column and grayscale masks.
 - `cart`: iNES files with mapper 0 (NROM).
-- Controllers through `$4016`/`$4017`. The APU's registers are ignored: no sound yet.
+- Controllers through `$4016`/`$4017`.
+- The APU: [`nes-apu`](../nes-apu), run in step with the CPU; `$4015` reads its status.
+  `Nes::take_samples()` gives the sound made since last asked (48 kHz, or `set_sample_rate`).
+  The DMC's sample fetching and the APU's interrupts are not emulated.
 
 `cargo test` runs nestest's automated CPU test to the cycle: point `NESTEST_ROM` at nestest.nes
 (it is not kept in this repo), or keep it at `~/Downloads/nestest.nes`.

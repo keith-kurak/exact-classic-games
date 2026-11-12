@@ -24,3 +24,6 @@ path = "../../../engines/nes-screen"
 
 [dependencies.nes-emu]
 path = "../../../engines/nes-emu"
+
+[dependencies.live-audio]
+path = "../../../engines/live-audio"

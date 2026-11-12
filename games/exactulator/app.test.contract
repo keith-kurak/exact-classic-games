@@ -16,3 +16,11 @@ test "opening the demo cart loads it, and keys become NES buttons"
   expect state pressed == 1
   tap "reset"
   expect state resets == 1
+
+test "the sound button turns the emulator's sound off and on"
+  expect state sound == true
+  tap "sound"
+  expect state sound == false
+  expect text "sound" == "Sound off"
+  tap "sound"
+  expect state sound == true

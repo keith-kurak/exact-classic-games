@@ -1,6 +1,7 @@
 // Exactulator: an NES emulator. Open an iNES (.nes) file with mapper 0 and
 // play it: engines/nes-emu runs the console (the 6502, the PPU, the
-// controllers), and gpu/ shows its picture through nes-screen. No sound yet.
+// controllers, the APU), and gpu/ shows its picture through nes-screen and
+// plays its sound through live-audio (a stopgap until Exact streams audio).
 // The data module reads the picked file and hands its bytes over as base64.
 shape Rom
   data: string
@@ -19,6 +20,7 @@ component Exactulator
   state held: number[] = []
   // Each press of Reset counts up; the emulator resets on a rise.
   state resets = 0
+  state sound = true
   resource rom = romFile(romPath) as shape Rom
 
   derive pressed = ((has(held, 1) ? 1 : 0) + (has(held, 2) ? 2 : 0) + (has(held, 4) ? 4 : 0) + (has(held, 8) ? 8 : 0)
@@ -37,6 +39,10 @@ component Exactulator
     resets = resets + 1
     blur("reset")
 
+  action toggleSound
+    sound = not sound
+    blur("sound")
+
   action onKey(k: string, e: KeyboardEvent)
     let b = keyButton(k)
     if b > 0
@@ -53,7 +59,8 @@ component Exactulator
       row display="flex" align-items="center" gap=12 padding=10
         button "Open ROM…" press=openRom id="open" testId="open" color="#ffffff" background-color="#3a3a3a" padding-left=12 padding-right=12 padding-top=5 padding-bottom=5 border-radius=6
         button "Reset" press=reset id="reset" testId="reset" disabled=(romData == "") color="#ffffff" background-color="#3a3a3a" padding-left=12 padding-right=12 padding-top=5 padding-bottom=5 border-radius=6 opacity=(romData == "" ? 0.4 : 1)
+        button (sound ? "Sound on" : "Sound off") press=toggleSound id="sound" testId="sound" color="#ffffff" background-color="#3a3a3a" padding-left=12 padding-right=12 padding-top=5 padding-bottom=5 border-radius=6
         text status testId="status" flex=1 color="#d8d8d8"
         text "Arrows · X A · Z B · Enter Start · Shift Select" color="#8a8a8a" font-size=12
-      canvas surface=ppu(romData, pressed, resets) flex=1 min-height=0 width="100%" testId="screen"
+      canvas surface=ppu(romData, pressed, resets, (sound ? 1 : 0)) flex=1 min-height=0 width="100%" testId="screen"
       input type="file" id="rom" testId="rom" display="none" change=romPicked

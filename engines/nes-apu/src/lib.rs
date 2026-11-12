@@ -467,6 +467,15 @@ impl Apu {
         std::mem::take(&mut self.samples)
     }
 
+    /// A read of $4015: bit n is set while channel n's length counter runs
+    /// (pulse 1, pulse 2, triangle, noise).
+    pub fn status(&self) -> u8 {
+        (self.pulse1.length > 0) as u8
+            | ((self.pulse2.length > 0) as u8) << 1
+            | ((self.triangle.length > 0) as u8) << 2
+            | ((self.noise.length > 0) as u8) << 3
+    }
+
     /// Each channel's level and period now.
     pub fn channels(&self) -> Channels {
         let p = |c: &Pulse| (if c.length == 0 || c.muted() { 0 } else { c.env.output() }, c.period);

@@ -1,0 +1,10 @@
+[package]
+name = "live-audio"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "A stopgap until Exact can stream audio: plays mono float samples a game makes live, through AudioQueue on Apple platforms (a no-op elsewhere), from a GPU module."
+
+[lib]
+path = "src/lib.rs"

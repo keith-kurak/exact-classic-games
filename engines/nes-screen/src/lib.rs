@@ -31,6 +31,9 @@ pub trait NesGame: Default {
     fn draw_at(&mut self, frame: u64, _now_ms: f64, _seekable: bool, rgba: &mut [u8]) {
         self.draw(frame, rgba);
     }
+    /// The surface was hidden (`false`) or shown again (`true`), or its
+    /// device work interrupted and resumed: a game playing sound pauses it.
+    fn shown(&mut self, _shown: bool) {}
 }
 
 /// The surface for a game: create one with [`surface`].
@@ -64,6 +67,14 @@ struct Gpu {
 impl<G: NesGame> Surface for NesSurface<G> {
     fn bind(&mut self, inputs: &[Value], _: Option<f64>) -> Result<(), SurfaceError> {
         self.game.bind(inputs)
+    }
+
+    fn lifecycle(&mut self, event: exact_gpu::Lifecycle) {
+        match event {
+            exact_gpu::Lifecycle::Hidden | exact_gpu::Lifecycle::Interrupted => self.game.shown(false),
+            exact_gpu::Lifecycle::Visible | exact_gpu::Lifecycle::Resumed => self.game.shown(true),
+            _ => {}
+        }
     }
 
     fn render(

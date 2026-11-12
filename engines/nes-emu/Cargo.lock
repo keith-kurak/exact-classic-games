@@ -18,9 +18,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "nes-apu"
+version = "0.1.0"
+
+[[package]]
 name = "nes-emu"
 version = "0.1.0"
 dependencies = [
+ "nes-apu",
  "nes-ppu",
 ]
 

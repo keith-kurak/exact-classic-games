@@ -1,8 +1,9 @@
-//! A basic NES emulator core: the 6502 ([`cpu`]), the PPU ([`ppu`]), iNES
-//! cartridges with mapper 0 ([`cart`]), RAM, OAM DMA and two controllers,
-//! run a frame at a time. It draws into nes-ppu's `Frame` (2C02 colour
-//! indices), so `nes_ppu::Frame::to_rgba` and nes-screen show it. No sound:
-//! APU writes are taken and ignored.
+//! A basic NES emulator core: the 6502 ([`cpu`]), the PPU ([`ppu`]), the APU
+//! (nes-apu, run in step with the CPU), iNES cartridges with mapper 0
+//! ([`cart`]), RAM, OAM DMA and two controllers, run a frame at a time. It
+//! draws into nes-ppu's `Frame` (2C02 colour indices), so
+//! `nes_ppu::Frame::to_rgba` and nes-screen show it, and makes samples
+//! ([`Nes::take_samples`]) for whatever plays them.
 
 pub mod cart;
 pub mod cpu;
@@ -47,6 +48,7 @@ pub struct Board {
     pub ram: [u8; 2048],
     pub ppu: Ppu,
     pub cart: Cart,
+    pub apu: nes_apu::Apu,
     pads: [Pad; 2],
     dma_stall: u32,
     open_bus: u8,
@@ -58,6 +60,7 @@ impl Bus for Board {
         let v = match addr {
             0x0000..=0x1FFF => self.ram[(addr & 0x07FF) as usize],
             0x2000..=0x3FFF => self.ppu.read_register(&self.cart, addr),
+            0x4015 => self.apu.status(),
             0x4016 => (self.open_bus & 0xE0) | self.pads[0].read(),
             0x4017 => (self.open_bus & 0xE0) | self.pads[1].read(),
             0x4000..=0x401F => self.open_bus,
@@ -91,11 +94,15 @@ impl Bus for Board {
                     }
                 }
             }
-            0x4000..=0x401F => {} // the APU: no sound yet
+            0x4000..=0x4013 | 0x4015 | 0x4017 => self.apu.write(addr, v),
+            0x4018..=0x401F => {}
             _ => self.cart.write(addr, v),
         }
     }
 }
+
+/// The sample rate the APU makes sound at by default ([`Nes::set_sample_rate`]).
+pub const SAMPLE_RATE: u32 = 48_000;
 
 /// A console with a cartridge in it.
 pub struct Nes {
@@ -107,7 +114,7 @@ impl Nes {
     /// Insert a cartridge (an iNES file's bytes) and press reset.
     pub fn new(rom: &[u8]) -> Result<Nes, String> {
         let cart = Cart::load(rom)?;
-        let mut board = Board { ram: [0; 2048], ppu: Ppu::default(), cart, pads: [Pad::default(); 2], dma_stall: 0, open_bus: 0, cpu_cycles: 0 };
+        let mut board = Board { ram: [0; 2048], ppu: Ppu::default(), cart, apu: nes_apu::Apu::new(SAMPLE_RATE), pads: [Pad::default(); 2], dma_stall: 0, open_bus: 0, cpu_cycles: 0 };
         let mut cpu = Cpu::default();
         cpu.reset(&mut board);
         Ok(Nes { cpu, board })
@@ -130,6 +137,7 @@ impl Nes {
     pub fn step(&mut self) -> u32 {
         self.board.cpu_cycles = self.cpu.cycles;
         let cycles = self.cpu.step(&mut self.board);
+        self.board.apu.run(cycles);
         for _ in 0..cycles * 3 {
             self.board.ppu.tick(&self.board.cart);
         }
@@ -152,6 +160,18 @@ impl Nes {
         while !self.board.ppu.frame_done && budget > 0 {
             budget = budget.saturating_sub(self.step());
         }
+    }
+
+    /// Make sound at `rate` samples a second from now on.
+    pub fn set_sample_rate(&mut self, rate: u32) {
+        if self.board.apu.sample_rate() != rate {
+            self.board.apu = nes_apu::Apu::new(rate);
+        }
+    }
+
+    /// The samples the APU has made since last asked (about −1 to 1).
+    pub fn take_samples(&mut self) -> Vec<f32> {
+        self.board.apu.take_samples()
     }
 
     /// The last frame, as 2C02 colour indices.

@@ -3,7 +3,12 @@
 //! 60.0988 frames a second whatever the display's.
 //!
 //! Inputs: 1. the ROM, an iNES file in base64 ("" for none); 2. the held
-//! buttons (nes_emu::button bits); 3. a reset count: each rise presses reset.
+//! buttons (nes_emu::button bits); 3. a reset count: each rise presses reset;
+//! 4. sound: 1 on, 0 off.
+//!
+//! Sound plays through live-audio, a stopgap until Exact streams audio: it
+//! opens the Mac's output itself, only when the display owns the clock (never
+//! under the agent, so tests stay silent), and pauses when the app is hidden.
 
 use exact_gpu::json::{number, text};
 use exact_gpu::{Registry, SurfaceError, Value};
@@ -12,7 +17,9 @@ use nes_ppu::font::FONT;
 use nes_ppu::Frame;
 use nes_screen::NesGame;
 
-pub const INPUTS: usize = 3;
+pub const INPUTS: usize = 4;
+/// Sound held ahead of the speaker at most: enough to ride out a late frame.
+const MAX_LATENCY_MS: u32 = 120;
 const FRAME_MS: f64 = 1000.0 / 60.0988;
 
 /// Standard base64, padding optional, whitespace ignored.
@@ -93,6 +100,10 @@ pub struct Emulator {
     resets: f64,
     last_ms: Option<f64>,
     owed: f64,
+    sound: bool,
+    audio: Option<live_audio::LiveAudio>,
+    /// The output could not be opened: don't keep trying.
+    no_audio: bool,
 }
 
 impl Emulator {
@@ -114,7 +125,7 @@ impl Emulator {
 
 impl NesGame for Emulator {
     fn bind(&mut self, inputs: &[Value]) -> Result<(), SurfaceError> {
-        let [rom, buttons, resets] = inputs else {
+        let [rom, buttons, resets, sound] = inputs else {
             return Err(SurfaceError(format!("ppu: expected {INPUTS} inputs, got {}", inputs.len())));
         };
         let rom = text(rom, "rom")?;
@@ -129,6 +140,10 @@ impl NesGame for Emulator {
             }
         }
         self.resets = resets;
+        self.sound = number(sound, "sound")? > 0.5;
+        if let Some(a) = &self.audio {
+            a.set_volume(if self.sound { 1.0 } else { 0.0 });
+        }
         Ok(())
     }
 
@@ -164,6 +179,37 @@ impl NesGame for Emulator {
             nes.run_frame();
         }
         nes.frame().to_rgba(rgba);
+        // The frames' sound: to the speaker when the display owns the clock.
+        let samples = nes.take_samples();
+        if seekable || self.no_audio {
+            return;
+        }
+        if self.audio.is_none() {
+            match live_audio::LiveAudio::open(nes_emu::SAMPLE_RATE, MAX_LATENCY_MS) {
+                Some(a) => {
+                    a.set_volume(if self.sound { 1.0 } else { 0.0 });
+                    self.audio = Some(a);
+                }
+                None => {
+                    self.no_audio = true;
+                    return;
+                }
+            }
+        }
+        if let Some(a) = &self.audio {
+            a.push(&samples);
+        }
+    }
+
+    fn shown(&mut self, shown: bool) {
+        if let Some(a) = &self.audio {
+            if shown {
+                a.resume();
+            } else {
+                a.pause();
+            }
+        }
+        self.last_ms = None;
     }
 }
 
@@ -210,6 +256,34 @@ mod tests {
         nes.set_buttons(0, nes_emu::button::A);
         nes.run_frame();
         assert_eq!(nes.board.ram[0x0202], 1, "A turns the star green");
+    }
+
+    /// The demo cart's sounds: A beeps on a pulse, B hisses on noise, through
+    /// the emulated APU.
+    #[test]
+    fn the_demo_cart_makes_sound() {
+        let mut nes = Nes::new(DEMO).unwrap();
+        for _ in 0..10 {
+            nes.run_frame();
+        }
+        let loud = |s: &[f32]| s.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+        let _ = nes.take_samples();
+        for _ in 0..10 {
+            nes.run_frame();
+        }
+        assert!(loud(&nes.take_samples()) < 0.01, "silent until a button");
+        for b in [nes_emu::button::A, nes_emu::button::B] {
+            nes.set_buttons(0, b);
+            for _ in 0..6 {
+                nes.run_frame();
+            }
+            nes.set_buttons(0, 0);
+            assert!(loud(&nes.take_samples()) > 0.05, "button {b} makes a sound");
+            for _ in 0..40 {
+                nes.run_frame();
+            }
+            let _ = nes.take_samples();
+        }
     }
 
     #[test]

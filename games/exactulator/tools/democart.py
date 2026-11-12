@@ -1,7 +1,9 @@
 # Exactulator's demo cartridge: an original mapper-0 NES program, assembled
 # here, so the app (and its tests) have a ROM that is ours to ship. It draws a
 # title in the shared nes-ppu font (tiles at their ASCII codes), and a star
-# sprite the D-pad moves; A turns it green, B gold, Start resets it.
+# sprite the D-pad moves; A turns it green, B gold, Start resets it. Each
+# press also plays a sound on the APU: A a pulse beep, B a burst of noise,
+# Start a rising sweep.
 # Run: python3 tools/democart.py   (writes assets/demo.nes)
 import os, re
 
@@ -18,7 +20,7 @@ OPS = {
     ('jmp', 'abs'): 0x4C, ('bit', 'abs'): 0x2C, ('and', 'imm'): 0x29, ('lsr', 'acc'): 0x4A,
     ('rol', 'zp'): 0x26, ('inc', 'abs'): 0xEE, ('dec', 'abs'): 0xCE, ('txs', 'imp'): 0x9A,
     ('sei', 'imp'): 0x78, ('cld', 'imp'): 0xD8, ('rti', 'imp'): 0x40, ('pha', 'imp'): 0x48,
-    ('pla', 'imp'): 0x68, ('txa', 'imp'): 0x8A, ('tax', 'imp'): 0xAA, ('tya', 'imp'): 0x98, ('tay', 'imp'): 0xA8,
+    ('pla', 'imp'): 0x68, ('txa', 'imp'): 0x8A, ('eor', 'imm'): 0x49, ('and', 'zp'): 0x25, ('tax', 'imp'): 0xAA, ('tya', 'imp'): 0x98, ('tay', 'imp'): 0xA8,
 }
 SIZE = {'imp': 1, 'acc': 1, 'imm': 2, 'zp': 2, 'rel': 2, 'abs': 3, 'absx': 3}
 
@@ -71,11 +73,13 @@ def print_at(row, col, label, palette_line=None):
         ('sta', 'abs', 0x2007), ('inx', 'imp'), ('jmp', 'abs', f'{label}_loop'), f'{label}_done']
 
 
-BUTTONS, STAR = 0x10, 0x0200
+BUTTONS, PREVIOUS, PRESSED, STAR = 0x10, 0x11, 0x12, 0x0200
 code = [
     'reset',
     ('sei', 'imp'), ('cld', 'imp'), ('ldx', 'imm', 0xFF), ('txs', 'imp'),
     ('ldx', 'imm', 0), ('stx', 'abs', 0x2000), ('stx', 'abs', 0x2001),
+    # Sound: pulses, triangle and noise on; the 4-step frame counter.
+    ('lda', 'imm', 0x0F), ('sta', 'abs', 0x4015), ('lda', 'imm', 0x40), ('sta', 'abs', 0x4017),
     'wait1', ('bit', 'abs', 0x2002), ('bpl', 'rel', 'wait1'),
     'wait2', ('bit', 'abs', 0x2002), ('bpl', 'rel', 'wait2'),
     # The palette.
@@ -92,6 +96,7 @@ code = [
     *print_at(14, 9, 'hint1'),
     *print_at(16, 9, 'hint2'),
     *print_at(18, 9, 'hint3'),
+    *print_at(20, 5, 'hint4'),
     *print_at(24, 6, 'credit'),
     # Hide every sprite, then place the star.
     ('lda', 'imm', 0xFF), ('ldx', 'imm', 0),
@@ -109,6 +114,21 @@ code = [
     # (A ends up in bit 7).
     ('lda', 'imm', 1), ('sta', 'abs', 0x4016), ('lda', 'imm', 0), ('sta', 'abs', 0x4016), ('ldx', 'imm', 8),
     'pad', ('lda', 'abs', 0x4016), ('lsr', 'acc'), ('rol', 'zp', BUTTONS), ('dex', 'imp'), ('bne', 'rel', 'pad'),
+    # Buttons new this frame: held now and not before.
+    ('lda', 'zp', PREVIOUS), ('eor', 'imm', 0xFF), ('and', 'zp', BUTTONS), ('sta', 'zp', PRESSED),
+    ('lda', 'zp', BUTTONS), ('sta', 'zp', PREVIOUS),
+    # A: a beep on pulse 1 (50%, decaying envelope, a C5 that the length counter ends).
+    ('lda', 'zp', PRESSED), ('and', 'imm', 0x80), ('beq', 'rel', 'nobeep'),
+    ('lda', 'imm', 0x84), ('sta', 'abs', 0x4000), ('lda', 'imm', 0x08), ('sta', 'abs', 0x4001),
+    ('lda', 'imm', 0xD5), ('sta', 'abs', 0x4002), ('lda', 'imm', 0x08), ('sta', 'abs', 0x4003), 'nobeep',
+    # B: a burst of noise, its envelope decaying.
+    ('lda', 'zp', PRESSED), ('and', 'imm', 0x40), ('beq', 'rel', 'nohiss'),
+    ('lda', 'imm', 0x03), ('sta', 'abs', 0x400C), ('lda', 'imm', 0x06), ('sta', 'abs', 0x400E),
+    ('lda', 'imm', 0x08), ('sta', 'abs', 0x400F), 'nohiss',
+    # Start: a sweep up on pulse 2.
+    ('lda', 'zp', PRESSED), ('and', 'imm', 0x10), ('beq', 'rel', 'nosweep'),
+    ('lda', 'imm', 0x9A), ('sta', 'abs', 0x4004), ('lda', 'imm', 0xAB), ('sta', 'abs', 0x4005),
+    ('lda', 'imm', 0x40), ('sta', 'abs', 0x4006), ('lda', 'imm', 0x99), ('sta', 'abs', 0x4007), 'nosweep',
     ('lda', 'zp', BUTTONS), ('and', 'imm', 0x01), ('beq', 'rel', 'noright'), ('inc', 'abs', STAR + 3), 'noright',
     ('lda', 'zp', BUTTONS), ('and', 'imm', 0x02), ('beq', 'rel', 'noleft'), ('dec', 'abs', STAR + 3), 'noleft',
     ('lda', 'zp', BUTTONS), ('and', 'imm', 0x04), ('beq', 'rel', 'nodown'), ('inc', 'abs', STAR), 'nodown',
@@ -133,6 +153,7 @@ code = [
     'hint1', ('.byte', text('D-PAD   MOVE')),
     'hint2', ('.byte', text('A B     COLOUR')),
     'hint3', ('.byte', text('START   CENTRE')),
+    'hint4', ('.byte', text('EACH ONE MAKES A SOUND')),
     'credit', ('.byte', text('A DEMO CART FOR MAPPER 0')),
 ]
 
