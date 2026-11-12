@@ -287,6 +287,16 @@ pub struct Limits {
     pub overflow: Overflow,
     /// Sprites drawn a frame (the NES's OAM: 64). `None`: no limit.
     pub oam_size: Option<usize>,
+    /// Background cells may be mirrored (`Cell::flip`). The NES cannot; with
+    /// `false` the flips are ignored.
+    pub bg_flip: bool,
+    /// The background area one palette covers, in pixels: 16 on the NES (its
+    /// attribute table: each 16×16 area takes the palette of its top-left
+    /// cell, so colours clash at the seams), or 8 for a palette per cell.
+    pub attribute_cell: usize,
+    /// Tiles a pattern table may hold (the NES: 256). Checked when the art
+    /// is built, by [`Limits::check_table`]. `None`: no limit.
+    pub tiles_per_table: Option<usize>,
 }
 
 /// A crowded scanline: flicker (the shown set moves each frame, so every
@@ -300,9 +310,33 @@ pub enum Overflow {
 
 impl Limits {
     /// The console: 8 sprites a line with flicker, 64 a frame.
-    pub const NES: Limits = Limits { sprites_per_line: Some(SPRITES_PER_LINE), overflow: Overflow::Flicker, oam_size: Some(MAX_SPRITES) };
-    /// A modern game drawn in NES style: no sprite limits, so no flicker.
-    pub const MODERN: Limits = Limits { sprites_per_line: None, overflow: Overflow::Flicker, oam_size: None };
+    pub const NES: Limits = Limits {
+        sprites_per_line: Some(SPRITES_PER_LINE),
+        overflow: Overflow::Flicker,
+        oam_size: Some(MAX_SPRITES),
+        bg_flip: false,
+        attribute_cell: 16,
+        tiles_per_table: Some(TABLE_SIZE),
+    };
+    /// A modern game drawn in NES style: no sprite limits (so no flicker),
+    /// flipped background cells, a palette per 8×8 cell, banks of any size.
+    pub const MODERN: Limits = Limits {
+        sprites_per_line: None,
+        overflow: Overflow::Flicker,
+        oam_size: None,
+        bg_flip: true,
+        attribute_cell: 8,
+        tiles_per_table: None,
+    };
+
+    /// Whether a pattern table keeps to `tiles_per_table`; the error names
+    /// the table and its size.
+    pub fn check_table(&self, name: &str, table: &PatternTable) -> Result<(), String> {
+        match self.tiles_per_table {
+            Some(max) if table.tiles.len() > max => Err(format!("{name} has {} tiles; these limits allow {max}", table.tiles.len())),
+            _ => Ok(()),
+        }
+    }
 }
 
 /// What the picture processor draws one frame from.
@@ -348,6 +382,7 @@ pub fn render(scene: &Scene) -> Frame {
     let rotate = if oam.is_empty() { 0 } else { (scene.frame as usize * 3) % oam.len() };
     let limit = scene.limits.sprites_per_line.unwrap_or(usize::MAX);
     let flicker = scene.limits.overflow == Overflow::Flicker;
+    let coarse = scene.limits.attribute_cell >= 16;
     let mut on_line: Vec<&Sprite> = Vec::with_capacity(MAX_SPRITES);
     let mut line_sprites: Vec<&Sprite> = Vec::with_capacity(SPRITES_PER_LINE);
     let mut bg_opaque = [false; WIDTH];
@@ -355,14 +390,25 @@ pub fn render(scene: &Scene) -> Frame {
         // Background.
         for x in 0..WIDTH as i32 {
             let (sx, sy) = (x >> 3, y >> 3);
-            let (cell, px, py) = match (scene.overlay)(sx, sy) {
-                Some(c) => (c, x & 7, y & 7),
+            // With 16-pixel attributes, a cell takes the palette of the
+            // top-left cell of its 16×16 area, as the attribute table gives it.
+            let (mut cell, px, py) = match (scene.overlay)(sx, sy) {
+                Some(c) => {
+                    let pal = if coarse { (scene.overlay)(sx & !1, sy & !1).map_or(c.palette, |a| a.palette) } else { c.palette };
+                    (Cell { palette: pal, ..c }, x & 7, y & 7)
+                }
                 None => {
                     let wx = x + scene.scroll_x;
                     let wy = y + scene.scroll_y;
-                    ((scene.background)(wx.div_euclid(8), wy.div_euclid(8)), wx.rem_euclid(8), wy.rem_euclid(8))
+                    let (tx, ty) = (wx.div_euclid(8), wy.div_euclid(8));
+                    let c = (scene.background)(tx, ty);
+                    let pal = if coarse { (scene.background)(tx & !1, ty & !1).palette } else { c.palette };
+                    (Cell { palette: pal, ..c }, wx.rem_euclid(8), wy.rem_euclid(8))
                 }
             };
+            if !scene.limits.bg_flip {
+                cell.flip = 0;
+            }
             let px = if cell.flip & FLIP_H != 0 { 7 - px } else { px };
             let py = if cell.flip & FLIP_V != 0 { 7 - py } else { py };
             let c = scene.bg_table.get(cell.tile).0[py as usize][px as usize];
@@ -433,6 +479,39 @@ pub fn glyph_tile(rows: &[&str], ink: u8, paper: u8) -> Tile {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn nes_attributes_cover_16_pixels_and_ignore_flips() {
+        // Four cells of one tile: the top-left in palette 1, the others in 2,
+        // the bottom-right flipped. NES limits paint all four in palette 1
+        // and unflipped; modern limits keep each cell's own.
+        let mut bg = PatternTable::default();
+        let mut t = Tile([[1; 8]; 8]);
+        t.0[0][0] = 2;
+        let tile = bg.add(t);
+        let spr = PatternTable::default();
+        let pal = Palettes { bg: [[0x0F, 0x01, 0x02, 0x03], [0x0F, 0x11, 0x12, 0x13], [0x0F, 0x21, 0x22, 0x23], [0x0F; 4]], spr: [[0x0F; 4]; 4] };
+        let cells = |tx: i32, ty: i32| Cell { tile, palette: if tx == 0 && ty == 0 { 1 } else { 2 }, flip: if tx == 1 && ty == 1 { FLIP_H } else { 0 } };
+        let draw = |limits: Limits| render(&Scene {
+            bg_table: &bg,
+            spr_table: &spr,
+            palettes: pal,
+            background: &cells,
+            overlay: &|_, _| None,
+            scroll_x: 0,
+            scroll_y: 0,
+            sprites: &[],
+            frame: 0,
+            limits,
+        });
+        let nes = draw(Limits::NES);
+        assert_eq!(nes.pixels[9 * WIDTH + 9], 0x11, "the 16×16 area takes the top-left cell's palette");
+        assert_eq!(nes.pixels[8 * WIDTH + 8], 0x12, "no flip: the marked pixel stays at the left");
+        let modern = draw(Limits::MODERN);
+        assert_eq!(modern.pixels[9 * WIDTH + 9], 0x21);
+        assert_eq!(modern.pixels[8 * WIDTH + 15], 0x22, "flipped: the marked pixel moves right");
+        assert!(Limits::NES.check_table("bg", &bg).is_ok());
+    }
+
     #[test]
     fn modern_limits_show_every_sprite_on_a_crowded_line() {
         let mut spr = PatternTable::default();

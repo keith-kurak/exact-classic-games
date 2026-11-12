@@ -26,11 +26,27 @@ pub mod art;
 use art::{Art, BATTLE, BATTLE_MAP, FIELD, FIELD_MAP, WINDOW_PALETTE};
 use exact_gpu::json::{number, text};
 use exact_gpu::{Registry, SurfaceError, Value};
-use nes_ppu::{render, Cell, Scene, Sprite, FLIP_H};
+use nes_ppu::{render, Cell, Limits, Scene, Sprite, FLIP_H};
 use nes_screen::NesGame;
 use std::sync::OnceLock;
 
 pub const INPUTS: usize = 7;
+
+/// The NES rules this game keeps, and the ones it breaks on purpose (the
+/// look stays NES: its palette, 2bpp tiles, 3-colour sprites).
+pub const LIMITS: Limits = Limits {
+    // Broken: battle enemies are drawn upside down when juggled, from the
+    // same tiles mirrored.
+    bg_flip: true,
+    // Broken: enemies take a palette per 8×8 cell, so their colours do not
+    // clash in 16×16 blocks.
+    attribute_cell: 8,
+    // Broken: the battle bank holds big enemies and every UI tile, more than
+    // the 256 a pattern table had.
+    tiles_per_table: None,
+    // Kept: 8 sprites a line with flicker, 64 a frame.
+    ..Limits::NES
+};
 const COLS: usize = 32;
 const ROWS: usize = 30;
 
@@ -251,7 +267,7 @@ fn draw(spec: &Spec, frame: u64, rgba: &mut [u8]) {
         scroll_y: if spec.battle { 0 } else { spec.scroll_y },
         sprites: &sprites,
         frame,
-        limits: nes_ppu::Limits::NES,
+        limits: LIMITS,
     });
     out.to_rgba(rgba);
 }
@@ -316,6 +332,16 @@ exact_gpu::module!(REGISTRY);
 mod tests {
     use super::*;
     use nes_ppu::{HEIGHT, WIDTH};
+
+    #[test]
+    fn art_keeps_its_limits() {
+        let art = art();
+        for (name, table) in [("field bank", &art.bg), ("battle bank", &art.bg_battle), ("sprites", &art.spr)] {
+            LIMITS.check_table(name, table).unwrap();
+        }
+        // The banks that break the NES's 256: say so, so the choice stays visible.
+        assert!(Limits::NES.check_table("battle bank", &art.bg_battle).is_err(), "the battle bank now fits an NES table: tiles_per_table could go back to the NES's");
+    }
 
     /// Writes the sprite sheets and two sample frames to assets/ (run with
     /// `cargo test -p exact-odyssey-gpu sheets -- --ignored`).
