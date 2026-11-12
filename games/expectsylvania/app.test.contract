@@ -1,0 +1,63 @@
+test "the stage card, then play"
+  expect state phase == "ready"
+  clock +1600
+  expect state phase == "play"
+  expect state x == 40
+  expect state y == 208
+
+test "walking, a committed jump, and landing"
+  clock +1600
+  type "root" key "ArrowRight" for 330
+  clock +100
+  expect state x == 60
+  type "root" key "z"
+  clock +200
+  expect state air == true
+  expect state y == 173.8
+  clock +900
+  expect state air == false
+  expect state y == 208
+
+test "the whip breaks a candle; its heart is picked up"
+  clock +1600
+  type "root" key "ArrowRight" for 330
+  clock +1200
+  type "root" key "x"
+  clock +170
+  expect state atk == 6
+  clock +200
+  expect state cLit.0 == false
+  clock +600
+  expect state dropS.0 == 2
+  expect state hearts == 6
+
+test "a ghoul rises, walks at Vesper, and falls to the whip"
+  clock +1600
+  type "root" key "ArrowRight" for 330
+  clock +2000
+  expect state eAlive.0 == true
+  clock +2500
+  type "root" key "x"
+  clock +300
+  expect state score == 100
+  expect state eAlive.0 == false
+  expect state ePuff.0 == 11
+  expect state hp == 16
+
+test "Up at a stair's foot climbs to the balcony"
+  clock +1600
+  type "root" key "ArrowRight" for 9000
+  clock +100
+  expect state x == 533.5
+  type "root" key "ArrowRight" for 430
+  clock +60
+  expect state x == 559.5
+  type "root" key "ArrowUp" for 1300
+  clock +100
+  expect state stair == -1
+  expect state x == 624
+  expect state y == 144
+  type "root" key "ArrowRight" for 600
+  clock +100
+  expect state x == 660
+  expect state y == 144

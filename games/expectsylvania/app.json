@@ -1,0 +1,33 @@
+{
+  "$schema": "../../../../exact/scripts/app.schema.json",
+  "name": "Expectsylvania",
+  "short_name": "Expectsylvania",
+  "id": "com.example.expectsylvania",
+  "start_url": "/",
+  "display": "standalone",
+  "app": {
+    "id": "com.example.expectsylvania",
+    "name": "Expectsylvania"
+  },
+  "host": {
+    "web": {},
+    "macos": {
+      "minimumOS": "14.0",
+      "window": {
+        "width": 900,
+        "height": 700
+      }
+    }
+  },
+  "deploy": {
+    "store": {
+      "web": "0",
+      "macos": "0"
+    }
+  },
+  "gpu": {
+    "shaderRoots": [
+      "../../engines/nes-screen/shaders"
+    ]
+  }
+}

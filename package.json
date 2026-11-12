@@ -6,11 +6,13 @@
     "links": "cd games/links-exact86 && bun exact.mjs mac --run",
     "test:exactbound": "bun scripts/silent-audio.ts && cd games/exactbound && bun exact.mjs test macos",
     "test:links": "cd games/links-exact86 && bun exact.mjs test macos",
-    "test": "bun run test:exactbound && bun run test:links && bun run test:gear && bun run test:odyssey && bun run test:engine",
+    "test": "bun run test:exactbound && bun run test:links && bun run test:gear && bun run test:odyssey && bun run test:expectsylvania && bun run test:engine",
     "gear": "cd games/exact-gear-solid && bun exact.mjs mac --run",
     "test:gear": "cd games/exact-gear-solid && bun exact.mjs test macos",
     "odyssey": "cd games/exact-odyssey && bun exact.mjs mac --run",
     "test:odyssey": "cd games/exact-odyssey && bun exact.mjs test macos",
-    "test:engine": "cd engines/nes-ppu && cargo test"
+    "test:engine": "cd engines/nes-ppu && cargo test",
+    "expectsylvania": "cd games/expectsylvania && bun exact.mjs mac --run",
+    "test:expectsylvania": "cd games/expectsylvania && bun exact.mjs test macos"
   }
 }

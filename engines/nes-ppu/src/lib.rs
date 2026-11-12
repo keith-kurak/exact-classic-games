@@ -20,6 +20,7 @@
 //!
 //! The frame is 256×240 colour indices; `to_rgba` turns it into pixels.
 
+pub mod font;
 pub mod png;
 
 pub const WIDTH: usize = 256;

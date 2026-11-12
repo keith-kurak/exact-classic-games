@@ -1,0 +1,70 @@
+// The Gatehouse, stage 1: 64×13 metatiles of 16×16 pixels, under a 32-pixel
+// HUD, so row r's top is at y = 32 + 16r. It must match LEVEL in
+// gpu/src/level.rs (both are written by tools/level.py). `#` and `=` are
+// solid; `/` and `z` draw the stairs, which the rules below define.
+
+fn levelMap(): string[] = [
+  "`          `          WWWWccccccccccccccccccccccccccccccccccccc#",
+  "     mn          `    WWWWbPbbCCPbbbbbbbbbPbbbbbbbPbCCbbbPbbbbb#",
+  " `   oq     `         WWWWbPbwCCPbbwbbbbbbPbbbbwbbPbCCbbbPbwbbb#",
+  "       `          `   WWWWbPbvCCPbbvbbbbbbPbbbbvbbPbCCbbbPbvbbb#",
+  "  `        KkKkKkKkKkKWWWWbPbvbbPbbvbbbbbbPbbbbvbbPbbbbbbPbvbbb#",
+  " TTT    `  kkkkkTTTkkkWAAWbPbvbbPbbvbbbbbbPbbbbvbbPbbbbbbPbvbbb#",
+  " TTT       kkjkkTTTkjkWaaWbPbbbbPbbbbbbbbbPbbbbbbbPbbbbbbPbbbbb#",
+  "  t        kkkkkktkkkkWaaWbPbbbbPbbbbb/==============zbbbPbbbbb#",
+  "  t        kkkkkktkkkkWaaWbPbbbbPbbbb/bbbbPbbbbbbbPbbbzbbPbbbbb#",
+  "FFtFFFFFFFFFFFFFFtFFFFWaaWbPbbbbPbbb/bbbbbPbbbbbbbPbbbbzbPbbbDE#",
+  "fftfffffffffffffftffffWaaWbPbbbbPbb/bbbbbbPbbbbbbbPbbbbbzPbbbde#",
+  "################################################################",
+  "################################################################"
+]
+fn tileAt(c: number, r: number): string =
+  (c < 0 or r < 0 or c >= 64 or r >= 13 ? "#" : match levelMap().at(r) { case some(s) => s.slice(c, c + 1), case none => "#" })
+fn solidAt(x: number, y: number): bool = (y < 32 ? false : (tileAt(floor(x / 16), floor((y - 32) / 16)) == "#" or tileAt(floor(x / 16), floor((y - 32) / 16)) == "="))
+// The top of the tile row holding y: where feet stand.
+fn rowTop(y: number): number = 32 + floor((y - 32) / 16) * 16
+// Standing at x on a surface at y: either foot on something solid.
+fn standsOn(x: number, y: number): bool = solidAt(x - 4, y + 1) or solidAt(x + 4, y + 1)
+fn floorY(): number = 208
+fn balconyY(): number = 144
+fn minX(): number = 8
+fn maxX(): number = 1000
+fn camMax(): number = 768
+fn doorX(): number = 984
+
+// Stairs: a bottom point, the way "up" goes along x, and a 64-pixel rise.
+fn stairs(): number = 2
+fn stairBx(i: number): number = (i == 0 ? 560 : 912)
+fn stairDir(i: number): number = (i == 0 ? 1 : -1)
+fn stairLen(): number = 64
+fn stairTopX(i: number): number = stairBx(i) + stairDir(i) * stairLen()
+
+// Candles: where each hangs (centre x, bottom y) and what it drops.
+fn candles(): number = 9
+fn candleX(i: number): number = nth([72, 184, 296, 456, 520, 680, 760, 872, 952], i)
+fn candleY(i: number): number = nth([192, 180, 192, 192, 176, 128, 128, 192, 184], i)
+fn dropOf(i: number): string = wordAt(["heart", "bigheart", "heart", "dagger", "heart", "bigheart", "heart", "heart", "bigheart"], i)
+
+// Enemies, in seven slots: two ghouls that keep rising in the courtyard,
+// three bats that wake as you pass, two knights on patrol.
+fn slots(): number = 7
+fn kindOf(i: number): string = (i < 2 ? "ghoul" : (i < 5 ? "bat" : "knight"))
+fn startX(i: number): number = nth([0, 0, 488, 712, 920, 760, 960], i)
+fn startY(i: number): number = nth([208, 208, 96, 76, 112, 144, 208], i)
+fn wakeX(i: number): number = nth([0, 0, 400, 630, 840, 0, 0], i)
+fn patrolMin(i: number): number = (i == 5 ? 650 : 924)
+fn patrolMax(i: number): number = (i == 5 ? 836 : 996)
+fn maxHpOf(kind: string): number = (kind == "knight" ? 4 : 1)
+fn damageOf(kind: string): number = (kind == "knight" ? 3 : 2)
+fn pointsOf(kind: string): number = (kind == "knight" ? 400 : (kind == "bat" ? 200 : 100))
+// The ghouls rise only while you are in the courtyard.
+fn ghoulZone(): number = 330
+
+// ── Helpers ──
+fn nth(xs: number[], k: number): number = match xs.at(k) { case some(v) => v, case none => 0 }
+fn wordAt(xs: string[], k: number): string = match xs.at(k) { case some(v) => v, case none => "" }
+fn flag(xs: bool[], k: number): bool = match xs.at(k) { case some(v) => v, case none => false }
+fn sgn(v: number): number = (v > 0 ? 1 : (v < 0 ? -1 : 0))
+fn clamp(v: number, lo: number, hi: number): number = max(lo, min(hi, v))
+fn overlaps(a0: number, a1: number, b0: number, b1: number): bool = a0 < b1 and b0 < a1
+fn pad(n: number, w: number): string = `${"000000".slice(0, max(0, w - `${floor(n)}`.length))}${floor(n)}`
