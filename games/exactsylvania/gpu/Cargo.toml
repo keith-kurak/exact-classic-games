@@ -1,5 +1,5 @@
 [package]
-name = "expectsylvania-gpu"
+name = "exactsylvania-gpu"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

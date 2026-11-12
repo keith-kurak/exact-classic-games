@@ -830,7 +830,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "expectsylvania-apple"
+name = "exactsylvania-apple"
 version = "0.1.0"
 dependencies = [
  "exact-apple",
@@ -841,7 +841,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "expectsylvania-gpu"
+name = "exactsylvania-gpu"
 version = "0.1.0"
 dependencies = [
  "exact-gpu",
@@ -853,7 +853,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "expectsylvania-web"
+name = "exactsylvania-web"
 version = "0.1.0"
 dependencies = [
  "exact-js-bake",

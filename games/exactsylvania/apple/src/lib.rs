@@ -1,4 +1,4 @@
-//! Expectsylvania on Apple: the Contract UI and the TypeScript data module.
+//! Exactsylvania on Apple: the Contract UI and the TypeScript data module.
 
 include!(concat!(env!("OUT_DIR"), "/module.rs"));
 

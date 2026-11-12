@@ -1,4 +1,4 @@
-# Expectsylvania's art as text pixel art: every pixel a colour number 0-3 in
+# Exactsylvania's art as text pixel art: every pixel a colour number 0-3 in
 # its palette. Writes gpu/src/data.rs (consts the Rust build turns into CHR
 # tiles), and tools/preview.png to look at. Run: python3 tools/art.py
 import os, zlib, struct

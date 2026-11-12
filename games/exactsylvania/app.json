@@ -1,13 +1,13 @@
 {
   "$schema": "../../../../exact/scripts/app.schema.json",
-  "name": "Expectsylvania",
-  "short_name": "Expectsylvania",
-  "id": "com.example.expectsylvania",
+  "name": "Exactsylvania",
+  "short_name": "Exactsylvania",
+  "id": "com.example.exactsylvania",
   "start_url": "/",
   "display": "standalone",
   "app": {
-    "id": "com.example.expectsylvania",
-    "name": "Expectsylvania"
+    "id": "com.example.exactsylvania",
+    "name": "Exactsylvania"
   },
   "host": {
     "web": {},

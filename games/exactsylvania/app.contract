@@ -1,4 +1,4 @@
-// Expectsylvania: a gothic action platformer drawn on the shared NES engine.
+// Exactsylvania: a gothic action platformer drawn on the shared NES engine.
 // Vesper Holt crosses the Gatehouse, stage 1: a moonlit courtyard, the castle
 // gate, and the entrance hall, to the door at its far end. Her chain whip
 // breaks candles and enemies; jumps are committed arcs; stairs climb when you
@@ -30,7 +30,7 @@ fn bar(v: number, a: string, b: string, c: string): string =
 fn bodyTop(kind: string, y: number): number = (kind == "bat" ? y - 5 : y - 30)
 fn bodyBottom(kind: string, y: number): number = (kind == "bat" ? y + 5 : y)
 
-component Expectsylvania
+component Exactsylvania
   // ── Vesper ──
   state x = 40
   state y = 208

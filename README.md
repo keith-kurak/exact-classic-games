@@ -7,7 +7,7 @@ Small games made with [Exact](../../exact), each in the style of a classic.
 | **Exactbound** | A 16-bit-era RPG slice: walk Cheery Cheery Village, talk to the Order of the Placid Blue, and fight them in turn-based battles over a GPU aurora background. | [`games/exactbound`](games/exactbound) |
 | **Exact Gear Solid** | A late-90s stealth game: cross a dim storage room past four patrolling guards, with an overhead camera, a radar of their view cones, and a camera that drops beside you when you press your back to a wall. | [`games/exact-gear-solid`](games/exact-gear-solid) |
 | **Exact Odyssey** | An 8-bit console RPG on a real NES-style picture processor: 2C02 colours, 8×8 CHR tiles, attribute-limited backgrounds, 3-colour sprites. Walk Reedholm with Thunda, Tooth and Chocolat, then fight real-time ATB battles with stagger chains, juggling and party stances. | [`games/exact-odyssey`](games/exact-odyssey) |
-| **Expectsylvania** | A gothic action platformer on the shared NES engine, in the style of the 8-bit castle crawlers. Vesper Holt and her chain whip cross the Gatehouse: a moonlit courtyard of rising ghouls, the castle gate, and an entrance hall of bats, knights, candles and stairs. | [`games/expectsylvania`](games/expectsylvania) |
+| **Exactsylvania** | A gothic action platformer on the shared NES engine, in the style of the 8-bit castle crawlers. Vesper Holt and her chain whip cross the Gatehouse: a moonlit courtyard of rising ghouls, the castle gate, and an entrance hall of bats, knights, candles and stairs. | [`games/exactsylvania`](games/exactsylvania) |
 | **Links Exact86** | An early-90s PC golf game: hole 1, a dogleg-right par 4 laid out after Pebble Beach's first, ray-marched from a fixed camera behind the ball, with a three-press swing. | [`games/links-exact86`](games/links-exact86) |
 
 Each game is its own Exact app, with its own Cargo workspace and tests. Their histories
@@ -138,7 +138,7 @@ as PNG sprite sheets and two sample frames to `games/exact-odyssey/assets/sheets
 cd games/exact-odyssey && cargo test -p exact-odyssey-gpu sheets -- --ignored
 ```
 
-### Expectsylvania
+### Exactsylvania
 
 | Key | Action |
 | --- | --- |
@@ -153,7 +153,7 @@ The whip winds back, then lashes out in front of you. It breaks candles, which d
 (and one drops the dagger). Ghouls keep rising in the courtyard, bats wake as you pass, and
 the knights take four lashes. Touching an enemy knocks you back and costs health; you flash
 for two seconds after. Reach the door at the end of the hall before the time runs out.
-The map is written by `games/expectsylvania/tools/level.py` (into both `level.contract` and
+The map is written by `games/exactsylvania/tools/level.py` (into both `level.contract` and
 `gpu/src/level.rs`), and the art by `tools/art.py` (into `gpu/src/data.rs`).
 
 ### Links Exact86
@@ -176,7 +176,7 @@ engines/
   nes-ppu/          an NES-style picture processor (Rust): palette, CHR tiles, metatiles, OAM
   nes-screen/       shows an nes-ppu frame on an Exact GPU surface (the NesGame trait)
 games/
-  expectsylvania/   app.contract, level.contract, gpu/ (its NesGame), tools/ (level.py, art.py)
+  exactsylvania/   app.contract, level.contract, gpu/ (its NesGame), tools/ (level.py, art.py)
   exact-odyssey/    app.contract, field.contract, battle.contract, gpu/ (art.rs, its NesGame), tools/ (art generators)
   exactbound/       app.contract, world.contract, battle.contract, gpu/ (aurora shader), assets/ (audio, not in git)
   exact-gear-solid/ app.contract, room.contract, items.contract, gpu/ (room shader)

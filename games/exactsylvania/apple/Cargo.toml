@@ -1,5 +1,5 @@
 [package]
-name = "expectsylvania-web"
+name = "exactsylvania-apple"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -7,13 +7,13 @@ publish = false
 build = "build.rs"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["rlib"]
 
 [dependencies]
 exact-logic = { path = "../../../../../exact/logic" }
-exact-web = { path = "../../../../../exact/host/web" }
-exact-web-capabilities = { path = "../../../../../exact/host/web-capabilities" }
-exact-js-web = { path = "../../../../../exact/js/web" }
+exact-apple = { path = "../../../../../exact/host/apple" }
+exact-apple-update = { path = "../../../../../exact/host/apple-update" }
+exact-js = { path = "../../../../../exact/js" }
 
 [build-dependencies]
 exact-js-bake = { path = "../../../../../exact/js/bake" }

@@ -1,4 +1,4 @@
-//! Expectsylvania on the web: the Contract UI and the TypeScript data module.
+//! Exactsylvania on the web: the Contract UI and the TypeScript data module.
 
 include!(concat!(env!("OUT_DIR"), "/module.rs"));
 const PLAN: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/app.plan"));

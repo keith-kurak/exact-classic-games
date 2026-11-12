@@ -1,4 +1,4 @@
-//! Expectsylvania's GPU module: the `ppu` surface, an NES-style picture from
+//! Exactsylvania's GPU module: the `ppu` surface, an NES-style picture from
 //! the shared engines (nes-ppu draws it, nes-screen shows it). The view says
 //! what is on screen in small text specs:
 //!
@@ -248,7 +248,7 @@ mod tests {
         }
     }
 
-    /// Writes two sample frames to assets/ (`cargo test -p expectsylvania-gpu frames -- --ignored`).
+    /// Writes two sample frames to assets/ (`cargo test -p exactsylvania-gpu frames -- --ignored`).
     #[test]
     #[ignore]
     fn frames() {
