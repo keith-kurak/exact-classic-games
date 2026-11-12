@@ -117,7 +117,7 @@ Each segment is a block: it fills, turns solid once charged, and is gone from th
 command finishes. Escape takes back a slot. **Item** commits a Potion, which heals the whole
 party, or a Revive, which brings a fallen ally back at half HP. Tooth
 and Chocolat fill theirs by role (shown in yellow) and act. Press **Left** for the stance list, in the chooser,
-free at any time, even mid-attack (a shift cancels the party's commands) (a "Stance Shift!" banner sweeps across the screen): **Assault** (all Blast), **Rush** (Strike, Strike, Blast), **Balance** and
+free at any time, even mid-attack, where a shift cancels the party's commands; a "Stance Shift!" banner sweeps across the screen. The stances: **Assault** (all Blast), **Rush** (Strike, Strike, Blast), **Balance** and
 **Bulwark**. Only Strike attacks; Blast throws Fire and Ice, which build an enemy's chain fast; Mend
 cures and heals, and casts Raise by itself when an ally has fallen; Guard can Taunt and Steel. The chain drains over time, slower just after a Strike hit. The stagger panel
 at the top left follows the enemy you last targeted. Each attacker leaps in beside its target, weapon out. Staggered, an enemy takes far more damage (each spell on it keeps the stagger going a little longer),
