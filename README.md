@@ -12,7 +12,7 @@ Each game has a README with screenshots, its controls, and how it's made.
 | **Exactsylvania** | A gothic action platformer on the shared NES engine, in the style of the 8-bit castle crawlers. Vesper Holt and her chain whip cross the Gatehouse: a moonlit courtyard of rising ghouls, the castle gate, an entrance hall of bats, knights, candles and stairs, and the Belfry, where a giant bat waits. | [`games/exactsylvania`](games/exactsylvania/README.md) |
 | **Links Exact86** | An early-90s PC golf game: hole 1, a dogleg-right par 4 laid out after Pebble Beach's first, ray-marched from a fixed camera behind the ball, with a three-press swing. | [`games/links-exact86`](games/links-exact86/README.md) |
 | **Exacticom Musicbox** | A jukebox for the shared NES sound engine: three original chiptunes and seven sound effects from an emulated 2A03, with live channel meters on an NES-drawn screen. | [`games/exacticom-musicbox`](games/exacticom-musicbox/README.md) |
-| **Exactulator** | A basic NES emulator on the shared NES engines: open a mapper 0 `.nes` file and play it. Passes nestest to the cycle; comes with an original demo cart. No sound yet. | [`games/exactulator`](games/exactulator/README.md) |
+| **Exactulator** | A basic NES emulator on the shared NES engines: open a mapper 0 `.nes` file and play it. Passes nestest to the cycle; plays sound through the shared APU; comes with an original demo cart. | [`games/exactulator`](games/exactulator/README.md) |
 
 Each game is its own Exact app, with its own Cargo workspace and tests. Their histories
 came in with `git subtree`, so `git log -- games/<game>` shows each game's commits.
@@ -68,7 +68,7 @@ bun run test:gear         # 10 tests
 bun run test:odyssey      # 18 tests
 bun run test:exactsylvania # 7 tests
 bun run test:musicbox     # 3 tests
-bun run test:exactulator  # 2 tests
+bun run test:exactulator  # 3 tests
 bun run test:engine       # the NES engines' own tests (picture, sound, emulator)
 ```
 
@@ -76,7 +76,7 @@ The tests are each game's `app.test.contract`. They build the macOS app and driv
 
 ## Engines
 
-The NES-style games share four Rust crates:
+The NES-style games share five Rust crates:
 
 - [`engines/nes-ppu`](engines/nes-ppu): an NES-style picture processor: the 2C02 palette, 2bpp
   8×8 tiles, metatiles and attribute palettes, OAM sprites, fades, a bold 8×8 font, PNG sheets
@@ -87,7 +87,10 @@ The NES-style games share four Rust crates:
   pulses, triangle, noise, the frame counter and mixer, with a 60 Hz sound driver and a WAV
   writer. Exacticom Musicbox renders its music with it.
 - [`engines/nes-emu`](engines/nes-emu): a basic NES emulator core: the 6502, a real PPU front
-  end that draws into nes-ppu's frame, mapper 0 cartridges and controllers. Exactulator runs it.
+  end that draws into nes-ppu's frame, the APU, mapper 0 cartridges and controllers. Exactulator
+  runs it.
+- [`engines/live-audio`](engines/live-audio): plays samples a module makes live, through
+  AudioQueue: a stopgap until Exact can stream audio. Exactulator's sound goes through it.
 
 Exact Odyssey draws its art as text in code; Exactsylvania draws everything from PNG sprite
 sheets. Each game's README says how.
@@ -99,7 +102,8 @@ engines/
   nes-ppu/          an NES-style picture processor (Rust): palette, CHR tiles, metatiles, OAM
   nes-screen/       shows an nes-ppu frame on an Exact GPU surface (the NesGame trait)
   nes-apu/          the NES sound chip, a sound driver, WAV output
-  nes-emu/          an NES emulator core: 6502, PPU, mapper 0, controllers
+  nes-emu/          an NES emulator core: 6502, PPU, APU, mapper 0, controllers
+  live-audio/       live samples to the speaker (AudioQueue), until Exact streams audio
 games/
   exactsylvania/    app.contract, level.contract, gpu/ (its NesGame, sheets.rs), assets/sprites/ (PNG sheets), tools/
   exactulator/      app.contract, app.ts (reads the ROM), gpu/ (runs nes-emu), assets/demo.nes, tools/democart.py
