@@ -277,6 +277,34 @@ impl Metasprite {
     }
 }
 
+/// Which NES limits the picture processor enforces. Each one is a choice: the
+/// look of the console, or a modern game that only looks retro.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Limits {
+    /// Sprites one scanline can show (the NES: 8). `None`: no limit.
+    pub sprites_per_line: Option<usize>,
+    /// What a crowded line does with the sprites it cannot show.
+    pub overflow: Overflow,
+    /// Sprites drawn a frame (the NES's OAM: 64). `None`: no limit.
+    pub oam_size: Option<usize>,
+}
+
+/// A crowded scanline: flicker (the shown set moves each frame, so every
+/// sprite appears some of the time, as NES games did it) or drop (the
+/// lowest-priority sprites stay hidden: steady, but they vanish).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Overflow {
+    Flicker,
+    Drop,
+}
+
+impl Limits {
+    /// The console: 8 sprites a line with flicker, 64 a frame.
+    pub const NES: Limits = Limits { sprites_per_line: Some(SPRITES_PER_LINE), overflow: Overflow::Flicker, oam_size: Some(MAX_SPRITES) };
+    /// A modern game drawn in NES style: no sprite limits, so no flicker.
+    pub const MODERN: Limits = Limits { sprites_per_line: None, overflow: Overflow::Flicker, oam_size: None };
+}
+
 /// What the picture processor draws one frame from.
 pub struct Scene<'a> {
     pub bg_table: &'a PatternTable,
@@ -292,9 +320,8 @@ pub struct Scene<'a> {
     /// The frame count: it moves the window of sprites a crowded line shows,
     /// so lines with too many sprites flicker.
     pub frame: u64,
-    /// Sprites a scanline can show: `SPRITES_PER_LINE` (8) as on the NES, or
-    /// more to trade authenticity for less flicker; 0 means no limit.
-    pub sprites_per_line: usize,
+    /// The NES limits to enforce: `Limits::NES`, `Limits::MODERN`, or a mix.
+    pub limits: Limits,
 }
 
 /// A drawn frame: one 2C02 colour index a pixel.
@@ -315,11 +342,12 @@ impl Frame {
 pub fn render(scene: &Scene) -> Frame {
     let mut pixels = vec![0u8; WIDTH * HEIGHT];
     let backdrop = scene.palettes.bg[0][0];
-    let oam = &scene.sprites[..scene.sprites.len().min(MAX_SPRITES)];
+    let oam = &scene.sprites[..scene.sprites.len().min(scene.limits.oam_size.unwrap_or(usize::MAX))];
     // With more than 8 sprites on a line, start OAM evaluation further along
     // each frame, so every sprite gets drawn some of the time.
     let rotate = if oam.is_empty() { 0 } else { (scene.frame as usize * 3) % oam.len() };
-    let limit = if scene.sprites_per_line == 0 { usize::MAX } else { scene.sprites_per_line };
+    let limit = scene.limits.sprites_per_line.unwrap_or(usize::MAX);
+    let flicker = scene.limits.overflow == Overflow::Flicker;
     let mut on_line: Vec<&Sprite> = Vec::with_capacity(MAX_SPRITES);
     let mut line_sprites: Vec<&Sprite> = Vec::with_capacity(SPRITES_PER_LINE);
     let mut bg_opaque = [false; WIDTH];
@@ -355,7 +383,7 @@ pub fn render(scene: &Scene) -> Frame {
         if on_line.len() <= limit {
             line_sprites.extend(on_line.iter().copied());
         } else {
-            let start = rotate % on_line.len();
+            let start = if flicker { rotate % on_line.len() } else { 0 };
             let mut picked: Vec<usize> = (0..limit).map(|k| (start + k) % on_line.len()).collect();
             picked.sort_unstable();
             line_sprites.extend(picked.into_iter().map(|i| on_line[i]));
@@ -406,6 +434,36 @@ pub fn glyph_tile(rows: &[&str], ink: u8, paper: u8) -> Tile {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn modern_limits_show_every_sprite_on_a_crowded_line() {
+        let mut spr = PatternTable::default();
+        let t = spr.add(Tile([[1; 8]; 8]));
+        let sprites: Vec<Sprite> = (0..12).map(|i| Sprite { x: i * 10, y: 0, tile: t, attr: 0 }).collect();
+        let bg = PatternTable::default();
+        let pal = Palettes { bg: [[0x0F; 4]; 4], spr: [[0x0F, 0x30, 0x30, 0x30]; 4] };
+        for (limits, every_frame) in [(Limits::MODERN, 12), (Limits { overflow: Overflow::Drop, ..Limits::NES }, 8)] {
+            for frame in 0..4 {
+                let f = render(&Scene {
+                    bg_table: &bg,
+                    spr_table: &spr,
+                    palettes: pal,
+                    background: &|_, _| Cell::default(),
+                    overlay: &|_, _| None,
+                    scroll_x: 0,
+                    scroll_y: 0,
+                    sprites: &sprites,
+                    frame,
+                    limits,
+                });
+                let shown = (0..12).filter(|i| f.pixels[(i * 10) as usize] == 0x30).count();
+                assert_eq!(shown, every_frame);
+                if limits.overflow == Overflow::Drop {
+                    assert!((0..8).all(|i| f.pixels[(i * 10) as usize] == 0x30), "Drop keeps the first eight");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn overlapping_sprites_keep_their_priority_frame_to_frame() {
         // Two sprites over each other on an uncrowded line: the first in OAM
         // stays in front every frame.
@@ -426,7 +484,7 @@ mod tests {
                 scroll_y: 0,
                 sprites: &sprites,
                 frame,
-                sprites_per_line: SPRITES_PER_LINE,
+                limits: Limits::NES,
             });
             assert_eq!(f.pixels[0], 0x16, "frame {frame}");
         }
@@ -489,7 +547,7 @@ mod tests {
             scroll_y: 0,
             sprites: &sprites,
             frame: 0,
-            sprites_per_line: SPRITES_PER_LINE,
+            limits: Limits::NES,
         });
         let drawn = (0..9).filter(|i| frame.pixels[(i * 10) as usize] == 0x30).count();
         assert_eq!(drawn, 8);

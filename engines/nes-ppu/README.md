@@ -24,3 +24,27 @@ see `games/exact-odyssey/gpu/src/lib.rs`.
 ```sh
 cargo test   # CHR encoding, tile dedupe, the 8-per-line limit, fades
 ```
+
+## Limits: console-accurate or retro-styled
+
+Each frame's `Scene` carries `limits: Limits`, the NES rules the renderer enforces:
+
+| Field | `Limits::NES` | `Limits::MODERN` |
+| --- | --- | --- |
+| `sprites_per_line` | `Some(8)` | `None` (no limit) |
+| `overflow` | `Overflow::Flicker` (the shown set moves each frame) | (unused) |
+| `oam_size` | `Some(64)` | `None` (no limit) |
+
+Mix them for anything in between, e.g. 8 a line without flicker:
+`Limits { overflow: Overflow::Drop, ..Limits::NES }` (the lowest-priority sprites stay hidden).
+Sprites always draw in OAM order, so overlapping sprites never swap places between frames.
+
+The look stays NES either way: the 2C02 palette, 2bpp 8×8 tiles, 3-colour sprites and palettes
+per background area. Exact Odyssey uses `Limits::NES`; Exactsylvania uses `Limits::MODERN`.
+
+## PNG sprite sheets
+
+`png::decode(bytes)` reads a PNG (grey, RGB, indexed or with alpha; not interlaced), and
+`Image::art(x, y, w, h, [c1, c2, c3])` turns a region into text art in a sprite palette's
+three colours (nearest match; transparent pixels stay clear), ready for `Metasprite::from_art`.
+Embed the sheet with `include_bytes!` so it is checked when the game builds.
