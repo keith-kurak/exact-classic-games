@@ -1,4 +1,6 @@
-//! An NES picture on an Exact GPU surface. A game implements [`NesGame`]:
+//! A retro picture on an Exact GPU surface: an NES's 256×240 by default, or
+//! any size a game's picture processor draws (`NesGame::size`; a System 16
+//! board's 320×224). A game implements [`NesGame`]:
 //! how its view's inputs bind, and how it draws one 256×240 frame (usually
 //! with `nes_ppu::render`). [`NesSurface`] does the rest: it counts frames,
 //! uploads the picture and draws it with `shaders/screen.wgsl`, at the largest
@@ -21,9 +23,15 @@ use shaders::screen::{entry, module, Uniforms, GROUP_0, SCREEN, SCREEN_SAMPLER, 
 
 /// A game's side of the screen.
 pub trait NesGame: Default {
+    /// The frame's size in pixels: the NES's 256×240 unless the game's
+    /// picture processor draws another (a System 16 board's 320×224).
+    fn size(&self) -> (usize, usize) {
+        (WIDTH, HEIGHT)
+    }
     /// Take the view's inputs (positional, typed); refuse with the bad one.
     fn bind(&mut self, inputs: &[Value]) -> Result<(), SurfaceError>;
-    /// Draw frame number `frame` (60 a second) into `rgba`, 256×240×4 bytes.
+    /// Draw frame number `frame` (60 a second) into `rgba`, `size()`'s
+    /// width × height × 4 bytes.
     fn draw(&mut self, frame: u64, rgba: &mut [u8]);
     /// The same, with the host's clock (`now_ms`) and whether the agent owns
     /// time (`seekable`): for a game that keeps its own pace (an emulator
@@ -58,6 +66,7 @@ pub fn surface<G: NesGame + 'static>() -> Box<dyn Surface> {
 struct Gpu {
     format: wgpu::TextureFormat,
     generation: u32,
+    size: (usize, usize),
     pipeline: wgpu::RenderPipeline,
     uniforms: FrameUniform,
     texture: wgpu::Texture,
@@ -86,8 +95,12 @@ impl<G: NesGame> Surface for NesSurface<G> {
         target: &wgpu::TextureView,
         format: wgpu::TextureFormat,
     ) -> bool {
-        if self.gpu.as_ref().map(|g| (g.format, g.generation)) != Some((format, frame.shader_generation)) {
-            self.gpu = Some(build(device, format, frame.shader_generation));
+        let size = self.game.size();
+        if self.gpu.as_ref().map(|g| (g.format, g.generation, g.size)) != Some((format, frame.shader_generation, size)) {
+            self.gpu = Some(build(device, format, frame.shader_generation, size));
+        }
+        if self.rgba.len() != size.0 * size.1 * 4 {
+            self.rgba = vec![0; size.0 * size.1 * 4];
         }
         self.frame += 1;
         self.game.draw_at(self.frame, frame.now_ms, frame.seekable, &mut self.rgba);
@@ -100,11 +113,11 @@ impl<G: NesGame> Surface for NesSurface<G> {
                 aspect: wgpu::TextureAspect::All,
             },
             &self.rgba,
-            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(WIDTH as u32 * 4), rows_per_image: None },
-            wgpu::Extent3d { width: WIDTH as u32, height: HEIGHT as u32, depth_or_array_layers: 1 },
+            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(size.0 as u32 * 4), rows_per_image: None },
+            wgpu::Extent3d { width: size.0 as u32, height: size.1 as u32, depth_or_array_layers: 1 },
         );
         let (w, h) = frame.pixels();
-        let uniforms = Uniforms { width: w as f32, height: h as f32, pad0: 0.0, pad1: 0.0 };
+        let uniforms = Uniforms { width: w as f32, height: h as f32, src_width: size.0 as f32, src_height: size.1 as f32 };
         let slot = gpu.uniforms.write(queue, &uniforms.bytes());
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -130,12 +143,12 @@ impl<G: NesGame> Surface for NesSurface<G> {
     }
 }
 
-fn build(device: &wgpu::Device, format: wgpu::TextureFormat, generation: u32) -> Gpu {
+fn build(device: &wgpu::Device, format: wgpu::TextureFormat, generation: u32, size: (usize, usize)) -> Gpu {
     let shader = device.create_shader_module(module());
     let layout = device.create_bind_group_layout(&GROUP_0);
     let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("nes frame"),
-        size: wgpu::Extent3d { width: WIDTH as u32, height: HEIGHT as u32, depth_or_array_layers: 1 },
+        label: Some("retro frame"),
+        size: wgpu::Extent3d { width: size.0 as u32, height: size.1 as u32, depth_or_array_layers: 1 },
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
@@ -185,5 +198,5 @@ fn build(device: &wgpu::Device, format: wgpu::TextureFormat, generation: u32) ->
         multiview_mask: None,
         cache: None,
     });
-    Gpu { format, generation, pipeline, uniforms, texture, bind_groups }
+    Gpu { format, generation, size, pipeline, uniforms, texture, bind_groups }
 }

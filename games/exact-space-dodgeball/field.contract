@@ -1,0 +1,39 @@
+// The field: world units, x across (0 straight ahead), y up from the floor,
+// z ahead of you (you fly at z = 0). Things come from far ahead and pass you.
+
+fn slots(): number = 14
+fn farZ(): number = 64
+fn goneZ(): number = -5
+fn minX(): number = -7
+fn maxX(): number = 7
+fn minY(): number = 0.4
+fn maxY(): number = 7
+// How fast you fly at first, the most you will, and how it builds.
+fn startSpeed(): number = 0.42
+fn topSpeed(): number = 0.9
+fn speedFor(travel: number): number = min(topSpeed(), startSpeed() + travel / 4000)
+// Ticks between throws: fewer as you go.
+fn gapFor(travel: number): number = max(7, 22 - floor(travel / 220))
+fn gravity(): number = 0.028
+fn bounce(): number = 0.5
+fn pillarHeight(): number = 6
+fn startLives(): number = 3
+fn hurtTicks(): number = 60
+
+// The ZX81's random numbers: exact in doubles, the same every game.
+fn nextRng(s: number): number = (s * 75 + 74) % 65537
+
+// A throw: a ball aimed near you, or now and then a pillar in a lane.
+fn kindFor(r: number): number = (r % 5 == 0 ? 2 : 1)
+fn throwX(r: number, px: number, kind: number): number =
+  (kind == 2 ? (r % 15) - 7 : max(minX(), min(maxX(), px + ((r % 9) - 4) * 1.1)))
+fn throwY(r: number): number = 2 + (r % 4)
+fn sizeFor(r: number, kind: number): number = (kind == 2 ? 0.6 : 0.7 + (r % 4) * 0.25)
+fn colorFor(r: number): number = r % 4
+
+// ── Helpers ──
+fn nth(xs: number[], k: number): number = match xs.at(k) { case some(v) => v, case none => 0 }
+fn sq(v: number): number = v * v
+fn clamp(v: number, lo: number, hi: number): number = max(lo, min(hi, v))
+fn pad(n: number, w: number): string = `${"000000".slice(0, max(0, w - `${floor(n)}`.length))}${floor(n)}`
+fn n2(v: number): string = `${round(v * 100) / 100}`

@@ -1,0 +1,141 @@
+// Exact Space Dodgeball: fly low over a checkerboard in space while giant
+// dodgeballs bounce at you from the horizon, and stone pillars stand in your
+// way. Dodge them all: no shooting, just flying. Drawn by engines/sys16, a
+// picture processor in the style of Sega's Super Scaler boards: everything
+// that comes at you is one piece of art, zoomed from a speck to the size of
+// the screen.
+use slots, farZ, goneZ, minX, maxX, minY, maxY, speedFor, gapFor, gravity, bounce, pillarHeight, startLives, hurtTicks, nextRng, kindFor, throwX, throwY, sizeFor, colorFor, nth, sq, clamp, pad, n2 from "./field.contract"
+
+fn dirX(k: string): number = (k == "ArrowLeft" or k == "a" ? -1 : (k == "ArrowRight" or k == "d" ? 1 : 0))
+fn dirY(k: string): number = (k == "ArrowUp" or k == "w" ? 1 : (k == "ArrowDown" or k == "s" ? -1 : 0))
+fn isGo(k: string): bool = k == " " or k == "Enter"
+fn zeros(): number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+fn ks(): number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+
+component ExactSpaceDodgeball
+  // "title", "play" or "over".
+  state phase = "title"
+  state px = 0
+  state py = 2.5
+  state hx = 0
+  state hy = 0
+  state travel = 0
+  state ticks = 0
+  state rng = 11
+  state wait = 30
+  state lives = 3
+  state hurt = 0
+  state best = 0
+  // The things coming: kind (0 none, 1 ball, 2 pillar), where, its fall
+  // speed, size and colour.
+  state kind: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  state ox: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  state oy: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  state oz: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  state ov: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  state osize: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  state ocol: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  state hits = 0
+
+  derive score = floor(travel * 10)
+  derive playing = phase == "play"
+
+  task frame when phase != "over"
+    every(33, tick)
+
+  action tick
+    let speed = speedFor(travel)
+    let k0 = kind
+    let x0 = ox
+    let y0 = oy
+    let z0 = oz
+    let v0 = ov
+    let s0 = osize
+    // Flying: a little momentum, held to the field.
+    let nx = clamp(px + hx * 0.26, minX(), maxX())
+    let ny = clamp(py + hy * 0.2, minY(), maxY())
+    // Everything comes on; balls fall and bounce.
+    let z1 = ks().map(i => nth(z0, i) - speed)
+    let v1 = ks().map(i => (nth(k0, i) == 1 ? nth(v0, i) - gravity() : 0))
+    let ya = ks().map(i => nth(y0, i) + nth(v1, i))
+    let floored = ks().map(i => (nth(k0, i) == 1 and nth(ya, i) < nth(s0, i) ? 1 : 0))
+    let y1 = ks().map(i => (nth(floored, i) == 1 ? nth(s0, i) : nth(ya, i)))
+    let v2 = ks().map(i => (nth(floored, i) == 1 ? bounce() : nth(v1, i)))
+    // Passing you: a hit if it is where you are (you are 1.4 tall, centred
+    // 0.7 above your feet at py).
+    let crossing = ks().filter(i => nth(k0, i) > 0 and nth(z0, i) > 0 and nth(z1, i) <= 0)
+    let struck = crossing.filter(i => (nth(k0, i) == 1
+      ? sq(nth(x0, i) - nx) + sq(nth(y1, i) - (ny + 0.7)) < sq(nth(s0, i) + 0.5)
+      : (nth(x0, i) - nx) * (nth(x0, i) - nx) < 1.0 and ny < pillarHeight()))
+    let hitNow = playing and hurt == 0 and struck.length > 0
+    let lives1 = hitNow ? lives - 1 : lives
+    // A throw when it is time, into the first free slot.
+    let r = nextRng(rng)
+    let free = ks().filter(i => nth(k0, i) == 0 or nth(z1, i) < goneZ())
+    let throwing = wait <= 0 and free.length > 0
+    let slot = throwing ? nth(free, 0) : -1
+    let k = kindFor(r)
+    px = playing ? nx : px * 0.9
+    py = playing ? ny : 2.5 + (py - 2.5) * 0.9
+    let t1 = travel + speed
+    travel = t1
+    ticks = ticks + 1
+    rng = r
+    wait = throwing ? gapFor(t1) : wait - 1
+    kind = ks().map(i => (i == slot ? k : (nth(z1, i) < goneZ() ? 0 : nth(k0, i))))
+    ox = ks().map(i => (i == slot ? throwX(r, nx, k) : nth(x0, i)))
+    oy = ks().map(i => (i == slot ? (k == 2 ? 0 : throwY(r)) : nth(y1, i)))
+    oz = ks().map(i => (i == slot ? farZ() : nth(z1, i)))
+    ov = ks().map(i => (i == slot ? 0 : nth(v2, i)))
+    osize = ks().map(i => (i == slot ? sizeFor(r, k) : nth(s0, i)))
+    ocol = ks().map(i => (i == slot ? colorFor(r) : nth(ocol, i)))
+    hurt = hitNow ? hurtTicks() : max(0, hurt - 1)
+    lives = lives1
+    hits = hitNow ? hits + 1 : hits
+    if playing and lives1 <= 0
+      phase = "over"
+      best = max(best, floor(t1 * 10))
+
+  action start
+    phase = "play"
+    px = 0
+    py = 2.5
+    travel = 0
+    ticks = 0
+    wait = 30
+    lives = startLives()
+    hurt = 0
+    hits = 0
+    kind = zeros()
+    oz = zeros()
+
+  // ── What the picture is told ──
+  derive playerSpec = `${n2(px)},${n2(py)},${hx},${hurt},${ticks}`
+  derive things = ks().filter(i => nth(kind, i) > 0).map(i =>
+    `${nth(kind, i)},${n2(nth(ox, i))},${n2(nth(oy, i))},${n2(nth(oz, i))},${n2(nth(osize, i))},${nth(ocol, i)}`).join(";")
+  derive hud = ([`1,1|SCORE ${pad(score, 6)}`, `16,1|TOP ${pad(max(best, score), 6)}`, `30,1|LIFE ${"****".slice(0, max(0, lives))}`]
+    .concat(phase == "title" ? ["9,9|{EXACT SPACE DODGEBALL}", "11,13|ARROWS TO FLY", "10,15|DODGE EVERYTHING", (ticks % 30 < 18 ? "12,19|PRESS SPACE" : "")] : [])
+    .concat(phase == "over" ? ["15,10|{GAME OVER}", `13,13|SCORE ${pad(score, 6)}`, "12,17|PRESS SPACE"] : [])
+    .join("^"))
+
+  // ── Keys ──
+  action onKey(k: string, e: KeyboardEvent)
+    if dirX(k) != 0 or dirY(k) != 0 or isGo(k)
+      preventDefault()
+    if dirX(k) != 0
+      hx = dirX(k)
+    if dirY(k) != 0
+      hy = dirY(k)
+    if isGo(k) and phase != "play"
+      start()
+
+  action onKeyUp(k: string)
+    if dirX(k) != 0 and dirX(k) == hx
+      hx = 0
+    if dirY(k) != 0 and dirY(k) == hy
+      hy = 0
+
+  view
+    main testId="root" key=onKey keyup=onKeyUp width="100%" height="100%" background-color="#000000"
+      canvas surface=s16(playerSpec, n2(travel), things, hud) width="100%" height="100%" testId="screen"
+      text phase testId="phase" position="absolute" left=-9999 top=0

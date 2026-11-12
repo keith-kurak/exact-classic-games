@@ -1,0 +1,28 @@
+test "the title waits for Space"
+  expect tree has "screen"
+  expect state phase == "title"
+  type "root" key " "
+  expect state phase == "play"
+  expect state lives == 3
+
+test "the arrows fly you around the field, to its edges"
+  type "root" key " "
+  type "root" key "ArrowRight" down
+  type "root" key "ArrowUp" down
+  clock +1000
+  type "root" key "ArrowRight" up
+  type "root" key "ArrowUp" up
+  expect state px == 7
+  expect state py == 7
+
+test "balls come from far off; standing still, three hits end the game"
+  type "root" key " "
+  clock +3000
+  expect state kind.0 == 1
+  clock +30000
+  expect state hits == 3
+  expect state lives == 0
+  expect state phase == "over"
+  type "root" key " "
+  expect state phase == "play"
+  expect state lives == 3

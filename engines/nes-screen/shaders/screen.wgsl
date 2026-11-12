@@ -1,10 +1,11 @@
-// The NES frame on screen: the 256×240 picture the picture processor drew,
-// scaled up with nearest sampling (hard pixels), centred, letterboxed black.
+// A retro frame on screen: the picture the game's processor drew (256×240 for
+// the NES, 320×224 for a System 16 board), scaled up with nearest sampling
+// (hard pixels), centred, letterboxed black.
 struct Uniforms {
     width: f32,
     height: f32,
-    pad0: f32,
-    pad1: f32,
+    src_width: f32,
+    src_height: f32,
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -27,7 +28,7 @@ fn vs(@builtin(vertex_index) i: u32) -> Fragment {
 @fragment
 fn fs(f: Fragment) -> @location(0) vec4<f32> {
     let res = vec2<f32>(u.width, u.height);
-    let nes = vec2<f32>(256.0, 240.0);
+    let nes = vec2<f32>(u.src_width, u.src_height);
     // The largest whole-number scale that fits, so every NES pixel is the
     // same size; a fractional one when the canvas is smaller than 256×240.
     let fit = min(res.x / nes.x, res.y / nes.y);

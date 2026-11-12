@@ -1,0 +1,13 @@
+[package]
+name = "sys16"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "A picture processor in the style of Sega's System 16 and Super Scaler arcade boards: 320x224, 15-bit colour in 16-colour palette lines, 4bpp art, hardware-style sprite zoom, shadow sprites, raster backdrops, line-scrolled tile layers, and a perspective checkerboard ground."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+nes-ppu = { path = "../nes-ppu" }
