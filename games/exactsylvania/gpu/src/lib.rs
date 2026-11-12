@@ -13,8 +13,41 @@
 
 mod data;
 mod level;
+mod sheets;
 
-use data::{BG_PALETTES, METATILES, SPRITES, SPRITE_PALETTES};
+/// What sheets.rs describes: a frame of a sprite sheet, and the grid of
+/// background tiles.
+pub mod sheets_types {
+    pub struct Frame {
+        pub name: &'static str,
+        pub x: usize,
+        pub y: usize,
+        pub w: usize,
+        pub h: usize,
+        /// The sprite palette it is drawn in (0–3).
+        pub palette: u8,
+    }
+    pub struct Tiles {
+        /// Each tile's size in pixels, and how many a row of the sheet holds.
+        pub size: usize,
+        pub per_row: usize,
+        /// The map character each tile is, and its background palette.
+        pub cells: &'static [(char, u8)],
+    }
+}
+
+/// The PNG sheets, embedded at build.
+const SPRITE_SHEETS: [(&str, &[u8], &[sheets_types::Frame]); 4] = [
+    ("hero.png", include_bytes!("../../assets/sprites/hero.png"), sheets::HERO),
+    ("enemies.png", include_bytes!("../../assets/sprites/enemies.png"), sheets::ENEMIES),
+    ("boss.png", include_bytes!("../../assets/sprites/boss.png"), sheets::BOSS),
+    ("items.png", include_bytes!("../../assets/sprites/items.png"), sheets::ITEMS),
+];
+const TILES_PNG: &[u8] = include_bytes!("../../assets/sprites/tiles.png");
+const HUD_PNG: &[u8] = include_bytes!("../../assets/sprites/hud.png");
+
+use data::{BG_PALETTES, SPRITE_PALETTES};
+use sheets::{HUD, TILES};
 use exact_gpu::json::{number, text};
 use exact_gpu::{Registry, SurfaceError, Value};
 use level::LEVEL;
@@ -26,12 +59,6 @@ use std::sync::OnceLock;
 
 pub const INPUTS: usize = 4;
 
-/// Vesper's frames come from a PNG sheet, drawn in her palette's colours
-/// (16×32 cells, left to right in this order); everything else is text art in
-/// data.rs. Edit the sheet in any paint program and rebuild.
-const HERO_SHEET: &[u8] = include_bytes!("../../assets/sprites/hero.png");
-const HERO_FRAMES: [&str; 12] =
-    ["stand", "walk0", "walk1", "walk2", "walk3", "jump", "crouch", "whipback", "whipfore", "cwhipback", "cwhipfore", "hurt"];
 const COLS: usize = 32;
 const ROWS: usize = 30;
 /// The HUD's height in tiles: the level is drawn below it.
@@ -48,29 +75,10 @@ pub struct Art {
     pub escapes: HashMap<char, u16>,
 }
 
-fn bar_tile(halves: usize, colour: u8) -> Tile {
-    // Two 3-pixel cells a tile, on black, with a dark gap: the classic segmented bar.
-    let mut t = Tile::default();
-    for y in 1..7 {
-        for x in 0..8 {
-            let cell = x / 4;
-            let inside = x % 4 != 3;
-            t.0[y][x] = if inside && cell < halves { colour } else if inside && (y == 1 || y == 6) { 3 } else { 0 };
-        }
-    }
-    t
-}
-
-fn icon(rows: &[&str]) -> Tile {
-    let mut t = Tile::default();
-    for (y, r) in rows.iter().enumerate() {
-        for (x, c) in r.chars().enumerate() {
-            t.0[y][x] = c.to_digit(10).unwrap_or(0) as u8;
-        }
-    }
-    t
-}
-
+/// The art, every bit of it from the PNG sheets in assets/sprites/ (embedded
+/// at build, so a broken sheet fails the build's tests), laid out as
+/// sheets.rs says. Each pixel becomes the nearest colour of its frame's
+/// palette: draw the sheets in those exact colours (transparent for clear).
 pub fn build() -> Art {
     let mut bg = PatternTable::default();
     let mut spr = PatternTable::default();
@@ -79,33 +87,37 @@ pub fn build() -> Art {
     for (ch, rows) in FONT {
         glyphs.insert(*ch, bg.add(glyph_tile(rows, 3, 0)));
     }
-    let mut escapes = HashMap::new();
-    for (i, ch) in ['a', 'b', 'c'].into_iter().enumerate() {
-        escapes.insert(ch, bg.add(bar_tile(i, 2)));
-    }
-    for (i, ch) in ['x', 'y', 'z'].into_iter().enumerate() {
-        escapes.insert(ch, bg.add(bar_tile(i, 1)));
-    }
-    escapes.insert('h', bg.add(icon(&["........", ".11.11..", "1311111.", "1111111.", ".11111..", "..111...", "...1....", "........"])));
-    escapes.insert('d', bg.add(icon(&["........", "........", ".......1", "......13", "33333333", "......13", ".......1", "........"])));
-    escapes.insert('e', bg.add(icon(&["........", "........", "........", "33331...", "333331..", "33331...", "........", "........"])));
-    escapes.insert('_', 0);
-    let mut metatiles = HashMap::new();
-    for (ch, pal, art) in METATILES {
-        let (w, h, tiles) = parse_art(art);
-        assert!(w == 2 && h == 2, "metatile {ch} is 16×16");
-        metatiles.insert(*ch, Metatile { tiles: [bg.add(tiles[0]), bg.add(tiles[1]), bg.add(tiles[2]), bg.add(tiles[3])], palette: *pal });
-    }
+    let load = |file: &str, bytes: &[u8]| nes_ppu::png::decode(bytes).unwrap_or_else(|e| panic!("assets/sprites/{file}: {e}"));
+    // Sprites: every frame of every sprite sheet.
     let mut sprites = HashMap::new();
-    for (name, pal, art) in SPRITES {
-        sprites.insert(*name, Metasprite::from_art(&mut spr, art, *pal));
+    for (file, bytes, frames) in SPRITE_SHEETS {
+        let sheet = load(file, bytes);
+        for f in frames.iter() {
+            assert!(f.x + f.w <= sheet.width && f.y + f.h <= sheet.height, "{file}: {} is outside the sheet", f.name);
+            let [_, c1, c2, c3] = SPRITE_PALETTES[f.palette as usize];
+            sprites.insert(f.name, Metasprite::from_art(&mut spr, &sheet.art(f.x, f.y, f.w, f.h, [c1, c2, c3]), f.palette));
+        }
     }
-    let sheet = nes_ppu::png::decode(HERO_SHEET).expect("assets/sprites/hero.png");
-    let [_, c1, c2, c3] = SPRITE_PALETTES[0];
-    for (i, name) in HERO_FRAMES.into_iter().enumerate() {
-        assert!(sheet.width >= (i + 1) * 16 && sheet.height >= 32, "hero.png needs {} frames of 16×32", HERO_FRAMES.len());
-        sprites.insert(name, Metasprite::from_art(&mut spr, &sheet.art(i * 16, 0, 16, 32, [c1, c2, c3]), 0));
+    // Background: 16×16 metatiles, each in its own palette.
+    let tiles = load("tiles.png", TILES_PNG);
+    let mut metatiles = HashMap::new();
+    for (i, (ch, pal)) in TILES.cells.iter().enumerate() {
+        let (x, y) = ((i % TILES.per_row) * TILES.size, (i / TILES.per_row) * TILES.size);
+        let (_, _, t) = parse_art(&tiles.bg_art(x, y, TILES.size, TILES.size, BG_PALETTES[*pal as usize]));
+        metatiles.insert(*ch, Metatile { tiles: [bg.add(t[0]), bg.add(t[1]), bg.add(t[2]), bg.add(t[3])], palette: *pal });
     }
+    // The HUD's tiles, by the escape the text uses for each.
+    let hud = load("hud.png", HUD_PNG);
+    let mut escapes = HashMap::new();
+    for (i, name) in HUD.iter().enumerate() {
+        let (_, _, t) = parse_art(&hud.bg_art(i * 8, 0, 8, 8, BG_PALETTES[HUD_PALETTE as usize]));
+        let ch = match *name {
+            "bar20" => 'a', "bar21" => 'b', "bar22" => 'c', "bar10" => 'x', "bar11" => 'y', "bar12" => 'z',
+            "heart" => 'h', "dagger0" => 'd', "dagger1" => 'e', other => panic!("hud.png: unknown tile {other}"),
+        };
+        escapes.insert(ch, bg.add(t[0]));
+    }
+    escapes.insert('_', 0);
     Art { bg, spr, metatiles, sprites, glyphs, escapes }
 }
 

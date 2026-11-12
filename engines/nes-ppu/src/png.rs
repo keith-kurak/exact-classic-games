@@ -210,4 +210,27 @@ impl Image {
         }
         out
     }
+
+    /// The region as background art: every pixel the nearest of a whole
+    /// background palette's four colours (`palette[0]`, the backdrop, as
+    /// `.`); transparent pixels are backdrop too.
+    pub fn bg_art(&self, x: usize, y: usize, w: usize, h: usize, palette: [u8; 4]) -> String {
+        let rgb = palette.map(|c| crate::NES_PALETTE[(c & 0x3F) as usize]);
+        let mut out = String::with_capacity((w + 1) * h);
+        for yy in y..y + h {
+            for xx in x..x + w {
+                let i = (yy * self.width + xx) * 4;
+                let p = self.rgba.get(i..i + 4).unwrap_or(&[0, 0, 0, 0]);
+                if p[3] < 128 {
+                    out.push('.');
+                    continue;
+                }
+                let d = |c: [u8; 3]| -> i32 { (0..3).map(|k| (p[k] as i32 - c[k] as i32).pow(2)).sum() };
+                let best = (0..4).min_by_key(|&k| d(rgb[k])).unwrap();
+                out.push(if best == 0 { '.' } else { (b'0' + best as u8) as char });
+            }
+            out.push('\n');
+        }
+        out
+    }
 }
