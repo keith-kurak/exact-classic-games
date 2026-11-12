@@ -289,8 +289,12 @@ pub struct Scene<'a> {
     pub scroll_x: i32,
     pub scroll_y: i32,
     pub sprites: &'a [Sprite],
-    /// The frame count: it rotates OAM so lines with too many sprites flicker.
+    /// The frame count: it moves the window of sprites a crowded line shows,
+    /// so lines with too many sprites flicker.
     pub frame: u64,
+    /// Sprites a scanline can show: `SPRITES_PER_LINE` (8) as on the NES, or
+    /// more to trade authenticity for less flicker; 0 means no limit.
+    pub sprites_per_line: usize,
 }
 
 /// A drawn frame: one 2C02 colour index a pixel.
@@ -315,6 +319,8 @@ pub fn render(scene: &Scene) -> Frame {
     // With more than 8 sprites on a line, start OAM evaluation further along
     // each frame, so every sprite gets drawn some of the time.
     let rotate = if oam.is_empty() { 0 } else { (scene.frame as usize * 3) % oam.len() };
+    let limit = if scene.sprites_per_line == 0 { usize::MAX } else { scene.sprites_per_line };
+    let mut on_line: Vec<&Sprite> = Vec::with_capacity(MAX_SPRITES);
     let mut line_sprites: Vec<&Sprite> = Vec::with_capacity(SPRITES_PER_LINE);
     let mut bg_opaque = [false; WIDTH];
     for y in 0..HEIGHT as i32 {
@@ -339,16 +345,20 @@ pub fn render(scene: &Scene) -> Frame {
                 scene.palettes.bg[(cell.palette & 3) as usize][c as usize]
             };
         }
-        // Sprite evaluation: the first 8 in (rotated) OAM order on this line.
+        // Sprite evaluation. Every sprite on this line, in OAM order; when
+        // there are more than the line holds, a window of them that moves
+        // each frame (so all of them show some of the time: flicker), still
+        // drawn in OAM order, so priority never changes between frames.
+        on_line.clear();
+        on_line.extend(oam.iter().filter(|s| y >= s.y && y < s.y + 8));
         line_sprites.clear();
-        for k in 0..oam.len() {
-            let s = &oam[(k + rotate) % oam.len()];
-            if y >= s.y && y < s.y + 8 {
-                if line_sprites.len() == SPRITES_PER_LINE {
-                    break;
-                }
-                line_sprites.push(s);
-            }
+        if on_line.len() <= limit {
+            line_sprites.extend(on_line.iter().copied());
+        } else {
+            let start = rotate % on_line.len();
+            let mut picked: Vec<usize> = (0..limit).map(|k| (start + k) % on_line.len()).collect();
+            picked.sort_unstable();
+            line_sprites.extend(picked.into_iter().map(|i| on_line[i]));
         }
         // Sprites, front to back: the first opaque pixel wins.
         for x in 0..WIDTH as i32 {
@@ -395,6 +405,33 @@ pub fn glyph_tile(rows: &[&str], ink: u8, paper: u8) -> Tile {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn overlapping_sprites_keep_their_priority_frame_to_frame() {
+        // Two sprites over each other on an uncrowded line: the first in OAM
+        // stays in front every frame.
+        let mut spr = PatternTable::default();
+        let a = spr.add(Tile([[1; 8]; 8]));
+        let b = spr.add(Tile([[2; 8]; 8]));
+        let sprites = [Sprite { x: 0, y: 0, tile: a, attr: 0 }, Sprite { x: 0, y: 0, tile: b, attr: 0 }];
+        let bg = PatternTable::default();
+        let pal = Palettes { bg: [[0x0F; 4]; 4], spr: [[0x0F, 0x16, 0x2A, 0x30]; 4] };
+        for frame in 0..6 {
+            let f = render(&Scene {
+                bg_table: &bg,
+                spr_table: &spr,
+                palettes: pal,
+                background: &|_, _| Cell::default(),
+                overlay: &|_, _| None,
+                scroll_x: 0,
+                scroll_y: 0,
+                sprites: &sprites,
+                frame,
+                sprites_per_line: SPRITES_PER_LINE,
+            });
+            assert_eq!(f.pixels[0], 0x16, "frame {frame}");
+        }
+    }
+
     #[test]
     fn png_round_trip_to_art() {
         // A 8×8 sheet in a sprite's three colours plus clear pixels.
@@ -452,6 +489,7 @@ mod tests {
             scroll_y: 0,
             sprites: &sprites,
             frame: 0,
+            sprites_per_line: SPRITES_PER_LINE,
         });
         let drawn = (0..9).filter(|i| frame.pixels[(i * 10) as usize] == 0x30).count();
         assert_eq!(drawn, 8);

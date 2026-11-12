@@ -19,7 +19,7 @@ use exact_gpu::json::{number, text};
 use exact_gpu::{Registry, SurfaceError, Value};
 use level::LEVEL;
 use nes_ppu::font::FONT;
-use nes_ppu::{glyph_tile, parse_art, render, Cell, Metasprite, Metatile, Palettes, PatternTable, Scene, Sprite, Tile};
+use nes_ppu::{glyph_tile, parse_art, render, Cell, Metasprite, Metatile, Palettes, PatternTable, Scene, Sprite, Tile, SPRITES_PER_LINE};
 use nes_screen::NesGame;
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -202,6 +202,7 @@ impl Game {
             scroll_y: 0,
             sprites: &sprites,
             frame,
+            sprites_per_line: SPRITES_PER_LINE,
         });
         out.to_rgba(rgba);
     }

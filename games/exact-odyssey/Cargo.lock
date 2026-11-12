@@ -1477,6 +1477,9 @@ dependencies = [
 [[package]]
 name = "nes-ppu"
 version = "0.1.0"
+dependencies = [
+ "miniz_oxide 0.8.9",
+]
 
 [[package]]
 name = "nes-screen"

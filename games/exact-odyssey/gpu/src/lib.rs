@@ -251,6 +251,7 @@ fn draw(spec: &Spec, frame: u64, rgba: &mut [u8]) {
         scroll_y: if spec.battle { 0 } else { spec.scroll_y },
         sprites: &sprites,
         frame,
+        sprites_per_line: nes_ppu::SPRITES_PER_LINE,
     });
     out.to_rgba(rgba);
 }
