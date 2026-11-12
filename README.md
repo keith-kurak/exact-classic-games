@@ -8,7 +8,7 @@ Each game has a README with screenshots, its controls, and how it's made.
 | --- | --- | --- |
 | **Exactbound** | A 16-bit-era RPG slice: walk Cheery Cheery Village, talk to the Order of the Placid Blue, and fight them in turn-based battles over a GPU aurora background. | [`games/exactbound`](games/exactbound/README.md) |
 | **Exact Gear Solid** | A late-90s stealth game: cross a dim storage room past four patrolling guards, with an overhead camera, a radar of their view cones, and a camera that drops beside you when you press your back to a wall. | [`games/exact-gear-solid`](games/exact-gear-solid/README.md) |
-| **Exact Gear Solid NES** | The same storage room on the NES engines: view cones lit on the floor from above, a ray-cast over-the-shoulder view when you press to a wall, and a slow, tense chiptune from the NES sound chip. | [`games/exact-gear-solid-nes`](games/exact-gear-solid-nes/README.md) |
+| **Exact Gear Solid NES** | The same storage room on the NES engines, in 3D from behind your shoulder: a ray-cast view cut into NES tiles each frame, a pixel-a-metre minimap of red dots, wall-pressing in profile, Dr. Vale on the radio, and a slow, tense chiptune from the NES sound chip. | [`games/exact-gear-solid-nes`](games/exact-gear-solid-nes/README.md) |
 | **Exact Odyssey** | An 8-bit console RPG on a real NES-style picture processor: 2C02 colours, 8×8 CHR tiles, attribute-limited backgrounds, 3-colour sprites. Walk Reedholm with Thunda, Tooth and Chocolat, then fight real-time ATB battles with stagger chains, juggling and party stances. | [`games/exact-odyssey`](games/exact-odyssey/README.md) |
 | **Exactsylvania** | A gothic action platformer on the shared NES engine, in the style of the 8-bit castle crawlers. Vesper Holt and her chain whip cross the Gatehouse: a moonlit courtyard of rising ghouls, the castle gate, an entrance hall of bats, knights, candles and stairs, and the Belfry, where a giant bat waits. | [`games/exactsylvania`](games/exactsylvania/README.md) |
 | **Links Exact86** | An early-90s PC golf game: hole 1, a dogleg-right par 4 laid out after Pebble Beach's first, ray-marched from a fixed camera behind the ball, with a three-press swing. | [`games/links-exact86`](games/links-exact86/README.md) |
@@ -67,7 +67,7 @@ bun run test              # every game
 bun run test:exactbound   # 8 tests
 bun run test:links        # 5 tests
 bun run test:gear         # 10 tests
-bun run test:gear-nes     # 6 tests
+bun run test:gear-nes     # 7 tests
 bun run test:odyssey      # 18 tests
 bun run test:exactsylvania # 7 tests
 bun run test:musicbox     # 3 tests
@@ -113,7 +113,7 @@ games/
   exacticom-musicbox/     app.contract, songs.contract (generated), gpu/ (music.rs, its NesGame), assets/ (rendered WAVs)
   exact-odyssey/    app.contract, field.contract, battle.contract, gpu/ (art.rs, its NesGame), tools/ (art generators)
   exactbound/       app.contract, world.contract, battle.contract, gpu/ (aurora shader), assets/ (audio, not in git)
-  exact-gear-solid-nes/ room.contract (the original's), app.contract, gpu/ (both views, music.rs), assets/ (rendered WAVs)
+  exact-gear-solid-nes/ room.contract (the original's), calls.contract, app.contract, gpu/ (the 3D view, minimap, radio, music.rs), assets/ (rendered WAVs)
   exact-gear-solid/ app.contract, room.contract, items.contract, gpu/ (room shader)
   links-exact86/    app.contract, course.contract, golfer.contract, gpu/ (course shader)
 ```

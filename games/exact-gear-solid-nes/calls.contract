@@ -1,0 +1,23 @@
+// The radio. The first time you light up, Dr. Vale calls on 142.37 to tell you
+// what smoking does, cut down from the original game's call to fit an NES
+// screen (three lines of 28 letters at most).
+
+shape Line
+  who: string
+  text: string
+
+fn freq(): string = "142.37"
+fn callLines(): Line[] = [
+  Line(who="VALE", text="Is that smoke on your vitals? In the middle of an infiltration?"),
+  Line(who="VALE", text="Carbon monoxide grips your blood 200 times tighter than oxygen."),
+  Line(who="VALE", text="Less oxygen just when your muscles need it. You'll tire fast."),
+  Line(who="VALE", text="Nicotine squeezes your vessels. Shaky hands, a pounding pulse."),
+  Line(who="VALE", text="Tar gums up the cilia that sweep your lungs. Hello, smoker's cough."),
+  Line(who="VALE", text="And dozens of carcinogens. They damage the DNA in your lungs."),
+  Line(who="YOU", text="Relax, Doc. It helps me think."),
+  Line(who="VALE", text="Then think about this: one cough in there and it's over. Put it out... please?"),
+  Line(who="YOU", text="...Noted.")
+]
+fn lineAt(i: number): Line = match callLines().at(i) { case some(l) => l, case none => Line(who="", text="") }
+// The items Q cycles through.
+fn itemLabel(i: number): string = (i == 1 ? "CIGS" : (i == 2 ? "C.BOX" : "NONE"))

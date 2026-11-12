@@ -1,47 +1,89 @@
-test "the mission starts at the south-west corner, from above, with the music"
+test "the mission starts at the south-west corner, behind you, with the music"
   expect tree has "screen"
   expect state px == 1.5
   expect state py == 18.5
-  expect state view == 0
+  expect state view == 1
+  expect state camSpec == ""
   expect state phase == "play"
   expect tree has "music"
 
-test "holding up walks north, and letting go stops"
+test "Up walks forward, Right turns"
   type "root" key "ArrowUp" down
   clock +1000
   type "root" key "ArrowUp" up
   clock +100
   expect state moving == false
   expect state px == 1.5
+  type "root" key "ArrowRight" down
+  clock +750
+  type "root" key "ArrowRight" up
+  expect state fy == 0
+  expect state fx == 1
 
-test "pushing into a wall cuts to over the shoulder, and stepping away cuts back"
+test "walking into a container presses your back to it; stepping off leaves it"
   type "root" key "ArrowUp" down
   clock +1000
   type "root" key "ArrowUp" up
   type "root" key "ArrowRight" down
-  clock +1200
+  clock +750
   type "root" key "ArrowRight" up
+  type "root" key "ArrowUp" down
+  clock +1200
+  type "root" key "ArrowUp" up
   expect state pressed == true
-  expect state view == 1
+  expect state nx == -1
   type "root" key "ArrowLeft" down
   clock +200
   type "root" key "ArrowLeft" up
   expect state pressed == false
-  expect state view == 0
 
 test "sliding past the end of a container leans round its corner"
   type "root" key "ArrowUp" down
   clock +1000
   type "root" key "ArrowUp" up
   type "root" key "ArrowRight" down
-  clock +1200
+  clock +750
   type "root" key "ArrowRight" up
+  type "root" key "ArrowUp" down
+  clock +1200
+  type "root" key "ArrowUp" up
   type "root" key "ArrowUp" down
   clock +2000
   expect state peek == true
   type "root" key "ArrowUp" up
 
-test "Q gets into the box, with a rustle, and out again"
+test "the first cigarette brings Dr. Vale's call; afterward you smoke"
+  type "root" key "q"
+  expect state item == 1
+  expect state ring == true
+  expect sound has "assets/sfx/call.wav"
+  clock +1500
+  expect state view == 2
+  expect state callAt == 0
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  expect state callAt == -1
+  expect state smoking == true
+  expect state view == 1
+
+test "Q again gets into the box, with a rustle, and once more out"
+  type "root" key "q"
   type "root" key "q"
   expect state boxed == true
   expect sound has "assets/sfx/box.wav"

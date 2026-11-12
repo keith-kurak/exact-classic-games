@@ -116,5 +116,16 @@ pub fn effects() -> Vec<Effect> {
     }
     w.push((80, 0x4008, 0x80));
     out.push(Effect { file: "clear", frames: 90, writes: w });
+    // The radio ringing: a two-tone chirp on a thin pulse, three times.
+    let mut w = vec![(0, 0x4001, 0x08)];
+    for ring in 0..3u32 {
+        for (i, n) in [88, 91, 88, 91].into_iter().enumerate() {
+            let f = ring * 26 + i as u32 * 3;
+            w.push((f, 0x4000, 0x3A));
+            pulse_note(&mut w, f, false, n, 1);
+        }
+        w.push((ring * 26 + 12, 0x4000, 0x30));
+    }
+    out.push(Effect { file: "call", frames: 80, writes: w });
     out
 }

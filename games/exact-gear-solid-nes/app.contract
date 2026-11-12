@@ -1,17 +1,23 @@
 // Exact Gear Solid NES: the storage room again, on the NES engines. Cross to
-// the exit without being seen. From above, each guard's view cone is lit on
-// the floor. Push into a wall and you press your back to it: the view cuts to
-// over your shoulder, looking along the wall, and at its end you can lean
-// round the corner. Q gets you into the cardboard box (a guard notices only a
-// box that moves while it watches). The rules are the original game's
+// the exit without being seen. The camera rides behind you (Up and Down walk,
+// Left and Right turn); a minimap in the corner shows the guards as red dots.
+// Walk into a wall and you press your back to it: the view cuts to look along
+// it, and at its end you can lean round the corner. Q cycles your items: the cigarettes (light up and Dr.
+// Vale calls about it) and the cardboard box (a guard notices only a box that
+// moves while it watches). The rules are the original game's
 // (room.contract); gpu/ draws both views through the NES picture processor,
 // and the music and sounds were made by the NES sound chip (gpu/src/music.rs).
 use Spot, Guard, roomW, roomD, radius, sq, mag, sgn, nth, solid, atExit, guard, advI, advT, advW, sees from "./room.contract"
+use Line, freq, callLines, lineAt, itemLabel from "./calls.contract"
 
 sound "assets/sfx/alert.wav"
 sound "assets/sfx/box.wav"
 sound "assets/sfx/clear.wav"
+sound "assets/sfx/call.wav"
 
+// Turning: radians a tick (about 4°), and how much slower walking back is.
+fn turnRate(): number = 0.07
+fn backPace(): number = 0.6
 fn dirX(k: string): number = (k == "ArrowLeft" or k == "a" ? -1 : (k == "ArrowRight" or k == "d" ? 1 : 0))
 fn dirY(k: string): number = (k == "ArrowUp" or k == "w" ? -1 : (k == "ArrowDown" or k == "s" ? 1 : 0))
 fn isMove(k: string): bool = dirX(k) != 0 or dirY(k) != 0
@@ -28,8 +34,11 @@ fn guardSpec(g: Guard, state: number): string = `${n2(g.x)},${n2(g.y)},${n2(g.fx
 component ExactGearSolidNes
   state px = 1.5
   state py = 18.5
+  // Facing: an angle (0 north, clockwise), and its direction.
+  state angle = 0
   state fx = 0
   state fy = -1
+  // The keys held: hx turns (or, on a wall, steps off it), hy walks.
   state hx = 0
   state hy = 0
   state moving = false
@@ -51,7 +60,19 @@ component ExactGearSolidNes
   // "play" → "caught" or "clear".
   state phase = "play"
   state ticks = 0
-  state boxed = false
+  // Items: 0 none, 1 cigarettes, 2 the box. The radio: ringing, then the
+  // call's line (-1: no call) and how much of it is typed.
+  state item = 0
+  state smoked = false
+  state ring = false
+  state callAt = -1
+  state typed = 0
+  derive boxed = item == 2
+  derive inCall = callAt >= 0
+  derive line = lineAt(callAt)
+  // From "Then think about this..." on, Dr. Vale smiles.
+  derive smiling = callAt >= callLines().length - 2
+  derive smoking = item == 1 and smoked and not ring and not inCall
 
   derive g0 = guard(0, nth(si, 0), nth(st, 0), nth(sw, 0))
   derive g1 = guard(1, nth(si, 1), nth(st, 1), nth(sw, 1))
@@ -60,7 +81,8 @@ component ExactGearSolidNes
   derive guards = [g0, g1, g2, g3]
 
   // ── One frame: the guards walk, the player moves, the guards look ──
-  task frame when phase == "play"
+  // The game holds still while the radio is on.
+  task frame when phase == "play" and not inCall
     every(33, tick)
 
   action tick
@@ -81,7 +103,11 @@ component ExactGearSolidNes
     if pressed
       slide()
     else
-      walk()
+      // Tank controls: turn, then walk along the facing.
+      let a = angle + hx * turnRate()
+      let pace = hy < 0 ? 1 : (hy > 0 ? 0 - backPace() : 0)
+      angle = a
+      walk(sin(a) * pace, 0 - cos(a) * pace, hy != 0, a)
     // In the box, a guard notices you only if you move while it watches.
     let still = boxed and hx == 0 and hy == 0
     // Leaning round a corner only your head is past it: the guards look at a
@@ -102,44 +128,53 @@ component ExactGearSolidNes
       phase = "clear"
       playSound("assets/sfx/clear.wav")
 
-  action walk
-    // The box is slow going.
-    let diag = (hx != 0 and hy != 0 ? 0.707 : 1) * (boxed ? 0.55 : 1)
-    let tx = px + hx * step() * diag
+  // Walking by (mx, my) a tick, each axis on its own, so you slide along what
+  // you brush. The box is slow going.
+  action walk(mx: number, my: number, going: bool, a: number)
+    let slow = boxed ? 0.55 : 1
+    let tx = px + mx * step() * slow
     let okx = not solid(tx, py, radius())
     let nxp = okx ? tx : px
-    let ty = py + hy * step() * diag
+    let ty = py + my * step() * slow
     let oky = not solid(nxp, ty, radius())
     let nyp = oky ? ty : py
     px = nxp
     py = nyp
-    moving = hx != 0 or hy != 0
-    if hx != 0 or hy != 0
-      fx = hx * (hx != 0 and hy != 0 ? 0.707 : 1)
-      fy = hy * (hx != 0 and hy != 0 ? 0.707 : 1)
-    // Pushing straight into a wall for a quarter second presses your back to it.
-    let into = (hx != 0 and hy == 0 and not okx) or (hy != 0 and hx == 0 and not oky)
+    moving = going
+    fx = sin(a)
+    fy = 0 - cos(a)
+    // Walking forward square into a wall for a quarter second presses your
+    // back to it: the axis you face most is the wall's.
+    let ax = mag(mx) > 0.9 ? sgn(mx) : 0
+    let ay = mag(my) > 0.9 ? sgn(my) : 0
+    let into = hy < 0 and ((ax != 0 and not okx) or (ay != 0 and not oky))
     let p = into ? push + 1 : 0
     push = p
     if p >= 8 and not boxed
       pressed = true
-      nx = 0 - hx
-      ny = 0 - hy
-      lx = hy != 0 ? 1 : 0
-      ly = hx != 0 ? -1 : 0
-      fx = 0 - hx
-      fy = 0 - hy
+      nx = 0 - ax
+      ny = 0 - ay
+      lx = ay != 0 ? 1 : 0
+      ly = ax != 0 ? -1 : 0
       moving = false
 
   // Along the wall, the player slides; at its end they stop at the corner and
   // can look round it. Moving away from the wall steps off it.
+  // On a wall, keys go by the camera looking along it: Up and Down slide
+  // along the wall, and the side key away from it steps off.
   action slide
-    let away = hx * nx + hy * ny > 0
-    let along = hx * ny - hy * nx
+    let wx = (hy < 0 ? lx : (hy > 0 ? 0 - lx : 0)) + hx * (0 - ly)
+    let wy = (hy < 0 ? ly : (hy > 0 ? 0 - ly : 0)) + hx * lx
+    let away = wx * nx + wy * ny > 0
+    let along = wx * ny - wy * nx
     if away
       pressed = false
       peek = false
       push = 0
+      // Off the wall, facing away from it.
+      angle = (nx > 0 ? 1.5708 : (nx < 0 ? -1.5708 : (ny > 0 ? 3.14159 : 0)))
+      fx = nx
+      fy = ny
     else
       if along != 0
         let dx = along * ny
@@ -160,14 +195,48 @@ component ExactGearSolidNes
         moving = false
         peek = false
 
-  action toggleBox
-    if not pressed
-      boxed = not boxed
+  // Q: the next item. The box takes you off the wall; the first cigarette
+  // brings a call.
+  action nextItem
+    let was = item
+    let next = (was + 1) % 3
+    item = next
+    if next == 2 or was == 2
       playSound("assets/sfx/box.wav")
+    if next == 2
+      pressed = false
+      peek = false
+    if next == 1 and not smoked
+      smoked = true
+      ring = true
+      playSound("assets/sfx/call.wav")
+
+  task ringing when ring
+    after(1400, answer)
+  action answer
+    ring = false
+    hx = 0
+    hy = 0
+    callAt = 0
+    typed = 0
+
+  task typewriter when inCall and typed < line.text.length
+    every(30, typeOn)
+  action typeOn
+    typed = min(line.text.length, typed + 2)
+
+  action advance
+    if typed < line.text.length
+      typed = line.text.length
+    else
+      let next = callAt + 1
+      typed = 0
+      callAt = next < callLines().length ? next : -1
 
   action restart
     px = 1.5
     py = 18.5
+    angle = 0
     fx = 0
     fy = -1
     hx = 0
@@ -183,27 +252,39 @@ component ExactGearSolidNes
     seenBy = -1
     seeing = []
     ticks = 0
-    boxed = false
+    item = 0
+    smoked = false
+    ring = false
+    callAt = -1
+    typed = 0
     phase = "play"
 
   // ── What the picture processor is told ──
-  // The view: 0 from above, 1 over the shoulder.
-  derive view = pressed and phase == "play" ? 1 : 0
-  derive playerSpec = `${n2(px)},${n2(py)},${n2(fx)},${n2(fy)},${moving ? 1 : 0},${boxed ? 1 : 0},${floor(ticks / 6) % 2}`
-  // Over the shoulder: the camera beside you and out from the wall, looking
-  // along it; leaning out, it swings past the corner to look round it.
-  derive camSpec = (peek
+  // The view: 1 the 3D view (behind you, or along the wall), 2 the radio.
+  derive view = inCall ? 2 : 1
+  // On a wall the picture is told which way is away from it (you face that way, back to the wall).
+  derive playerSpec = `${n2(px)},${n2(py)},${n2(pressed ? nx : fx)},${n2(pressed ? ny : fy)},${moving ? 1 : 0},${boxed ? 1 : 0},${floor(ticks / 6) % 2},${smoking ? 1 : 0}`
+  // On a wall: the camera beside you and out from the wall, looking along
+  // it; leaning out, it swings past the corner to look round it. Otherwise
+  // "" and the picture follows behind you.
+  derive camSpec = (not pressed ? "" : peek
     ? `${n2(px + lx * 0.9 + nx * 2.0)},${n2(py + ly * 0.9 + ny * 2.0)},${n2(px + lx * 1.4 - nx * 5)},${n2(py + ly * 1.4 - ny * 5)}`
     : `${n2(px + nx * 0.95 - lx * 2.1)},${n2(py + ny * 0.95 - ly * 2.1)},${n2(px + lx * 5 + nx * 0.7)},${n2(py + ly * 5 + ny * 0.7)}`)
   derive guardsSpec = [0, 1, 2, 3].map(k => guardSpec(match guards.at(k) { case some(g) => g, case none => g0 },
     (phase == "caught" and seenBy == k ? 2 : (seeing.filter(s => s == k).length > 0 ? 1 : 0)))).join(";")
-  derive status = (phase == "caught" ? "{!! ALERT !!}" : (phase == "clear" ? "COMPLETE" : (spot > 0 ? "{CAUTION}" : "INFILTRATION")))
+  derive status = (phase == "caught" ? "{!! ALERT !!}" : (phase == "clear" ? "COMPLETE"
+    : (ring ? (ticks % 10 < 5 ? "{CALL}" : "") : (spot > 0 ? "{CAUTION}" : "INFILTRATION"))))
   derive hint = (phase == "caught" ? "SPOTTED. SPACE TO RETRY"
     : (phase == "clear" ? "MISSION COMPLETE. SPACE"
+    : (inCall ? "SPACE: NEXT"
+    : (ring ? "INCOMING CALL..."
     : (peek ? "ROUND THE CORNER"
     : (pressed ? "ALONG THE WALL. STEP AWAY"
-    : (boxed ? "IN THE BOX. KEEP STILL" : "PUSH INTO WALLS. Q BOX")))))
-  derive hud = ([`1,1|STORAGE ROOM B`, `20,1|TIME ${clock(ticks)}`, `1,2|ITEM ${boxed ? "C.BOX" : "NONE"}`, `18,2|${status}`, `1,28|${hint}`]
+    : (boxed ? "IN THE BOX. KEEP STILL" : (smoking ? "A SMOKE. Q: NEXT ITEM" : "WALK INTO WALLS. Q ITEM"))))))))
+  // On the radio, the picture lays out the call: who speaks, whether Dr. Vale
+  // smiles, and the words typed so far.
+  derive callSpec = inCall ? [`@call|${line.who}|${smiling ? 1 : 0}|${freq()}|${line.text.slice(0, typed)}`] : []
+  derive hud = ([`1,1|STORAGE ROOM B`, `16,1|TIME ${clock(ticks)}`, `1,2|ITEM ${itemLabel(item)}`, `13,2|${status}`, `1,28|${hint}`].concat(callSpec)
     .join("^"))
 
   // ── Keys ──
@@ -211,12 +292,16 @@ component ExactGearSolidNes
     if isMove(k) or isGo(k) or isBox(k)
       preventDefault()
     if phase == "play"
-      if isBox(k)
-        toggleBox()
-      if dirX(k) != 0
-        hx = dirX(k)
-      if dirY(k) != 0
-        hy = dirY(k)
+      if inCall
+        if isGo(k)
+          advance()
+      else
+        if isBox(k)
+          nextItem()
+        if dirX(k) != 0
+          hx = dirX(k)
+        if dirY(k) != 0
+          hy = dirY(k)
     else
       if isGo(k)
         restart()
@@ -224,6 +309,13 @@ component ExactGearSolidNes
   action onKeyUp(k: string)
     if dirX(k) != 0 and dirX(k) == hx
       hx = 0
+      // Letting go of a turn settles you on the nearest eighth of a circle,
+      // square to the aisles.
+      if not pressed
+        let snapped = round(angle / 0.785398) * 0.785398
+        angle = snapped
+        fx = round(sin(snapped) * 1000) / 1000
+        fy = round(0 - cos(snapped) * 1000) / 1000
     if dirY(k) != 0 and dirY(k) == hy
       hy = 0
 
