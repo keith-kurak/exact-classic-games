@@ -351,3 +351,362 @@ test "a stance shift mid-attack cancels the party's commands"
   expect state play == ""
   expect state atb.0 == 0
   expect state plan.length == 0
+
+test "the Gloamwarden waits in the thicket; speaking to it starts the boss fight"
+  type "root" key "ArrowRight" for 5300
+  clock +1100
+  type "root" key "ArrowLeft"
+  type "root" key "ArrowDown"
+  type "root" key "ArrowDown"
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  clock +1500
+  expect state scene == "field"
+  expect state tx == 28
+  type "root" key "ArrowLeft" for 200
+  clock +400
+  expect state tx == 27
+  type "root" key "ArrowUp" for 100
+  clock +200
+  expect state ty == 7
+  expect state dir == "up"
+  type "root" key " "
+  expect state talkTo == 9
+  type "root" key " "
+  expect state foes.0 == "Warden"
+  clock +1500
+  expect state phase == "fight"
+  expect state foeHp.0 == 3000
+
+test "Auto in Balance can beat the Gloamwarden, and it is gone from the wood"
+  type "root" key "ArrowRight" for 5300
+  clock +1100
+  type "root" key "ArrowLeft"
+  type "root" key "ArrowDown"
+  type "root" key "ArrowDown"
+  type "root" key " "
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  clock +1500
+  expect state scene == "field"
+  expect state tx == 28
+  type "root" key "ArrowLeft" for 200
+  clock +400
+  expect state tx == 27
+  type "root" key "ArrowUp" for 100
+  clock +200
+  expect state ty == 7
+  expect state dir == "up"
+  type "root" key " "
+  expect state talkTo == 9
+  type "root" key " "
+  expect state foes.0 == "Warden"
+  clock +1500
+  expect state phase == "fight"
+  expect state foeHp.0 == 3000
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  type "root" key " "
+  type "root" key " "
+  clock +2750
+  expect state bossDown == true
+  expect state wins == 2
+  expect state scene == "field"

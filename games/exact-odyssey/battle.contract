@@ -22,13 +22,27 @@ shape Foe
 
 fn drone(): Foe = Foe(name="Drone", hp=600, atk=24, breakAt=180, speed=0.4, par=300)
 fn hound(): Foe = Foe(name="Hound", hp=420, atk=30, breakAt=150, speed=0.5, par=225)
-fn foeOf(name: string): Foe = (name == "Drone" ? drone() : hound())
+// The Gloamwarden, the forest's boss: one huge enemy, too big to launch, and
+// every third turn it sweeps the whole party with Gloom Tide.
+fn warden(): Foe = Foe(name="Warden", hp=3000, atk=42, breakAt=240, speed=0.5, par=1300)
+fn foeOf(name: string): Foe = (name == "Drone" ? drone() : (name == "Warden" ? warden() : hound()))
+fn isBoss(name: string): bool = name == "Warden"
+fn artName(name: string): string = (name == "Drone" ? "drone" : (name == "Warden" ? "warden" : "hound"))
+fn tideEvery(): number = 3
+fn tideHit(atk: number): number = floor(atk * 0.7)
 // Enemy groups, and where each enemy stands, in tiles (even, for attributes).
 fn group(k: number): string[] = (k == 0 ? ["Drone"] : (k == 1 ? ["Hound", "Hound"] : ["Drone", "Hound"]))
 // Enemies are 64×64 (8×8 tiles); two stand side by side, one stands centred.
 fn foeTx(i: number, count: number): number = (count == 1 ? 6 : (i == 0 ? 2 : 12))
 fn foeTy(i: number): number = 7
 fn labelRow(): number = 15
+// Where an enemy stands and how big it is, the boss apart: tiles, then pixels.
+fn foeX(i: number, count: number, boss: bool): number = (boss ? 1 : foeTx(i, count))
+fn foeY(boss: bool): number = (boss ? 4 : foeTy(0))
+fn foeW(boss: bool): number = (boss ? 112 : 64)
+fn foeH(boss: bool): number = (boss ? 88 : 64)
+fn barRow(boss: bool): number = (boss ? 15 : labelRow())
+fn barTiles(boss: bool): number = (boss ? 12 : 6)
 // The label under an enemy: its stagger bar (5 tiles) and chain. Staggered,
 // the bar shows the stagger draining and the chain turns yellow.
 fn staggerText(chain: number, brk: number, breakAt: number): string = (brk > 0
@@ -78,7 +92,7 @@ fn juggleTicks(): number = 30
 // The stagger panel, top left, for the enemy last targeted: name and chain,
 // and a long bar: progress to the stagger point, or the stagger wearing off.
 fn panelName(name: string, chain: number, brk: number): string =
-  (brk > 0 ? `{${padTo(name, 6)}${floor(chain)}%}` : `${padTo(name, 6)}${floor(chain)}%`)
+  (brk > 0 ? `{${padTo(name, 7)}${floor(chain)}%}` : `${padTo(name, 7)}${floor(chain)}%`)
 fn panelBar(chain: number, brk: number, breakAt: number): string =
   (brk > 0 ? gauge(brk / staggerTicks() * 80, 10) : gauge((chain - 100) / (breakAt - 100) * 80, 10))
 

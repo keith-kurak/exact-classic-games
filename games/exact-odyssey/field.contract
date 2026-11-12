@@ -42,6 +42,11 @@ fn npcs(): Npc[] = [
   Npc(x=13, y=5, lines=["The rift east of here has", "opened again. Machines and", "beasts pour out of it.", "Mind the thicket, Thunda."]),
   Npc(x=19, y=8, lines=["Past the bridge, thicket.", "When a fight turns, press", "left and change stance.", "Break them, then hit hard."])
 ]
+// The Gloamwarden waits deep in the thicket; speak to it to fight.
+fn bossX(): number = 27
+fn bossY(): number = 6
+fn bossAt(x: number, y: number): bool = x == bossX() and y == bossY()
+fn bossLines(): string[] = ["...You walk my wood, little", "lights. The rift fed me,", "and I am hungry still.", "Come. Be still with me."]
 fn npcIs(i: number, x: number, y: number): bool = match npcs().at(i) { case some(n) => n.x == x and n.y == y, case none => false }
 fn npcAt(x: number, y: number): number = (npcIs(0, x, y) ? 0 : (npcIs(1, x, y) ? 1 : -1))
 fn blocked(x: number, y: number): bool = not walkable(tileAt(x, y)) or npcAt(x, y) >= 0

@@ -24,10 +24,13 @@ MAT = {
     'teal': ('t0', 't2', 't2'),
     'red': ('g0', 'r', 'r'),
     'white': ('v1', 'w', 'w'),
+    'vine': ('t0', 't1', 't2'),
 }
 
 
-def canvas():
+def canvas(w=64, h=64):
+    global W, H
+    W, H = w, h
     return [[None] * W for _ in range(H)]
 
 
@@ -124,9 +127,9 @@ def finish(cv, name):
     # One palette per 16x16 block: the one covering the most pixels.
     pals = []
     rows = [['.'] * W for _ in range(H)]
-    for by in range(8):
+    for by in range(H // 8):
         prow = []
-        for bx in range(8):
+        for bx in range(W // 8):
             count = {0: 0, 1: 0, 3: 0}
             for y in range(by * 8, by * 8 + 8):
                 for x in range(bx * 8, bx * 8 + 8):
@@ -144,7 +147,7 @@ def finish(cv, name):
                     rows[y][x] = str(ci if cp == p else nearest(c, p))
         pals.append(''.join(map(str, prow)))
     out = f'const {name}: &str = "\n' + '\n'.join(''.join(r) for r in rows) + '";\n'
-    out += f'const {name}_PAL: [&str; 8] = [{", ".join(chr(34) + p + chr(34) for p in pals)}];\n'
+    out += f'const {name}_PAL: [&str; {H // 8}] = [{", ".join(chr(34) + p + chr(34) for p in pals)}];\n'
     return out
 
 
@@ -210,4 +213,72 @@ def drone():
     return finish(cv, 'DRONE')
 
 
-open(sys.argv[1], 'w').write(hound() + '\n' + drone())
+# ── The Gloamwarden, the forest's boss, 112×88: a towering spirit of violet
+# mist trailing wisps, a bone mask crowned with antlers and lit by red eyes,
+# and mossy vine arms reaching for the party. ──
+def warden():
+    cv = canvas(112, 88)
+    # Mist: a mass of tapering strands streaming back from the shoulders,
+    # each painted over the last so its dark rim parts it from its neighbour.
+    strands = [(70, 40, 8, 6, 9), (68, 46, 2, 30, 9), (66, 52, 4, 54, 9), (64, 58, 6, 76, 8),
+               (62, 64, 18, 87, 8), (64, 70, 40, 88, 7), (68, 72, 62, 88, 6), (72, 36, 30, 2, 7),
+               (70, 44, 14, 18, 8), (66, 56, 0, 66, 7), (64, 62, 26, 80, 7), (70, 66, 52, 86, 6)]
+    for sx, sy, ex, ey, r in strands:
+        mx, my = (sx + ex) / 2 + (ey - sy) * 0.12, (sy + ey) / 2 - (ex - sx) * 0.12
+        paint(cv, limb(sx, sy, mx, my, r, r * 0.7), 'purple')
+        paint(cv, limb(mx, my, ex, ey, r * 0.7, 0.8), 'purple')
+    paint(cv, ellipse(68, 50, 14, 16, -0.2), 'purple')
+    # Vines hanging from beneath the mist.
+    for x in (56, 66, 76):
+        paint(cv, limb(x, 76, x - 3, 87, 2, 0.8), 'vine')
+    # Arms: thick vines reaching right, ending in root claws.
+    for (sx, sy, hx, hy, r) in ((74, 60, 96, 62, 5), (70, 70, 92, 78, 4)):
+        paint(cv, limb(sx, sy, hx, hy, r, r * 0.6), 'vine')
+        for fx, fy in ((hx + 12, hy - 7), (hx + 13, hy + 1), (hx + 9, hy + 9)):
+            paint(cv, limb(hx, hy, min(111, fx), min(87, fy), 2.2, 0.7), 'vine')
+    # Antlers, then the mask: a long bone face with a jaw.
+    for x1, y1, x2, y2 in ((80, 22, 70, 4), (74, 12, 62, 9), (72, 8, 76, 0), (88, 20, 97, 3),
+                           (94, 10, 106, 8), (96, 6, 93, 0), (102, 9, 108, 3)):
+        paint(cv, limb(x1, y1, x2, y2, 2.2, 1), 'grey')
+    paint(cv, ellipse(85, 32, 11, 14, -0.25), 'grey')
+    paint(cv, poly([(84, 40), (99, 45), (94, 53), (82, 49)]), 'grey')
+    # Sockets, red eyes, a mouth slit, cheek marks.
+    for (x, y) in ellipse(88, 30, 3.5, 2.5) | ellipse(80, 29, 2.5, 2.2):
+        cv[y][x] = None
+    dot(cv, [(88, 30), (89, 30), (89, 31), (80, 29)], 'r')
+    for x in range(86, 97):
+        cv[47][x] = None
+    dot(cv, [(84, 36), (85, 37), (86, 38), (90, 37), (91, 38)], 'r')
+    return finish(cv, 'WARDEN')
+
+
+# ── The Gloamwarden on the field: 32×32, one sprite palette (dark red,
+# coral, white): a hooded spirit with a white antlered mask. ──
+def warden_field():
+    out = []
+    for lift in (0, 1):
+        cv = canvas(32, 32)
+        paint(cv, poly([(14, 8), (24, 12), (28, 31), (4, 31), (6, 14)]), 'purple')
+        paint(cv, limb(8, 18, 2, 28, 2.5, 1), 'purple')
+        paint(cv, limb(24, 18, 30, 27, 2.5, 1), 'purple')
+        for x1, y1, x2, y2 in ((12, 6, 8, 0), (10, 3, 6, 2), (19, 6, 23, 0), (21, 3, 25, 2)):
+            paint(cv, limb(x1, y1, x2, y2, 1.2, 0.8), 'grey')
+        face = ellipse(15.5, 10, 5, 6)
+        for (x, y) in face:
+            edge = any((x + a, y + b) not in face for a, b in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+            cv[y][x] = 'g0' if edge else 'g1'
+        for (x, y) in ellipse(13.5, 10, 1.4, 1) | ellipse(17.5, 10, 1.4, 1):
+            cv[y][x] = None
+        rows = []
+        for y in range(32):
+            sy = y + lift
+            row = ''
+            for x in range(32):
+                c = cv[sy][x] if sy < 32 else None
+                row += '.' if c is None else {'v0': '1', 'v1': '1', 'w': '2', 'g0': '1', 'g1': '3'}[c]
+            rows.append(row)
+        out.append(f'const WARDEN_FIELD_{lift}: &str = "\n' + '\n'.join(rows) + '";\n')
+    return ''.join(out)
+
+
+open(sys.argv[1], 'w').write(hound() + '\n' + drone() + '\n' + warden() + '\n' + warden_field())

@@ -126,6 +126,10 @@ beneath it. A win shows your time and a 1–5 star rank (five stars finds a Poti
 strikes victory poses, and the party
 is healed in full after every fight.
 
+Deep in the thicket east of the bridge waits the **Gloamwarden**, the forest's boss: walk up to
+it and talk to it to start the fight. It is one huge enemy (too big to launch), and every third
+turn it sweeps the whole party with Gloom Tide. Beaten, it is gone from the wood.
+
 The picture comes from [`engines/nes-ppu`](engines/nes-ppu). To write the game's pattern tables
 as PNG sprite sheets and two sample frames to `games/exact-odyssey/assets/sheets/`:
 

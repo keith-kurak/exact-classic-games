@@ -2,8 +2,8 @@
 // surface in gpu/, on the nes-ppu engine in engines/). This file is the game:
 // it walks the field, starts fights, runs the battle, and tells the surface
 // what is on screen as small text specs (see gpu/src/lib.rs).
-use Npc, fieldMap, tileAt, walkable, thicket, npcs, npcAt, blocked, dx, dy, camAxis, nextRng from "./field.contract"
-use Foe, foeOf, group, foeTx, foeTy, labelRow, juggleTicks, spellExtend, panelName, panelBar, potionHeal, startPotions, startRevives, fallen, raiseHp, segBlock, shiftTicks, bannerX, parOf, nameOf, maxHp, atkOf, speedOf, full, stances, stanceName, roleOf, abilityOf, needsTarget, isStrike, power, chainGain, hitFor, chainUp, maxChain, drain, staggerTicks, rolePlan, segments, segment, announce, slotText, lowest, stars, starLine, clockOf, nth, word, put, pad3, padTo, gauge from "./battle.contract"
+use Npc, fieldMap, tileAt, walkable, thicket, npcs, npcAt, blocked, bossX, bossY, bossAt, bossLines, dx, dy, camAxis, nextRng from "./field.contract"
+use Foe, foeOf, group, foeTx, foeTy, labelRow, isBoss, artName, tideEvery, tideHit, foeX, foeY, foeW, foeH, barRow, barTiles, juggleTicks, spellExtend, panelName, panelBar, potionHeal, startPotions, startRevives, fallen, raiseHp, segBlock, shiftTicks, bannerX, parOf, nameOf, maxHp, atkOf, speedOf, full, stances, stanceName, roleOf, abilityOf, needsTarget, isStrike, power, chainGain, hitFor, chainUp, maxChain, drain, staggerTicks, rolePlan, segments, segment, announce, slotText, lowest, stars, starLine, clockOf, nth, word, put, pad3, padTo, gauge from "./battle.contract"
 
 fn keyDir(k: string): string = (k == "ArrowUp" or k == "w" ? "up" : (k == "ArrowDown" or k == "s" ? "down"
   : (k == "ArrowLeft" or k == "a" ? "left" : (k == "ArrowRight" or k == "d" ? "right" : ""))))
@@ -96,6 +96,9 @@ component ExactOdyssey
   state revives = 1
   state itemCursor = 0
   state found = false
+  // The Gloamwarden: beaten yet, and how many turns it has taken this fight.
+  state bossDown = false
+  state foeTurns = 0
   // The stance-shift banner, counting down while it crosses the screen.
   state shiftT = 0
 
@@ -108,10 +111,12 @@ component ExactOdyssey
   // ending `*` in place from its frame counter.
   derive heroName = `${dir == "right" ? "left" : dir}*`
   derive talking = talkTo >= 0
-  derive talkLines = match npcs().at(talkTo) { case some(n) => n.lines, case none => [] }
+  // talkTo 9 is the Gloamwarden.
+  derive talkLines = talkTo == 9 ? bossLines() : match npcs().at(talkTo) { case some(n) => n.lines, case none => [] }
+  derive bossSprite = (not bossDown and (not talking or bossY() * 16 - camY < 136) ? [`warden*:${bossX() * 16 - 8 - camX}:${bossY() * 16 - 16 - camY}:`] : [])
   // While a window is open, sprites low on the screen would cover it.
   derive fieldSprites = ((not talking or py - camY < 136 ? [`${heroName}:${px - camX}:${py - camY}:${dir == "right" ? "h" : ""}`] : [])
-    .concat(npcs().filter(n => not talking or n.y * 16 - camY < 136).map(n => `villager*:${n.x * 16 - camX}:${n.y * 16 - camY}:`)))
+    .concat(npcs().filter(n => not talking or n.y * 16 - camY < 136).map(n => `villager*:${n.x * 16 - camX}:${n.y * 16 - camY}:`)).concat(bossSprite))
   derive fieldWindows = talking ? `1,19,30,10,2|${talkLines.join("|")}` : ""
 
   derive inBattle = scene == "battle"
@@ -123,12 +128,13 @@ component ExactOdyssey
   derive leaping = acting and isStrike(word(queue, qi))
   derive spell = acting and (word(queue, qi) == "Fire" or word(queue, qi) == "Ice")
   derive throwT = min(1, leap / 4)
-  derive ballX = round(partyX(actor) - 18 + (foeTx(aimNow, foes.length) * 8 + 24 - (partyX(actor) - 18)) * throwT)
-  derive ballY = round(partyY(actor) + 4 + (foeTy(aimNow) * 8 + 22 - (partyY(actor) + 4)) * throwT - sin(throwT * 3.14159) * 10)
+  derive boss = isBoss(word(foes, 0))
+  derive ballX = round(partyX(actor) - 18 + (foeX(aimNow, foes.length, boss) * 8 + foeW(boss) / 2 - 8 - (partyX(actor) - 18)) * throwT)
+  derive ballY = round(partyY(actor) + 4 + (foeY(boss) * 8 + foeH(boss) / 2 - 10 - (partyY(actor) + 4)) * throwT - sin(throwT * 3.14159) * 10)
   derive ballSprite = spell and step == 0 ? [`${word(queue, qi) == "Fire" ? "fireball" : "iceball"}:${ballX}:${ballY}:`] : []
   derive leapT = min(1, leap / 5)
-  derive leapX = round(partyX(actor) + (foeTx(aimNow, foes.length) * 8 + 66 - partyX(actor)) * leapT)
-  derive leapY = round(partyY(actor) + (foeTy(aimNow) * 8 + 24 - partyY(actor)) * leapT - sin(leapT * 3.14159) * 14)
+  derive leapX = round(partyX(actor) + (foeX(aimNow, foes.length, boss) * 8 + foeW(boss) + 2 - partyX(actor)) * leapT)
+  derive leapY = round(partyY(actor) + (foeY(boss) * 8 + foeH(boss) - 40 - partyY(actor)) * leapT - sin(leapT * 3.14159) * 14)
   // Won, the living strike their victory poses.
   derive partySprites = [0, 1, 2].map(i => `${nth(hp, i) <= 0 ? "ko" : (phase == "won" ? `win${i}` : (acting and actor == i ? (leaping ? `strike${i}` : `cast${i}`) : `idle${i}`))}:${acting and actor == i ? (leaping ? leapX : partyX(i) - 8) : partyX(i)}:${acting and actor == i and leaping ? leapY : partyY(i)}:${i}`)
   derive pointing = fighting and not committed
@@ -142,16 +148,16 @@ component ExactOdyssey
   // OAM order is draw priority: damage numbers and the cursor in front.
   derive battleSprites = dmgSprite.concat(handSprite).concat(ballSprite).concat(partySprites)
   derive enemySpec = ([0, 1].filter(i => i < foes.length and nth(fx, i) < 6)
-    .map(i => `${word(foes, i) == "Drone" ? "drone" : "hound"}:${foeTx(i, foes.length)}:${foeTy(i)}:${nth(fx, i) > 0 ? nth(fx, i) : (nth(juggle, i) > 0 ? 7 : 0)}`).join(";"))
+    .map(i => `${artName(word(foes, i))}:${foeX(i, foes.length, boss)}:${foeY(boss)}:${nth(fx, i) > 0 ? nth(fx, i) : (nth(juggle, i) > 0 ? 7 : 0)}`).join(";"))
   // The enemy window lists names (yellow while staggered). Under each enemy,
   // on the backdrop, its HP bar; the stagger panel, top left, follows the
   // enemy last targeted.
   derive foeLines = [0, 1].filter(i => i < foes.length).map(i => (nth(foeHp, i) <= 0 ? ""
     : (nth(brk, i) > 0 ? `{${word(foes, i)}}` : word(foes, i))))
   derive hpBars = ([0, 1].filter(i => i < foes.length and nth(foeHp, i) > 0).map(i =>
-    `@${foeTx(i, foes.length) + 1},${labelRow()},0|${gauge(nth(foeHp, i) / foeOf(word(foes, i)).hp * 48, 6)}`))
+    `@${foeX(i, foes.length, boss) + 1},${barRow(boss)},0|${gauge(nth(foeHp, i) / foeOf(word(foes, i)).hp * barTiles(boss) * 8, barTiles(boss))}`))
   derive panel = (foes.length > 0 and nth(foeHp, aimAt) > 0
-    ? [`0,0,12,4|${panelName(word(foes, aimAt), nth(chain, aimAt), nth(brk, aimAt))}|${panelBar(nth(chain, aimAt), nth(brk, aimAt), foeOf(word(foes, aimAt)).breakAt)}`] : [])
+    ? [`0,0,13,4|${panelName(word(foes, aimAt), nth(chain, aimAt), nth(brk, aimAt))}|${panelBar(nth(chain, aimAt), nth(brk, aimAt), foeOf(word(foes, aimAt)).breakAt)}`] : [])
   // The chooser: the commands, or, while picking a target, the enemies.
   derive menuLines = (ui == "target"
     ? [" {Target}"].concat([0, 1].filter(i => i < foes.length).map(i => (nth(foeHp, i) > 0 ? ` ${word(foes, i)}` : "")))
@@ -178,7 +184,7 @@ component ExactOdyssey
   derive statusLines = ([`<${stanceName(stance)}`].concat([0, 1, 2].map(i =>
     `${padTo(nameOf(i), 8)} {${padTo(roleOf(stance, i), 6)}} ${pad3(nth(hp, i))}`)))
   derive stanceLines = [` ${stanceName(0)}`, ` ${stanceName(1)}`, ` ${stanceName(2)}`, ` ${stanceName(3)}`]
-  derive rankLines = ["{Victory!}", `Time  ${clockOf(bticks)}`, `Rank  ${starLine(rank)}`].concat(found ? ["Found a Potion."] : [])
+  derive rankLines = ["{Victory!}", `Time  ${clockOf(bticks)}`, `Rank  ${starLine(rank)}`].concat(found ? ["Found a Potion."] : []).concat(boss ? ["The Gloamwarden", "fades away."] : [])
   // The top window: a stance's roles while choosing one, else what is playing.
   derive topMsg = ui == "stance" and fighting ? `${roleOf(stanceCursor, 0)} ${roleOf(stanceCursor, 1)} ${roleOf(stanceCursor, 2)}` : msg
   derive battleWindows = ([`10,20,22,10,2|${statusLines.join("|")}`]
@@ -186,7 +192,7 @@ component ExactOdyssey
     .concat(fighting ? (shown.length > 0 ? [`0,16,21,4|${slotNames}|${atbLine}`] : [`0,17,21,3|${atbLine}`]) : [])
     .concat(hpBars)
     .concat(fighting ? panel : [])
-    .concat(topMsg != "" ? [`12,1,20,3|${topMsg}`] : [])
+    .concat(topMsg != "" ? [`13,1,19,3|${topMsg}`] : [])
     .concat(shiftT > 0 ? [`${bannerX(shiftT)},8,16,5,2|${shiftT % 4 < 2 ? "{Stance Shift!}" : "Stance Shift!"}| > ${stanceName(stance)}`] : [])
     .concat(phase == "won" ? [`2,6,18,10,2|${rankLines.join("|")}`] : []).join("^"))
 
@@ -207,7 +213,7 @@ component ExactOdyssey
   action tryStep(x: number, y: number, d: string)
     if d != ""
       dir = d
-      moving = not blocked(x + dx(d), y + dy(d))
+      moving = not blocked(x + dx(d), y + dy(d)) and (bossDown or not bossAt(x + dx(d), y + dy(d)))
       off = 0
 
   action arrive
@@ -228,14 +234,22 @@ component ExactOdyssey
       tryStep(nx, ny, held)
 
   action talk
-    let who = npcAt(tx + dx(dir), ty + dy(dir))
-    talkTo = who
+    let fx0 = tx + dx(dir)
+    let fy0 = ty + dy(dir)
+    talkTo = not bossDown and bossAt(fx0, fy0) ? 9 : npcAt(fx0, fy0)
 
   // ── Into and out of battle ──
 
   action startFight(r: number)
-    let g = group(r % 3)
+    beginFight(group(r % 3), r)
+
+  // Speaking to the Gloamwarden starts its fight.
+  action startBoss
+    beginFight(["Warden"], rng)
+
+  action beginFight(g: string[], r: number)
     foes = g
+    foeTurns = 0
     foeHp = g.map(n => foeOf(n).hp)
     chain = g.map(n => 100)
     brk = g.map(n => 0)
@@ -518,13 +532,13 @@ component ExactOdyssey
       brk = breaks ? put(brk, t, staggerTicks()) : (broken and not isStrike(c) ? put(brk, t, min(staggerTicks(), nth(brk, t) + spellExtend())) : brk)
       hold = isStrike(c) ? put(hold, t, 40) : hold
       // Strike hits on a staggered enemy launch it and keep it in the air.
-      if isStrike(c) and broken and hpBefore > d
+      if isStrike(c) and broken and hpBefore > d and not isBoss(word(foes, t))
         juggle = put(juggle, t, juggleTicks())
         juggles = juggles + 1
       fx = put(fx, t, 1)
       dmgText = `${d}`
-      dmgX = foeTx(t, foes.length) * 8 + 24
-      dmgY = foeTy(t) * 8
+      dmgX = foeX(t, foes.length, boss) * 8 + foeW(boss) / 2 - 8
+      dmgY = foeY(boss) * 8 + (boss ? 24 : 0)
       dmgT = 16
       if breaks
         staggers = staggers + 1
@@ -567,18 +581,38 @@ component ExactOdyssey
               steel = actor
 
   // An enemy's plain attack: no message, as in the old games.
+  // The Gloamwarden's every third turn is Gloom Tide, named as it plays.
   action foeTurn(i: number, gauges: number[])
+    let tide = boss and foeTurns % tideEvery() == tideEvery() - 1
     foeAtb = put(gauges, i, 0)
+    foeTurns = foeTurns + 1
     actor = i
-    queue = ["attack"]
+    queue = [tide ? "Gloom Tide" : "attack"]
     qi = 0
     step = 0
-    msg = ""
+    msg = tide ? "Gloom Tide" : ""
     play = "foeAct"
 
   action applyFoe
     let r = nextRng(rng)
     dmgHeal = false
+    if word(queue, 0) == "Gloom Tide"
+      gloomTide(r)
+    else
+      foeHit(r)
+
+  // Gloom Tide: every member standing takes most of a hit (Guard, half).
+  action gloomTide(r: number)
+    let base = tideHit(foeOf(word(foes, actor)).atk) + r % 6
+    let h0 = hp
+    rng = r
+    hp = [0, 1, 2].map(i => (nth(h0, i) <= 0 ? 0 : max(0, nth(h0, i) - (roleOf(stance, i) == "Guard" ? floor(base / 2) : base))))
+    dmgText = `${base}`
+    dmgX = partyX(1)
+    dmgY = partyY(1) - 6
+    dmgT = 16
+
+  action foeHit(r: number)
     let alive = [0, 1, 2].filter(i => nth(hp, i) > 0)
     let guard = [0, 1, 2].filter(i => nth(hp, i) > 0 and roleOf(stance, i) == "Guard")
     let who = provoke >= 0 and nth(hp, provoke) > 0 ? provoke : (guard.length > 0 ? nth(guard, 0) : nth(alive, r % max(1, alive.length)))
@@ -603,6 +637,7 @@ component ExactOdyssey
       rank = r5
       found = r5 == 5
       potions = r5 == 5 ? potions + 1 : potions
+      bossDown = bossDown or boss
       phase = "won"
     else
       if partyLeft == 0 or nth(hp, 0) <= 0
@@ -621,7 +656,10 @@ component ExactOdyssey
       else
         if talking
           if confirmKey(k)
+            let was = talkTo
             talkTo = -1
+            if was == 9
+              startBoss()
         else
           if d != ""
             held = d
