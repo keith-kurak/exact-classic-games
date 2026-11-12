@@ -1,5 +1,5 @@
 diff --git a/host/apple/videoarm/VideoArm.swift b/host/apple/videoarm/VideoArm.swift
-index 5067314e..41fbf9d5 100644
+index 5067314e..912e3eb7 100644
 --- a/host/apple/videoarm/VideoArm.swift
 +++ b/host/apple/videoarm/VideoArm.swift
 @@ -124,7 +124,8 @@ private enum SharedAssets {
@@ -33,7 +33,7 @@ index 5067314e..41fbf9d5 100644
          if let error = props["sourceError"], error != old["sourceError"] { fail("src-not-supported", error) }
          layout()
          NowPlaying.shared.updated(self)
-@@ -467,7 +471,7 @@ private final class VideoArm: NSObject, NowPlayingPlayer {
+@@ -467,11 +471,16 @@ private final class VideoArm: NSObject, NowPlayingPlayer {
          }
          emit()
      }
@@ -42,7 +42,16 @@ index 5067314e..41fbf9d5 100644
          if player[keyPath: key] != value { player[keyPath: key] = value }
      }
      func configureItem() {
-@@ -486,7 +490,7 @@ private final class VideoArm: NSObject, NowPlayingPlayer {
+         guard let item = player.currentItem else { return }
++        configure(item)
++    }
++    /// An item's settings from the props: set on a loop's copy before it is
++    /// queued, as changing them while it plays interrupts the sound.
++    func configure(_ item: AVPlayerItem) {
+         let peak = number("preferredPeakBitRate", 0), buffer = number("preferredForwardBufferDuration", 0)
+         let pitch: AVAudioTimePitchAlgorithm = bool("preservesPitch", true) ? .spectral : .varispeed
+         if item.preferredPeakBitRate != peak { item.preferredPeakBitRate = peak }
+@@ -486,7 +495,7 @@ private final class VideoArm: NSObject, NowPlayingPlayer {
          observations.removeAll()
          notifications.forEach(NotificationCenter.default.removeObserver)
          notifications.removeAll()
@@ -51,7 +60,7 @@ index 5067314e..41fbf9d5 100644
          naturalSize = .zero
          itemReady = false; seekTarget = nil; atEnd = false
          posterDismissed = false; showPoster()
-@@ -522,18 +526,47 @@ private final class VideoArm: NSObject, NowPlayingPlayer {
+@@ -522,18 +531,51 @@ private final class VideoArm: NSObject, NowPlayingPlayer {
                  self.naturalSize = item.presentationSize; self.layout(); self.emit()
              }
          }]
@@ -103,11 +112,15 @@ index 5067314e..41fbf9d5 100644
 +    func queueLoop() {
 +        let waiting = Array(player.items().dropFirst())
 +        guard let current = player.currentItem, bool("loop") else { waiting.forEach(player.remove); return }
-+        if waiting.isEmpty { player.insert(AVPlayerItem(asset: current.asset), after: current) }
++        if waiting.isEmpty {
++            let copy = AVPlayerItem(asset: current.asset)
++            configure(copy)
++            player.insert(copy, after: current)
++        }
      }
      func play() {
          player.defaultRate = rate
-@@ -849,7 +882,7 @@ private final class VideoArm: NSObject, NowPlayingPlayer {
+@@ -849,7 +891,7 @@ private final class VideoArm: NSObject, NowPlayingPlayer {
          if let tick { player.removeTimeObserver(tick) }; tick = nil
          observations.removeAll(); playerObservations.removeAll(); displayObservations.removeAll()
          notifications.forEach(NotificationCenter.default.removeObserver); notifications.removeAll()
