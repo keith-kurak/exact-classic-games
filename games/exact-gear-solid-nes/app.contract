@@ -1,0 +1,235 @@
+// Exact Gear Solid NES: the storage room again, on the NES engines. Cross to
+// the exit without being seen. From above, each guard's view cone is lit on
+// the floor. Push into a wall and you press your back to it: the view cuts to
+// over your shoulder, looking along the wall, and at its end you can lean
+// round the corner. Q gets you into the cardboard box (a guard notices only a
+// box that moves while it watches). The rules are the original game's
+// (room.contract); gpu/ draws both views through the NES picture processor,
+// and the music and sounds were made by the NES sound chip (gpu/src/music.rs).
+use Spot, Guard, roomW, roomD, radius, sq, mag, sgn, nth, solid, atExit, guard, advI, advT, advW, sees from "./room.contract"
+
+sound "assets/sfx/alert.wav"
+sound "assets/sfx/box.wav"
+sound "assets/sfx/clear.wav"
+
+fn dirX(k: string): number = (k == "ArrowLeft" or k == "a" ? -1 : (k == "ArrowRight" or k == "d" ? 1 : 0))
+fn dirY(k: string): number = (k == "ArrowUp" or k == "w" ? -1 : (k == "ArrowDown" or k == "s" ? 1 : 0))
+fn isMove(k: string): bool = dirX(k) != 0 or dirY(k) != 0
+fn isGo(k: string): bool = k == " " or k == "Enter"
+fn isBox(k: string): bool = k == "q" or k == "Q"
+fn step(): number = 0.085
+fn spotLimit(): number = 21
+fn clock(ticks: number): string = `${floor(ticks * 33 / 60000)}:${floor(ticks * 33 / 1000) % 60 < 10 ? "0" : ""}${floor(ticks * 33 / 1000) % 60}`
+fn n2(v: number): string = `${round(v * 100) / 100}`
+// A guard for the picture: where it stands and faces, and what it knows (0
+// nothing, 1 half-seen you, 2 spotted you).
+fn guardSpec(g: Guard, state: number): string = `${n2(g.x)},${n2(g.y)},${n2(g.fx)},${n2(g.fy)},${state}`
+
+component ExactGearSolidNes
+  state px = 1.5
+  state py = 18.5
+  state fx = 0
+  state fy = -1
+  state hx = 0
+  state hy = 0
+  state moving = false
+  // Back to a wall: its normal (away from it) and the way you look along it;
+  // past its end, leaning round the corner.
+  state pressed = false
+  state push = 0
+  state nx = 0
+  state ny = 0
+  state lx = 1
+  state ly = 0
+  state peek = false
+  state si: number[] = [0, 0, 1, 2]
+  state st: number[] = [5, 10, 2, 1]
+  state sw: number[] = [0, 0, 0, 0]
+  state spot = 0
+  state seenBy = -1
+  state seeing: number[] = []
+  // "play" → "caught" or "clear".
+  state phase = "play"
+  state ticks = 0
+  state boxed = false
+
+  derive g0 = guard(0, nth(si, 0), nth(st, 0), nth(sw, 0))
+  derive g1 = guard(1, nth(si, 1), nth(st, 1), nth(sw, 1))
+  derive g2 = guard(2, nth(si, 2), nth(st, 2), nth(sw, 2))
+  derive g3 = guard(3, nth(si, 3), nth(st, 3), nth(sw, 3))
+  derive guards = [g0, g1, g2, g3]
+
+  // ── One frame: the guards walk, the player moves, the guards look ──
+  task frame when phase == "play"
+    every(33, tick)
+
+  action tick
+    let ks = [0, 1, 2, 3]
+    let i0 = si
+    let t0 = st
+    let w0 = sw
+    let ox = px
+    let oy = py
+    let wasPressed = pressed
+    let wasPeek = peek
+    let olx = lx
+    let oly = ly
+    si = ks.map(k => advI(k, nth(i0, k), nth(t0, k), nth(w0, k)))
+    st = ks.map(k => advT(k, nth(i0, k), nth(t0, k), nth(w0, k)))
+    sw = ks.map(k => advW(k, nth(i0, k), nth(t0, k), nth(w0, k)))
+    ticks = ticks + 1
+    if pressed
+      slide()
+    else
+      walk()
+    // In the box, a guard notices you only if you move while it watches.
+    let still = boxed and hx == 0 and hy == 0
+    // Leaning round a corner only your head is past it: the guards look at a
+    // point just behind the corner, so the wall hides you until one is near
+    // its edge.
+    let vx = wasPressed and wasPeek ? ox - olx * 0.45 : ox
+    let vy = wasPressed and wasPeek ? oy - oly * 0.45 : oy
+    let who = still ? [] : ks.filter(k => (k == 0 and sees(g0, vx, vy)) or (k == 1 and sees(g1, vx, vy))
+      or (k == 2 and sees(g2, vx, vy)) or (k == 3 and sees(g3, vx, vy)))
+    let next = who.length > 0 ? spot + 1 : max(0, spot - 1)
+    spot = next
+    seeing = who
+    if next >= spotLimit()
+      seenBy = nth(who, 0)
+      phase = "caught"
+      playSound("assets/sfx/alert.wav")
+    if atExit(ox, oy)
+      phase = "clear"
+      playSound("assets/sfx/clear.wav")
+
+  action walk
+    // The box is slow going.
+    let diag = (hx != 0 and hy != 0 ? 0.707 : 1) * (boxed ? 0.55 : 1)
+    let tx = px + hx * step() * diag
+    let okx = not solid(tx, py, radius())
+    let nxp = okx ? tx : px
+    let ty = py + hy * step() * diag
+    let oky = not solid(nxp, ty, radius())
+    let nyp = oky ? ty : py
+    px = nxp
+    py = nyp
+    moving = hx != 0 or hy != 0
+    if hx != 0 or hy != 0
+      fx = hx * (hx != 0 and hy != 0 ? 0.707 : 1)
+      fy = hy * (hx != 0 and hy != 0 ? 0.707 : 1)
+    // Pushing straight into a wall for a quarter second presses your back to it.
+    let into = (hx != 0 and hy == 0 and not okx) or (hy != 0 and hx == 0 and not oky)
+    let p = into ? push + 1 : 0
+    push = p
+    if p >= 8 and not boxed
+      pressed = true
+      nx = 0 - hx
+      ny = 0 - hy
+      lx = hy != 0 ? 1 : 0
+      ly = hx != 0 ? -1 : 0
+      fx = 0 - hx
+      fy = 0 - hy
+      moving = false
+
+  // Along the wall, the player slides; at its end they stop at the corner and
+  // can look round it. Moving away from the wall steps off it.
+  action slide
+    let away = hx * nx + hy * ny > 0
+    let along = hx * ny - hy * nx
+    if away
+      pressed = false
+      peek = false
+      push = 0
+    else
+      if along != 0
+        let dx = along * ny
+        let dy = 0 - along * nx
+        let tx = px + dx * step() * 0.7
+        let ty = py + dy * step() * 0.7
+        let backed = solid(tx - nx * 0.45, ty - ny * 0.45, 0)
+        let free = not solid(tx, ty, radius())
+        lx = dx
+        ly = dy
+        moving = backed and free
+        // Past the wall's end with open floor ahead: lean round the corner.
+        peek = free and not backed
+        if backed and free
+          px = tx
+          py = ty
+      else
+        moving = false
+        peek = false
+
+  action toggleBox
+    if not pressed
+      boxed = not boxed
+      playSound("assets/sfx/box.wav")
+
+  action restart
+    px = 1.5
+    py = 18.5
+    fx = 0
+    fy = -1
+    hx = 0
+    hy = 0
+    moving = false
+    pressed = false
+    peek = false
+    push = 0
+    si = [0, 0, 1, 2]
+    st = [5, 10, 2, 1]
+    sw = [0, 0, 0, 0]
+    spot = 0
+    seenBy = -1
+    seeing = []
+    ticks = 0
+    boxed = false
+    phase = "play"
+
+  // ── What the picture processor is told ──
+  // The view: 0 from above, 1 over the shoulder.
+  derive view = pressed and phase == "play" ? 1 : 0
+  derive playerSpec = `${n2(px)},${n2(py)},${n2(fx)},${n2(fy)},${moving ? 1 : 0},${boxed ? 1 : 0},${floor(ticks / 6) % 2}`
+  // Over the shoulder: the camera beside you and out from the wall, looking
+  // along it; leaning out, it swings past the corner to look round it.
+  derive camSpec = (peek
+    ? `${n2(px + lx * 0.9 + nx * 2.0)},${n2(py + ly * 0.9 + ny * 2.0)},${n2(px + lx * 1.4 - nx * 5)},${n2(py + ly * 1.4 - ny * 5)}`
+    : `${n2(px + nx * 0.95 - lx * 2.1)},${n2(py + ny * 0.95 - ly * 2.1)},${n2(px + lx * 5 + nx * 0.7)},${n2(py + ly * 5 + ny * 0.7)}`)
+  derive guardsSpec = [0, 1, 2, 3].map(k => guardSpec(match guards.at(k) { case some(g) => g, case none => g0 },
+    (phase == "caught" and seenBy == k ? 2 : (seeing.filter(s => s == k).length > 0 ? 1 : 0)))).join(";")
+  derive status = (phase == "caught" ? "{!! ALERT !!}" : (phase == "clear" ? "COMPLETE" : (spot > 0 ? "{CAUTION}" : "INFILTRATION")))
+  derive hint = (phase == "caught" ? "SPOTTED. SPACE TO RETRY"
+    : (phase == "clear" ? "MISSION COMPLETE. SPACE"
+    : (peek ? "ROUND THE CORNER"
+    : (pressed ? "ALONG THE WALL. STEP AWAY"
+    : (boxed ? "IN THE BOX. KEEP STILL" : "PUSH INTO WALLS. Q BOX")))))
+  derive hud = ([`1,1|STORAGE ROOM B`, `20,1|TIME ${clock(ticks)}`, `1,2|ITEM ${boxed ? "C.BOX" : "NONE"}`, `18,2|${status}`, `1,28|${hint}`]
+    .join("^"))
+
+  // ── Keys ──
+  action onKey(k: string, e: KeyboardEvent)
+    if isMove(k) or isGo(k) or isBox(k)
+      preventDefault()
+    if phase == "play"
+      if isBox(k)
+        toggleBox()
+      if dirX(k) != 0
+        hx = dirX(k)
+      if dirY(k) != 0
+        hy = dirY(k)
+    else
+      if isGo(k)
+        restart()
+
+  action onKeyUp(k: string)
+    if dirX(k) != 0 and dirX(k) == hx
+      hx = 0
+    if dirY(k) != 0 and dirY(k) == hy
+      hy = 0
+
+  view
+    main testId="root" key=onKey keyup=onKeyUp width="100%" height="100%" background-color="#000000"
+      canvas surface=ppu(view, playerSpec, camSpec, guardsSpec, hud) width="100%" height="100%" testId="screen"
+      if phase == "play"
+        audio "assets/music/infiltration.wav" autoplay=true loop=true testId="music"
+      text phase testId="phase" position="absolute" left=-9999 top=0

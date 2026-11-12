@@ -1,0 +1,33 @@
+{
+  "$schema": "../../../../exact/scripts/app.schema.json",
+  "name": "Exact Gear Solid NES",
+  "short_name": "Exact Gear Solid NES",
+  "id": "com.example.exactgearsolidnes",
+  "start_url": "/",
+  "display": "standalone",
+  "app": {
+    "id": "com.example.exactgearsolidnes",
+    "name": "Exact Gear Solid NES"
+  },
+  "host": {
+    "web": {},
+    "macos": {
+      "minimumOS": "14.0",
+      "window": {
+        "width": 768,
+        "height": 720
+      }
+    }
+  },
+  "deploy": {
+    "store": {
+      "web": "0",
+      "macos": "0"
+    }
+  },
+  "gpu": {
+    "shaderRoots": [
+      "../../engines/nes-screen/shaders"
+    ]
+  }
+}
